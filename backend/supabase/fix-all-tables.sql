@@ -1,0 +1,290 @@
+-- SafeBite: Fix and create all missing tables
+-- Run this in Supabase SQL Editor
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Step 1: Create users table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL UNIQUE,
+  is_admin BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  last_login_at TIMESTAMP WITH TIME ZONE,
+  settings JSONB DEFAULT '{"notifications": true, "autoSync": true, "theme": "auto"}'::JSONB
+);
+
+-- Step 2: Create profiles table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  relationship TEXT,
+  date_of_birth DATE,
+  allergens TEXT[] DEFAULT '{}',
+  custom_keywords TEXT[] DEFAULT '{}',
+  has_anaphylaxis BOOLEAN DEFAULT FALSE,
+  emergency_contacts JSONB DEFAULT '[]'::JSONB,
+  medications TEXT[] DEFAULT '{}',
+  avatar_color TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Step 3: Create products table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.products (
+  code TEXT PRIMARY KEY,
+  product_name TEXT,
+  brands TEXT,
+  image_url TEXT,
+  image_front_url TEXT,
+  ingredients_text TEXT,
+  allergens TEXT,
+  allergens_tags TEXT[],
+  traces TEXT,
+  traces_tags TEXT[],
+  categories TEXT,
+  categories_tags TEXT[],
+  source TEXT NOT NULL,
+  cached_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  last_fetched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  scan_count INTEGER DEFAULT 0
+);
+
+-- Step 4: Create scan_history table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.scan_history (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL,
+  product_name TEXT,
+  verdict TEXT NOT NULL CHECK (verdict IN ('safe', 'caution', 'danger')),
+  scanned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  location JSONB,
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Step 5: Create favorites table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.favorites (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL,
+  product_name TEXT,
+  added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, profile_id, product_code)
+);
+
+-- Step 6: Create shopping_list table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.shopping_list (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  product_code TEXT,
+  product_name TEXT NOT NULL,
+  quantity INTEGER DEFAULT 1,
+  checked BOOLEAN DEFAULT FALSE,
+  added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Step 7: Create analytics table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.analytics (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  event_data JSONB,
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Step 8: Create recall_cache table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.recall_cache (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  product_code TEXT,
+  search_query TEXT,
+  recalls JSONB DEFAULT '[]'::JSONB,
+  cached_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+-- Step 9: Enable RLS on all tables
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.scan_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.favorites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shopping_list ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.analytics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recall_cache ENABLE ROW LEVEL SECURITY;
+
+-- Step 10: Create/replace policies for users table
+DROP POLICY IF EXISTS "Users can view own data" ON public.users;
+CREATE POLICY "Users can view own data" ON public.users
+  FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own data" ON public.users;
+CREATE POLICY "Users can update own data" ON public.users
+  FOR UPDATE USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can insert own data" ON public.users;
+CREATE POLICY "Users can insert own data" ON public.users
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Step 11: Create/replace policies for profiles table
+DROP POLICY IF EXISTS "Users can view own profiles" ON public.profiles;
+CREATE POLICY "Users can view own profiles" ON public.profiles
+  FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can create own profiles" ON public.profiles;
+CREATE POLICY "Users can create own profiles" ON public.profiles
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own profiles" ON public.profiles;
+CREATE POLICY "Users can update own profiles" ON public.profiles
+  FOR UPDATE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own profiles" ON public.profiles;
+CREATE POLICY "Users can delete own profiles" ON public.profiles
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Step 12: Create/replace policies for products table
+DROP POLICY IF EXISTS "Products are viewable by everyone" ON public.products;
+CREATE POLICY "Products are viewable by everyone" ON public.products
+  FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Products can be inserted by authenticated users" ON public.products;
+CREATE POLICY "Products can be inserted by authenticated users" ON public.products
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Products can be updated by authenticated users" ON public.products;
+CREATE POLICY "Products can be updated by authenticated users" ON public.products
+  FOR UPDATE USING (auth.role() = 'authenticated');
+
+-- Step 13: Create/replace policies for scan_history table
+DROP POLICY IF EXISTS "Users can view own scan history" ON public.scan_history;
+CREATE POLICY "Users can view own scan history" ON public.scan_history
+  FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own scan history" ON public.scan_history;
+CREATE POLICY "Users can insert own scan history" ON public.scan_history
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own scan history" ON public.scan_history;
+CREATE POLICY "Users can delete own scan history" ON public.scan_history
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Step 14: Create/replace policies for favorites table
+DROP POLICY IF EXISTS "Users can view own favorites" ON public.favorites;
+CREATE POLICY "Users can view own favorites" ON public.favorites
+  FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can create own favorites" ON public.favorites;
+CREATE POLICY "Users can create own favorites" ON public.favorites
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own favorites" ON public.favorites;
+CREATE POLICY "Users can delete own favorites" ON public.favorites
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Step 15: Create/replace policies for shopping_list table
+DROP POLICY IF EXISTS "Users can view own shopping list" ON public.shopping_list;
+CREATE POLICY "Users can view own shopping list" ON public.shopping_list
+  FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage own shopping list" ON public.shopping_list;
+CREATE POLICY "Users can manage own shopping list" ON public.shopping_list
+  FOR ALL USING (auth.uid() = user_id);
+
+-- Step 16: Create/replace policies for analytics table
+DROP POLICY IF EXISTS "Users can insert own analytics" ON public.analytics;
+CREATE POLICY "Users can insert own analytics" ON public.analytics
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all analytics" ON public.analytics;
+CREATE POLICY "Admins can view all analytics" ON public.analytics
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE
+    )
+  );
+
+-- Step 17: Create/replace policies for recall_cache table
+DROP POLICY IF EXISTS "Recall cache is viewable by everyone" ON public.recall_cache;
+CREATE POLICY "Recall cache is viewable by everyone" ON public.recall_cache
+  FOR SELECT USING (TRUE);
+
+-- Step 18: Create indexes
+CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON public.profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_scan_history_user_id ON public.scan_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_scan_history_profile_id ON public.scan_history(profile_id);
+CREATE INDEX IF NOT EXISTS idx_scan_history_scanned_at ON public.scan_history(scanned_at);
+CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON public.favorites(user_id);
+CREATE INDEX IF NOT EXISTS idx_favorites_profile_id ON public.favorites(profile_id);
+CREATE INDEX IF NOT EXISTS idx_shopping_list_user_id ON public.shopping_list(user_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_user_id ON public.analytics(user_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_timestamp ON public.analytics(timestamp);
+CREATE INDEX IF NOT EXISTS idx_products_code ON public.products(code);
+CREATE INDEX IF NOT EXISTS idx_recall_cache_product_code ON public.recall_cache(product_code);
+CREATE INDEX IF NOT EXISTS idx_recall_cache_expires_at ON public.recall_cache(expires_at);
+
+-- Step 19: Create trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step 20: Create triggers
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+CREATE TRIGGER update_profiles_updated_at
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_shopping_list_updated_at ON public.shopping_list;
+CREATE TRIGGER update_shopping_list_updated_at
+  BEFORE UPDATE ON public.shopping_list
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Step 21: Create utility functions
+CREATE OR REPLACE FUNCTION increment_scan_count(product_code TEXT)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE public.products
+  SET scan_count = scan_count + 1,
+      last_fetched_at = NOW()
+  WHERE code = product_code;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Step 22: Grant permissions
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
+
+-- Step 23: Verify all tables exist
+SELECT 
+  'Tables created: ' || COUNT(*) AS status
+FROM information_schema.tables 
+WHERE table_schema = 'public' 
+AND table_name IN (
+  'users', 'profiles', 'products', 'scan_history', 
+  'favorites', 'shopping_list', 'analytics', 'recall_cache'
+);
+
+-- Show all tables
+SELECT 
+  table_name, 
+  (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = t.table_name AND table_schema = 'public') AS column_count
+FROM information_schema.tables t
+WHERE table_schema = 'public'
+ORDER BY table_name;
+
+SELECT '✅ All tables created and configured successfully!' AS status;
