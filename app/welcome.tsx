@@ -5,10 +5,12 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react-native';
@@ -51,6 +53,9 @@ export default function WelcomeScreen() {
 
   const handleSignIn = async () => {
     console.log('Welcome: handleSignIn called, isLoading:', isLoading);
+    
+    // Dismiss keyboard to prevent touch issues
+    Keyboard.dismiss();
     
     if (isLoading) {
       console.log('Welcome: Already processing, ignoring tap');
@@ -298,15 +303,19 @@ export default function WelcomeScreen() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+          <Pressable
+            style={({ pressed }) => [
+              styles.submitButton,
+              isLoading && styles.submitButtonDisabled,
+              pressed && !isLoading && styles.submitButtonPressed,
+            ]}
             onPress={() => {
-              console.log('Welcome: Submit button pressed');
+              console.log('Welcome: Submit button pressed at', new Date().toISOString());
               handleSignIn();
             }}
             disabled={isLoading}
-            activeOpacity={0.6}
             testID="submit-button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             {isLoading ? (
               <View style={styles.loadingContainer}>
@@ -326,7 +335,7 @@ export default function WelcomeScreen() {
                 {mode === 'signup' ? 'Create Account' : 'Sign In'}
               </Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
 
           {isLoading && authPhase === 'checking' && (
             <View style={styles.connectionStatusInfo}>
@@ -505,6 +514,10 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.5,
+  },
+  submitButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
   },
   submitButtonText: {
     fontSize: 18,
