@@ -8,10 +8,12 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { History, Heart, Trash2, Clock, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
+import { useUser } from '@/contexts/UserContext';
 import { getScanHistory, clearScanHistory, removeFromScanHistory, ScanHistoryItem } from '@/storage/scanHistory';
 import { getFavorites, removeFromFavorites, addToFavorites, FavoriteItem } from '@/storage/favorites';
 import { getVerdictColor } from '@/utils/verdict';
@@ -23,17 +25,24 @@ type TabType = 'history' | 'favorites';
 export default function HistoryScreen() {
   const router = useRouter();
   const { activeProfile } = useProfiles();
+  const { currentUser } = useUser();
   const [activeTab, setActiveTab] = useState<TabType>('history');
   const [history, setHistory] = useState<ScanHistoryItem[]>([]);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const userId = currentUser?.id;
 
   const loadData = useCallback(async () => {
     try {
+      console.log('[History] Loading data for user:', userId);
       const [historyData, favoritesData] = await Promise.all([
-        getScanHistory(),
-        getFavorites(),
+        getScanHistory(userId),
+        getFavorites(userId),
       ]);
+      
+      console.log('[History] Loaded', historyData.length, 'history items and', favoritesData.length, 'favorites');
       
       if (activeProfile) {
         setHistory(historyData.filter(item => item.profileId === activeProfile.id));
@@ -44,8 +53,10 @@ export default function HistoryScreen() {
       }
     } catch (err) {
       console.error('Error loading data:', err);
+    } finally {
+      setIsLoading(false);
     }
-  }, [activeProfile]);
+  }, [activeProfile, userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -70,7 +81,7 @@ export default function HistoryScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await clearScanHistory();
+              await clearScanHistory(userId);
               await loadData();
             } catch {
               Alert.alert('Error', 'Failed to clear history');
@@ -92,7 +103,7 @@ export default function HistoryScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await removeFromFavorites(id);
+              await removeFromFavorites(id, userId);
               await loadData();
             } catch {
               Alert.alert('Error', 'Failed to remove favorite');
@@ -131,6 +142,15 @@ export default function HistoryScreen() {
     
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0891B2" />
+        <Text style={styles.loadingText}>Loading your products...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -205,7 +225,7 @@ export default function HistoryScreen() {
                       product: item.product,
                       profileId: activeProfile.id,
                       addedAt: new Date().toISOString(),
-                    });
+                    }, userId);
                     
                     if (Platform.OS !== 'web') {
                       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -229,7 +249,7 @@ export default function HistoryScreen() {
                       color: '#DC2626',
                       onPress: async () => {
                         try {
-                          await removeFromScanHistory(item.id);
+                          await removeFromScanHistory(item.id, userId);
                           await loadData();
                         } catch {
                           Alert.alert('Error', 'Failed to remove item');
@@ -344,6 +364,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280',
   },
   header: {
     backgroundColor: '#FFFFFF',

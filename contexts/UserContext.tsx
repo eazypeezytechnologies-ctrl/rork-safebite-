@@ -2,16 +2,17 @@ import createContextHook from '@nkzw/create-context-hook';
 import { User } from '@/types';
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { migrateToSupabase, checkMigrationStatus } from '@/utils/supabaseMigration';
 import { withTimeout, withRetry, getAuthErrorMessage } from '@/utils/authTimeout';
+import { AppState, AppStateStatus } from 'react-native';
 
 const ONBOARDING_KEY = '@allergy_guardian_onboarding_complete';
 const CACHED_AUTH_KEY = '@allergy_guardian_cached_auth';
 const USER_ACTIVITY_KEY = '@allergy_guardian_user_activity';
-const AUTH_TIMEOUT = 18000; // 18 seconds - very forgiving for slow connections
-const SESSION_TIMEOUT = 12000; // 12 seconds for initial session check
+const AUTH_TIMEOUT = 10000; // 10 seconds - balanced timeout
+const SESSION_TIMEOUT = 6000; // 6 seconds for initial session check - fail fast
 const ADMIN_EMAILS = [
   'eazypeezytechnologies@gmail.com',
   // Add more admin emails here if needed
@@ -25,6 +26,8 @@ export const [UserProvider, useUser] = createContextHook(() => {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'slow' | 'error' | 'idle'>('idle');
   const [retryCount, setRetryCount] = useState(0);
   const queryClient = useQueryClient();
+  const loadingAbortRef = useRef<boolean>(false);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   
 
   const triggerMigration = useCallback(async (userId: string) => {
@@ -48,29 +51,70 @@ export const [UserProvider, useUser] = createContextHook(() => {
     }
   }, []);
 
+  // Handle app state changes to prevent freezing
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      console.log('[UserContext] App state changed:', appStateRef.current, '->', nextAppState);
+      
+      if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+        console.log('[UserContext] App came to foreground - refreshing state');
+        // App has come to the foreground - ensure UI is responsive
+        if (isLoading && connectionStatus === 'connecting') {
+          // If still loading after coming back, force complete
+          console.log('[UserContext] Force completing load after app resume');
+          setConnectionStatus('idle');
+          setIsLoading(false);
+        }
+      }
+      
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, [isLoading, connectionStatus]);
+
   useEffect(() => {
     let slowConnectionTimer: ReturnType<typeof setTimeout>;
+    let loadingTimeoutTimer: ReturnType<typeof setTimeout>;
+    loadingAbortRef.current = false;
 
     const loadData = async () => {
       try {
-        if (__DEV__) console.log('[UserContext] Loading user session...');
+        console.log('[UserContext] Loading user session...');
         setConnectionStatus('connecting');
         
+        // Show slow connection warning after 2 seconds
         slowConnectionTimer = setTimeout(() => {
-          setConnectionStatus('slow');
-        }, 3000);
+          if (!loadingAbortRef.current) {
+            setConnectionStatus('slow');
+          }
+        }, 2000);
+
+        // Force complete loading after 5 seconds max to prevent UI freeze
+        loadingTimeoutTimer = setTimeout(() => {
+          if (!loadingAbortRef.current && isLoading) {
+            console.log('[UserContext] Force completing load due to timeout');
+            loadingAbortRef.current = true;
+            setConnectionStatus('idle');
+            setIsLoading(false);
+          }
+        }, 5000);
         
         const [onboarding, cachedAuth] = await Promise.all([
           AsyncStorage.getItem(ONBOARDING_KEY),
           AsyncStorage.getItem(CACHED_AUTH_KEY),
         ]);
+        
+        if (loadingAbortRef.current) return;
+        
         setHasCompletedOnboarding(onboarding === 'true');
 
         if (cachedAuth) {
           try {
             const cached = JSON.parse(cachedAuth);
             if (cached.email && cached.id) {
-              if (__DEV__) console.log('[UserContext] Using cached auth for instant startup');
+              console.log('[UserContext] Using cached auth for instant startup');
               const cachedUser: User = {
                 id: cached.id,
                 email: cached.email,
@@ -80,9 +124,11 @@ export const [UserProvider, useUser] = createContextHook(() => {
               setCurrentUser(cachedUser);
             }
           } catch {
-            if (__DEV__) console.log('[UserContext] Failed to parse cached auth');
+            console.log('[UserContext] Failed to parse cached auth');
           }
         }
+
+        if (loadingAbortRef.current) return;
 
         let sessionResult;
         try {
@@ -91,15 +137,18 @@ export const [UserProvider, useUser] = createContextHook(() => {
             SESSION_TIMEOUT,
             'Session check timed out'
           );
-        } catch {
-          if (__DEV__) console.log('[UserContext] Session check timed out or failed, using cached auth if available');
+        } catch (sessionError) {
+          console.log('[UserContext] Session check timed out or failed:', sessionError);
           clearTimeout(slowConnectionTimer);
+          clearTimeout(loadingTimeoutTimer);
+          
+          if (loadingAbortRef.current) return;
           
           // If we have cached auth, use it and proceed
-          const cachedAuth = await AsyncStorage.getItem(CACHED_AUTH_KEY);
-          if (cachedAuth) {
+          const cachedAuthData = await AsyncStorage.getItem(CACHED_AUTH_KEY);
+          if (cachedAuthData) {
             try {
-              const cached = JSON.parse(cachedAuth);
+              const cached = JSON.parse(cachedAuthData);
               if (cached.email && cached.id) {
                 console.log('[UserContext] Using cached auth due to connection timeout');
                 const cachedUser: User = {
@@ -123,7 +172,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
           return;
         }
         
+        if (loadingAbortRef.current) return;
+        
         clearTimeout(slowConnectionTimer);
+        clearTimeout(loadingTimeoutTimer);
         const session = sessionResult.data.session;
         
         if (session?.user) {
@@ -226,6 +278,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       } catch (error) {
         console.error('Error loading user data:', error);
         clearTimeout(slowConnectionTimer);
+        clearTimeout(loadingTimeoutTimer);
         setConnectionStatus('error');
         setIsLoading(false);
       }
@@ -287,9 +340,12 @@ export const [UserProvider, useUser] = createContextHook(() => {
     });
 
     return () => {
+      loadingAbortRef.current = true;
       clearTimeout(slowConnectionTimer);
+      clearTimeout(loadingTimeoutTimer);
       authListener.subscription.unsubscribe();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerMigration]);
 
   const signIn = useCallback(async (email: string, password: string, isSignup: boolean = false) => {
@@ -349,12 +405,12 @@ export const [UserProvider, useUser] = createContextHook(() => {
           () => supabase.auth.signInWithPassword({ email, password }),
           {
             timeout: AUTH_TIMEOUT,
-            maxRetries: 2,
-            retryDelay: 2000,
+            maxRetries: 1,
+            retryDelay: 1500,
             onRetry: (attempt) => {
               setRetryCount(attempt);
               setConnectionStatus('slow');
-              if (__DEV__) console.log(`[UserContext] Sign-in retry attempt ${attempt}`);
+              console.log(`[UserContext] Sign-in retry attempt ${attempt}`);
             },
           }
         );

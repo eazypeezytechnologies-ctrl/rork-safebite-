@@ -32,7 +32,7 @@ export default function ProductDetailsScreen() {
   const params = useLocalSearchParams<{ code: string | string[] }>();
   const router = useRouter();
   const { activeProfile, profiles } = useProfiles();
-  const { trackActivity } = useUser();
+  const { trackActivity, currentUser } = useUser();
   const { viewMode, getFamilyMembers, activeFamilyGroup } = useFamily();
   
   const rawCode = Array.isArray(params.code) ? params.code[0] : params.code;
@@ -175,7 +175,7 @@ export default function ProductDetailsScreen() {
           profileId: activeProfile.id,
           profileName: activeProfile.name,
           scannedAt: new Date().toISOString(),
-        });
+        }, currentUser?.id);
         
         // Track scan activity for admin monitoring
         trackActivity('product_scan', {
