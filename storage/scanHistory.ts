@@ -21,29 +21,58 @@ function getUserHistoryKey(userId?: string): string {
 export async function getScanHistory(userId?: string): Promise<ScanHistoryItem[]> {
   try {
     const key = getUserHistoryKey(userId);
-    const data = await AsyncStorage.getItem(key);
+    console.log('[ScanHistory] Loading history for key:', key, 'userId:', userId || 'none');
     
-    // Also try to get from the old key for migration
+    let data: string | null = null;
+    try {
+      data = await AsyncStorage.getItem(key);
+    } catch (readError) {
+      console.warn('[ScanHistory] Failed to read storage:', readError);
+      return [];
+    }
+    
     let legacyData: ScanHistoryItem[] = [];
     if (userId) {
-      const oldData = await AsyncStorage.getItem(SCAN_HISTORY_KEY);
-      if (oldData) {
-        legacyData = JSON.parse(oldData);
+      try {
+        const oldData = await AsyncStorage.getItem(SCAN_HISTORY_KEY);
+        if (oldData) {
+          const parsed = JSON.parse(oldData);
+          if (Array.isArray(parsed)) {
+            legacyData = parsed;
+          }
+        }
+      } catch {
+        console.warn('[ScanHistory] Failed to parse legacy data');
       }
     }
     
-    if (!data && legacyData.length === 0) return [];
+    if (!data && legacyData.length === 0) {
+      console.log('[ScanHistory] No history found');
+      return [];
+    }
     
-    let history: ScanHistoryItem[] = data ? JSON.parse(data) : [];
+    let history: ScanHistoryItem[] = [];
+    if (data) {
+      try {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) {
+          history = parsed;
+        } else {
+          console.warn('[ScanHistory] Data was not an array, resetting');
+          await AsyncStorage.removeItem(key).catch(() => {});
+        }
+      } catch (parseError) {
+        console.warn('[ScanHistory] Failed to parse history, resetting:', parseError);
+        await AsyncStorage.removeItem(key).catch(() => {});
+      }
+    }
     
-    // Merge legacy data that might belong to this user
     if (legacyData.length > 0 && userId) {
       const existingIds = new Set(history.map(h => h.id));
       const newLegacyItems = legacyData.filter(item => !existingIds.has(item.id));
       if (newLegacyItems.length > 0) {
         history = [...newLegacyItems, ...history];
-        // Save merged data to user-specific key
-        await AsyncStorage.setItem(key, JSON.stringify(history));
+        await AsyncStorage.setItem(key, JSON.stringify(history)).catch(() => {});
         console.log(`[ScanHistory] Migrated ${newLegacyItems.length} items to user-specific storage`);
       }
     }
@@ -53,26 +82,18 @@ export async function getScanHistory(userId?: string): Promise<ScanHistoryItem[]
                      item.product.code !== 'undefined' && 
                      item.product.code !== 'null' &&
                      item.product.code.trim() !== '';
-      
-      if (!isValid) {
-        console.warn('Filtering out invalid history item:', {
-          id: item.id,
-          productName: item.product?.product_name,
-          code: item.product?.code
-        });
-      }
-      
       return isValid;
     });
     
     if (validHistory.length !== history.length) {
-      console.log(`Cleaned history: removed ${history.length - validHistory.length} invalid items`);
-      await AsyncStorage.setItem(key, JSON.stringify(validHistory));
+      console.log(`[ScanHistory] Cleaned ${history.length - validHistory.length} invalid items`);
+      await AsyncStorage.setItem(key, JSON.stringify(validHistory)).catch(() => {});
     }
     
+    console.log('[ScanHistory] Returning', validHistory.length, 'items for user:', userId || 'anonymous');
     return validHistory;
   } catch (error) {
-    console.error('Error loading scan history:', error);
+    console.error('[ScanHistory] Error loading history:', error instanceof Error ? error.message : 'Unknown');
     return [];
   }
 }

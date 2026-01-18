@@ -707,46 +707,72 @@ export const [UserProvider, useUser] = createContextHook(() => {
     
     try {
       const { Platform } = await import('react-native');
+      
+      const sanitizedMetadata = metadata ? JSON.parse(JSON.stringify(metadata)) : undefined;
+      
       const activity = {
         userId: currentUser.id,
         userEmail: currentUser.email,
         type: activityType,
-        metadata,
+        metadata: sanitizedMetadata,
         timestamp: new Date().toISOString(),
         platform: Platform.OS,
       };
       
       console.log('[UserContext] Tracking activity:', activityType);
       
-      // Store locally for admin monitor
-      const existingActivities = await AsyncStorage.getItem(USER_ACTIVITY_KEY);
-      const activities = existingActivities ? JSON.parse(existingActivities) : [];
-      activities.unshift(activity);
-      // Keep only last 100 activities
-      if (activities.length > 100) activities.splice(100);
-      await AsyncStorage.setItem(USER_ACTIVITY_KEY, JSON.stringify(activities));
-      
-      // Also try to sync to Supabase if online
+      let activities: any[] = [];
       try {
-        await supabase.from('user_activity').insert({
-          user_id: currentUser.id,
-          activity_type: activityType,
-          metadata,
-          created_at: new Date().toISOString(),
-        });
-      } catch {
-        // Silently fail - activity tracking is non-critical
+        const existingActivities = await AsyncStorage.getItem(USER_ACTIVITY_KEY);
+        if (existingActivities) {
+          const parsed = JSON.parse(existingActivities);
+          if (Array.isArray(parsed)) {
+            activities = parsed;
+          } else {
+            console.warn('[UserContext] Activity storage was not an array, resetting');
+            activities = [];
+          }
+        }
+      } catch (parseError) {
+        console.warn('[UserContext] Failed to parse existing activities, resetting:', parseError);
+        activities = [];
+        await AsyncStorage.removeItem(USER_ACTIVITY_KEY).catch(() => {});
       }
+      
+      activities.unshift(activity);
+      if (activities.length > 100) activities.splice(100);
+      
+      try {
+        await AsyncStorage.setItem(USER_ACTIVITY_KEY, JSON.stringify(activities));
+      } catch (saveError) {
+        console.warn('[UserContext] Failed to save activities:', saveError);
+      }
+      
+      Promise.resolve(supabase.from('user_activity').insert({
+        user_id: currentUser.id,
+        activity_type: activityType,
+        metadata: sanitizedMetadata,
+        created_at: new Date().toISOString(),
+      })).catch(() => {});
     } catch (error) {
-      console.error('[UserContext] Error tracking activity:', error);
+      console.warn('[UserContext] Error tracking activity (non-critical):', error instanceof Error ? error.message : 'Unknown error');
     }
   }, [currentUser]);
 
   const getRecentActivities = useCallback(async () => {
     try {
       const data = await AsyncStorage.getItem(USER_ACTIVITY_KEY);
-      return data ? JSON.parse(data) : [];
-    } catch {
+      if (!data) return [];
+      
+      const parsed = JSON.parse(data);
+      if (!Array.isArray(parsed)) {
+        console.warn('[UserContext] Activities data was not an array, returning empty');
+        return [];
+      }
+      return parsed;
+    } catch (error) {
+      console.warn('[UserContext] Failed to parse activities:', error instanceof Error ? error.message : 'Unknown');
+      AsyncStorage.removeItem(USER_ACTIVITY_KEY).catch(() => {});
       return [];
     }
   }, []);

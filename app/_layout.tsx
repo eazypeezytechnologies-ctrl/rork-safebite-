@@ -396,9 +396,17 @@ export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        retry: 2,
-        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        staleTime: 10 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
         refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false,
+        networkMode: 'offlineFirst',
+      },
+      mutations: {
+        retry: 1,
+        networkMode: 'offlineFirst',
       },
     },
   }));
