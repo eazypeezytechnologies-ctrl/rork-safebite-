@@ -633,10 +633,10 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
   if (cameraActive) {
     console.log('Rendering camera view, scanned state:', scanned, 'image mode:', imageRecognitionMode);
     return (
-      <View style={styles.container}>
+      <View style={styles.cameraContainer}>
         <CameraView
           ref={cameraRef}
-          style={styles.camera}
+          style={StyleSheet.absoluteFillObject}
           facing="back"
           enableTorch={torchEnabled}
           onBarcodeScanned={imageRecognitionMode ? undefined : handleBarCodeScanned}
@@ -652,88 +652,110 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             ],
           }}
           onTouchEnd={handleCameraPress}
-        >
-          <View style={styles.cameraOverlay}>
-            <View style={styles.cameraHeader}>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => {
-                  console.log('Closing camera');
-                  setCameraActive(false);
-                }}
-              >
-                <X size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-              
-<TouchableOpacity
-                style={[styles.flashButton, torchEnabled && styles.flashButtonActive]}
-                onPress={async () => {
-                  console.log('Flash button pressed, current state:', torchEnabled);
-                  if (Platform.OS !== 'web') {
-                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  }
-                  setTorchEnabled(!torchEnabled);
-                }}
-                testID="flash-button"
-                activeOpacity={0.7}
-                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-              >
-                <View style={styles.flashIconContainer}>
-                  {torchEnabled ? (
-                    <Flashlight size={32} color="#FCD34D" />
-                  ) : (
-                    <FlashlightOff size={32} color="#FFFFFF" />
-                  )}
-                </View>
-                <Text style={[styles.flashButtonText, torchEnabled && styles.flashButtonTextActive]}>
-                  {torchEnabled ? 'ON' : 'OFF'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.scanArea}>
-              {focusPoint && (
-                <View
-                  style={[
-                    styles.focusIndicator,
-                    {
-                      left: focusPoint.x - 40,
-                      top: focusPoint.y - 40,
-                    },
-                  ]}
-                />
-              )}
-              {imageRecognitionMode ? (
-                <>
-                  <View style={styles.photoFrame} />
-                  <View style={styles.instructionBox}>
-                    <Text style={styles.scanText}>📸 Tap anywhere to focus</Text>
-                    <Text style={styles.scanSubtext}>Then press the button below to capture</Text>
-                  </View>
-                  <Text style={styles.photoTips}>✓ Good lighting  ✓ Hold steady  ✓ Text should be clear</Text>
-                  <TouchableOpacity 
-                    style={styles.captureButton} 
-                    onPress={capturePhoto}
-                    activeOpacity={0.8}
-                  >
-                    <Camera size={32} color="#FFFFFF" />
-                    <Text style={styles.captureButtonText}>TAP TO CAPTURE</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <View style={styles.scanFrame} />
-                  <Text style={styles.scanText}>
-                    {scanned ? 'Processing...' : 'Align barcode within frame'}
-                  </Text>
-                  {scanned && (
-                    <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 16 }} />
-                  )}
-                </>
-              )}
-            </View>
+        />
+        
+        {/* Header */}
+        <View style={styles.cameraHeader}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={async () => {
+              console.log('Flash button pressed, current state:', torchEnabled);
+              if (Platform.OS !== 'web') {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }
+              setTorchEnabled(!torchEnabled);
+            }}
+            testID="flash-button"
+            activeOpacity={0.7}
+          >
+            {torchEnabled ? (
+              <Flashlight size={24} color="#FFFFFF" />
+            ) : (
+              <FlashlightOff size={24} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+          
+          <View style={styles.headerRight}>
+            {scanned && <View style={styles.processingDot} />}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                console.log('Closing camera');
+                setCameraActive(false);
+              }}
+            >
+              <X size={24} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
-        </CameraView>
+        </View>
+        
+        {/* Corner Brackets */}
+        <View style={styles.scanAreaContainer}>
+          {focusPoint && (
+            <View
+              style={[
+                styles.focusIndicator,
+                {
+                  left: focusPoint.x - 40,
+                  top: focusPoint.y - 40,
+                },
+              ]}
+            />
+          )}
+          
+          {imageRecognitionMode ? (
+            <View style={styles.photoFrameContainer}>
+              {/* Photo Frame Corners */}
+              <View style={[styles.corner, styles.cornerTopLeft]} />
+              <View style={[styles.corner, styles.cornerTopRight]} />
+              <View style={[styles.corner, styles.cornerBottomLeft]} />
+              <View style={[styles.corner, styles.cornerBottomRight]} />
+              
+              <TouchableOpacity 
+                style={styles.captureButtonModern} 
+                onPress={capturePhoto}
+                activeOpacity={0.8}
+              >
+                <View style={styles.captureButtonInner}>
+                  <Camera size={28} color="#FFFFFF" />
+                </View>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.scanFrameContainer}>
+              {/* Corner Brackets */}
+              <View style={[styles.corner, styles.cornerTopLeft]} />
+              <View style={[styles.corner, styles.cornerTopRight]} />
+              <View style={[styles.corner, styles.cornerBottomLeft]} />
+              <View style={[styles.corner, styles.cornerBottomRight]} />
+              
+              {scanned && (
+                <View style={styles.processingOverlay}>
+                  <ActivityIndicator size="large" color="#FFFFFF" />
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+        
+        {/* Bottom Status Card */}
+        <View style={styles.bottomCard}>
+          <View style={styles.bottomCardIcon}>
+            <Camera size={20} color="#FFFFFF" />
+          </View>
+          <View style={styles.bottomCardContent}>
+            <Text style={styles.bottomCardTitle}>
+              {imageRecognitionMode ? 'Photo Mode' : scanned ? 'Processing...' : 'Ready to Scan'}
+            </Text>
+            <Text style={styles.bottomCardSubtitle}>
+              {imageRecognitionMode 
+                ? 'Tap button to capture product' 
+                : scanned 
+                  ? 'Analyzing barcode...' 
+                  : 'Position barcode in frame'}
+            </Text>
+          </View>
+        </View>
       </View>
     );
   }
@@ -1195,79 +1217,151 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  camera: {
+  cameraContainer: {
     flex: 1,
-  },
-  cameraOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: '#000000',
   },
   cameraHeader: {
-    padding: 16,
-    paddingTop: Platform.OS === 'ios' ? 60 : 16,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    zIndex: 10,
   },
-  flashButton: {
-    flexDirection: 'row',
+  headerButton: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  processingDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FBBF24',
+  },
+  closeButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanAreaContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanFrameContainer: {
+    width: 280,
+    height: 280,
+    position: 'relative',
+  },
+  photoFrameContainer: {
+    width: 280,
+    height: 280,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  corner: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderColor: '#FFFFFF',
+  },
+  cornerTopLeft: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderTopLeftRadius: 4,
+  },
+  cornerTopRight: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderTopRightRadius: 4,
+  },
+  cornerBottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderBottomLeftRadius: 4,
+  },
+  cornerBottomRight: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderBottomRightRadius: 4,
+  },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+  },
+  bottomCard: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 50 : 30,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(30, 30, 30, 0.95)',
+    borderRadius: 16,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 30,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
-    gap: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
-  flashButtonActive: {
-    backgroundColor: 'rgba(251, 191, 36, 0.3)',
-    borderColor: '#FCD34D',
-  },
-  flashIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  bottomCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  flashButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700' as const,
-    minWidth: 32,
-  },
-  flashButtonTextActive: {
-    color: '#FCD34D',
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scanArea: {
+  bottomCardContent: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  scanFrame: {
-    width: 250,
-    height: 250,
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    borderRadius: 16,
-    backgroundColor: 'transparent',
-  },
-  scanText: {
+  bottomCardTitle: {
     fontSize: 16,
+    fontWeight: '600' as const,
     color: '#FFFFFF',
-    fontWeight: '700' as const,
-    textAlign: 'center',
+    marginBottom: 2,
+  },
+  bottomCardSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  captureButtonModern: {
+    position: 'absolute',
+    bottom: -80,
+    alignSelf: 'center',
+  },
+  captureButtonInner: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#0891B2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
   },
   disclaimer: {
     flexDirection: 'row',
@@ -1398,46 +1492,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#F3E8FF',
   },
-  photoFrame: {
-    width: 300,
-    height: 300,
-    borderWidth: 3,
-    borderColor: '#8B5CF6',
-    borderRadius: 16,
-    backgroundColor: 'transparent',
-  },
-  instructionBox: {
-    marginTop: 24,
-    backgroundColor: 'rgba(139, 92, 246, 0.9)',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  captureButton: {
-    marginTop: 32,
-    minWidth: 120,
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderRadius: 60,
-    backgroundColor: '#8B5CF6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  captureButtonText: {
-    marginTop: 8,
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
-    letterSpacing: 1,
-  },
+
   focusIndicator: {
     position: 'absolute',
     width: 80,
@@ -1447,21 +1502,7 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     zIndex: 100,
   },
-  scanSubtext: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#F3E8FF',
-    fontWeight: '500' as const,
-    textAlign: 'center',
-  },
-  photoTips: {
-    marginTop: 16,
-    fontSize: 12,
-    color: '#D1D5DB',
-    textAlign: 'center',
-    paddingHorizontal: 40,
-    fontWeight: '500' as const,
-  },
+
   previewImage: {
     width: 300,
     height: 300,
