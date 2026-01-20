@@ -5,8 +5,6 @@ import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useUser } from "@/contexts/UserContext";
 import { BUILD_ID } from "@/constants/appVersion";
 
-const HiddenTabButton = () => null;
-
 export default function TabLayout() {
   const { currentUser, isLoading } = useUser();
   
@@ -81,45 +79,27 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="shopping-list"
-          options={{
-            href: null,
-            tabBarButton: HiddenTabButton,
-          }}
+          options={{ href: null }}
         />
         <Tabs.Screen
           name="(scan)"
-          options={{
-            href: null,
-            tabBarButton: HiddenTabButton,
-          }}
+          options={{ href: null }}
         />
         <Tabs.Screen
           name="profiles"
-          options={{
-            href: null,
-            tabBarButton: HiddenTabButton,
-          }}
+          options={{ href: null }}
         />
         <Tabs.Screen
           name="recalls"
-          options={{
-            href: null,
-            tabBarButton: HiddenTabButton,
-          }}
+          options={{ href: null }}
         />
         <Tabs.Screen
           name="history"
-          options={{
-            href: null,
-            tabBarButton: HiddenTabButton,
-          }}
+          options={{ href: null }}
         />
         <Tabs.Screen
           name="admin-system-health"
-          options={{
-            href: null,
-            tabBarButton: HiddenTabButton,
-          }}
+          options={{ href: null }}
         />
       </Tabs>
     );
@@ -174,45 +154,27 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="admin-dashboard"
-        options={{
-          href: null,
-          tabBarButton: HiddenTabButton,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="admin-users-tab"
-        options={{
-          href: null,
-          tabBarButton: HiddenTabButton,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="admin-data"
-        options={{
-          href: null,
-          tabBarButton: HiddenTabButton,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="admin-settings"
-        options={{
-          href: null,
-          tabBarButton: HiddenTabButton,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="admin-monitor"
-        options={{
-          href: null,
-          tabBarButton: HiddenTabButton,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="admin-system-health"
-        options={{
-          href: null,
-          tabBarButton: HiddenTabButton,
-        }}
+        options={{ href: null }}
       />
     </Tabs>
   );
