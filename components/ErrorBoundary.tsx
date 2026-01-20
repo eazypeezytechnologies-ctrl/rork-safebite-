@@ -90,11 +90,13 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           <Text style={styles.message}>
             The app encountered an unexpected error. Please try again.
           </Text>
-          {__DEV__ && this.state.error && (
-            <View style={styles.errorDetails}>
-              <Text style={styles.errorText}>{this.state.error.toString()}</Text>
-            </View>
-          )}
+          <View style={styles.errorDetails}>
+            <Text style={styles.errorLabel}>Error Details:</Text>
+            <Text style={styles.errorText} selectable>
+              {this.state.error?.toString() || 'Unknown error'}
+            </Text>
+            <Text style={styles.buildInfo}>BUILD_ID: 2025-01-20-v1</Text>
+          </View>
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.button} onPress={this.handleReset}>
               <RefreshCw size={20} color="#FFFFFF" />
@@ -149,7 +151,19 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     color: '#DC2626',
-    fontFamily: 'monospace' as const,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  errorLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#991B1B',
+    marginBottom: 4,
+  },
+  buildInfo: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 8,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   buttonContainer: {
     gap: 12,

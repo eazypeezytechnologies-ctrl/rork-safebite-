@@ -4,6 +4,8 @@ import React, { useMemo } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useUser } from "@/contexts/UserContext";
 
+const TABS_BUILD_ID = '2025-01-20-v1';
+
 export default function TabLayout() {
   const { currentUser, isLoading } = useUser();
   
@@ -161,41 +163,49 @@ export default function TabLayout() {
         name="admin-dashboard"
         options={{
           href: null,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-users-tab"
         options={{
           href: null,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-data"
         options={{
           href: null,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-settings"
         options={{
           href: null,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-monitor"
         options={{
           href: null,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-system-health"
         options={{
           href: null,
+          tabBarButton: () => null,
         }}
       />
     </Tabs>
   );
 }
+
+console.log('[TabLayout] BUILD_ID:', TABS_BUILD_ID);
 
 const tabStyles = StyleSheet.create({
   loadingContainer: {
