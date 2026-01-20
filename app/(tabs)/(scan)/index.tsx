@@ -45,6 +45,8 @@ export default function ScanScreen() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [noResults, setNoResults] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -210,6 +212,8 @@ export default function ScanScreen() {
     setIsSearching(true);
     setSearchResults([]);
     setShowSearchHistory(false);
+    setSearchError(null);
+    setNoResults(false);
     
     try {
       let searchType: 'barcode' | 'name' | 'url' = 'name';
@@ -254,11 +258,13 @@ export default function ScanScreen() {
           if (Platform.OS !== 'web') {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
+        } else {
+          setNoResults(true);
         }
       }
     } catch (error) {
       console.error('Search error:', error);
-      Alert.alert('Error', 'Failed to search products');
+      setSearchError('Failed to search products. Please check your connection and try again.');
     } finally {
       setIsSearching(false);
     }
@@ -657,24 +663,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         
         {/* Header */}
         <View style={styles.cameraHeader}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={async () => {
-              console.log('Flash button pressed, current state:', torchEnabled);
-              if (Platform.OS !== 'web') {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }
-              setTorchEnabled(!torchEnabled);
-            }}
-            testID="flash-button"
-            activeOpacity={0.7}
-          >
-            {torchEnabled ? (
-              <Flashlight size={24} color="#FFFFFF" />
-            ) : (
-              <FlashlightOff size={24} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerLeft} />
           
           <View style={styles.headerRight}>
             {scanned && <View style={styles.processingDot} />}
@@ -739,6 +728,29 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           )}
         </View>
         
+        {/* Flash Toggle - Bottom Left */}
+        <TouchableOpacity
+          style={styles.flashButtonBottomLeft}
+          onPress={async () => {
+            console.log('Flash button pressed, current state:', torchEnabled);
+            if (Platform.OS !== 'web') {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+            setTorchEnabled(!torchEnabled);
+          }}
+          testID="flash-button"
+          activeOpacity={0.7}
+        >
+          {torchEnabled ? (
+            <Flashlight size={24} color="#FBBF24" />
+          ) : (
+            <FlashlightOff size={24} color="#FFFFFF" />
+          )}
+          <Text style={[styles.flashButtonText, torchEnabled && styles.flashButtonTextActive]}>
+            {torchEnabled ? 'ON' : 'OFF'}
+          </Text>
+        </TouchableOpacity>
+
         {/* Bottom Status Card */}
         <View style={styles.bottomCard}>
           <View style={styles.bottomCardIcon}>
@@ -988,6 +1000,41 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           </TouchableOpacity>
         </View>
 
+        {searchError && (
+          <View style={styles.errorContainer}>
+            <AlertCircle size={24} color="#DC2626" />
+            <Text style={styles.errorText}>{searchError}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={handleSearch}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {noResults && !searchError && (
+          <View style={styles.noResultsContainer}>
+            <Search size={48} color="#9CA3AF" />
+            <Text style={styles.noResultsTitle}>No Results Found</Text>
+            <Text style={styles.noResultsText}>
+              We couldn't find any products matching "{searchQuery}"
+            </Text>
+            <View style={styles.noResultsActions}>
+              <TouchableOpacity 
+                style={styles.noResultsButton}
+                onPress={openImageRecognition}
+              >
+                <ImageIcon size={20} color="#FFFFFF" />
+                <Text style={styles.noResultsButtonText}>Try Photo Recognition</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.noResultsButtonSecondary}
+                onPress={() => router.push('/manual-ingredient-entry')}
+              >
+                <Text style={styles.noResultsButtonSecondaryText}>Enter Ingredients Manually</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {searchResults.length > 0 && (
           <View style={styles.resultsSection}>
             <Text style={styles.sectionTitle}>Results ({searchResults.length})</Text>
@@ -1236,11 +1283,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
-  headerButton: {
+  headerLeft: {
     width: 44,
     height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   headerRight: {
     flexDirection: 'row',
@@ -1572,5 +1617,108 @@ const styles = StyleSheet.create({
     textAlign: 'center' as const,
     marginTop: 8,
     marginBottom: 16,
+  },
+  flashButtonBottomLeft: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 140 : 120,
+    left: 20,
+    backgroundColor: 'rgba(30, 30, 30, 0.9)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 10,
+  },
+  flashButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  flashButtonTextActive: {
+    color: '#FBBF24',
+  },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 14,
+    textAlign: 'center' as const,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  retryButton: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  noResultsContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  noResultsTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#111827',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center' as const,
+    marginBottom: 20,
+  },
+  noResultsActions: {
+    width: '100%',
+    gap: 12,
+  },
+  noResultsButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  noResultsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  noResultsButtonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  noResultsButtonSecondaryText: {
+    color: '#6B7280',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
 });

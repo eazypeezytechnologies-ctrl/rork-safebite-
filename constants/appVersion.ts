@@ -1,2 +1,2 @@
-export const BUILD_ID = '2026-01-20-v1';
-export const BUILD_TIMESTAMP = '2026-01-20T12:00:00Z';
+export const BUILD_ID = '2025-01-20-dod-v2';
+export const BUILD_TIMESTAMP = new Date().toISOString();

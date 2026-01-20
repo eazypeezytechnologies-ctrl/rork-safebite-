@@ -194,11 +194,11 @@ export default function AdminDashboardScreen() {
       route: 'admin-monitor',
     },
     {
-      label: 'Diagnostics',
-      description: 'System health check',
+      label: 'System Health',
+      description: 'API & service status',
       icon: Stethoscope,
       color: '#F59E0B',
-      route: '/diagnostics',
+      route: 'admin-system-health',
     },
   ];
 
