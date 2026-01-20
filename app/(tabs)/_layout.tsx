@@ -4,8 +4,6 @@ import React, { useMemo } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useUser } from "@/contexts/UserContext";
 
-const TABS_BUILD_ID = '2025-01-20-v1';
-
 export default function TabLayout() {
   const { currentUser, isLoading } = useUser();
   
@@ -198,8 +196,6 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
-console.log('[TabLayout] BUILD_ID:', TABS_BUILD_ID);
 
 const tabStyles = StyleSheet.create({
   loadingContainer: {

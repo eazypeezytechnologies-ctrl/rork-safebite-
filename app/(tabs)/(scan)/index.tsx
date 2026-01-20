@@ -1030,8 +1030,6 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             This app is informational only. Databases may be incomplete. Always read labels and follow medical guidance.
           </Text>
         </View>
-
-        <Text style={styles.buildId}>BUILD_ID: 2025-01-20-v1</Text>
       </ScrollView>
     </View>
   );
@@ -1378,13 +1376,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     lineHeight: 18,
-  },
-  buildId: {
-    fontSize: 10,
-    color: '#D1D5DB',
-    textAlign: 'center' as const,
-    marginTop: 16,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   emptyText: {
     fontSize: 20,
