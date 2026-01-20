@@ -25,6 +25,7 @@ import { getSearchHistory, addToSearchHistory } from '@/storage/searchHistory';
 import { calculateVerdict, getVerdictColor, getVerdictIcon } from '@/utils/verdict';
 import { Product } from '@/types';
 import { getRelationshipIcon } from '@/constants/profileColors';
+import { BUILD_ID } from '@/constants/appVersion';
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -1030,6 +1031,8 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             This app is informational only. Databases may be incomplete. Always read labels and follow medical guidance.
           </Text>
         </View>
+
+        <Text style={styles.buildId}>Build: {BUILD_ID}</Text>
       </ScrollView>
     </View>
   );
@@ -1562,5 +1565,12 @@ const styles = StyleSheet.create({
   },
   searchHistoryBadgeText: {
     fontSize: 12,
+  },
+  buildId: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'center' as const,
+    marginTop: 8,
+    marginBottom: 16,
   },
 });

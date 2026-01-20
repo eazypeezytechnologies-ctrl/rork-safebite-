@@ -1,8 +1,11 @@
 import { Tabs } from "expo-router";
 import { ScanBarcode, Users, AlertCircle, History, LayoutDashboard, Settings, Database, ShoppingCart, Activity } from "lucide-react-native";
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useUser } from "@/contexts/UserContext";
+import { BUILD_ID } from "@/constants/appVersion";
+
+const HiddenTabButton = () => null;
 
 export default function TabLayout() {
   const { currentUser, isLoading } = useUser();
@@ -10,8 +13,14 @@ export default function TabLayout() {
   const { isAdmin, isReady } = useMemo(() => {
     if (isLoading) return { isAdmin: false, isReady: false };
     if (!currentUser) return { isAdmin: false, isReady: true };
-    return { isAdmin: currentUser.isAdmin === true, isReady: true };
+    const adminStatus = currentUser.isAdmin === true;
+    console.log('[TabLayout] Admin check - user:', currentUser.email, 'isAdmin:', adminStatus);
+    return { isAdmin: adminStatus, isReady: true };
   }, [currentUser, isLoading]);
+
+  useEffect(() => {
+    console.log('[TabLayout] Rendering tabs - isAdmin:', isAdmin, 'isReady:', isReady, 'BUILD_ID:', BUILD_ID);
+  }, [isAdmin, isReady]);
 
   if (!isReady) {
     return (
@@ -74,36 +83,42 @@ export default function TabLayout() {
           name="shopping-list"
           options={{
             href: null,
+            tabBarButton: HiddenTabButton,
           }}
         />
         <Tabs.Screen
           name="(scan)"
           options={{
             href: null,
+            tabBarButton: HiddenTabButton,
           }}
         />
         <Tabs.Screen
           name="profiles"
           options={{
             href: null,
+            tabBarButton: HiddenTabButton,
           }}
         />
         <Tabs.Screen
           name="recalls"
           options={{
             href: null,
+            tabBarButton: HiddenTabButton,
           }}
         />
         <Tabs.Screen
           name="history"
           options={{
             href: null,
+            tabBarButton: HiddenTabButton,
           }}
         />
         <Tabs.Screen
           name="admin-system-health"
           options={{
             href: null,
+            tabBarButton: HiddenTabButton,
           }}
         />
       </Tabs>
@@ -161,36 +176,42 @@ export default function TabLayout() {
         name="admin-dashboard"
         options={{
           href: null,
+          tabBarButton: HiddenTabButton,
         }}
       />
       <Tabs.Screen
         name="admin-users-tab"
         options={{
           href: null,
+          tabBarButton: HiddenTabButton,
         }}
       />
       <Tabs.Screen
         name="admin-data"
         options={{
           href: null,
+          tabBarButton: HiddenTabButton,
         }}
       />
       <Tabs.Screen
         name="admin-settings"
         options={{
           href: null,
+          tabBarButton: HiddenTabButton,
         }}
       />
       <Tabs.Screen
         name="admin-monitor"
         options={{
           href: null,
+          tabBarButton: HiddenTabButton,
         }}
       />
       <Tabs.Screen
         name="admin-system-health"
         options={{
           href: null,
+          tabBarButton: HiddenTabButton,
         }}
       />
     </Tabs>

@@ -90,9 +90,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           <Text style={styles.message}>
             The app encountered an unexpected error. Please try again.
           </Text>
-          {__DEV__ && this.state.error && (
+          {this.state.error && (
             <View style={styles.errorDetails}>
+              <Text style={styles.errorLabel}>Error Details:</Text>
               <Text style={styles.errorText}>{this.state.error.toString()}</Text>
+              {this.state.error.stack && (
+                <Text style={styles.errorStack} numberOfLines={5}>
+                  {this.state.error.stack.split('\n').slice(0, 5).join('\n')}
+                </Text>
+              )}
             </View>
           )}
           <View style={styles.buttonContainer}>
@@ -146,9 +152,21 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     width: '100%',
   },
+  errorLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#991B1B',
+    marginBottom: 8,
+  },
   errorText: {
     fontSize: 12,
     color: '#DC2626',
+    fontFamily: 'monospace' as const,
+    marginBottom: 8,
+  },
+  errorStack: {
+    fontSize: 10,
+    color: '#B91C1C',
     fontFamily: 'monospace' as const,
   },
   buttonContainer: {
