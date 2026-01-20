@@ -163,42 +163,36 @@ export default function TabLayout() {
         name="admin-dashboard"
         options={{
           href: null,
-          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-users-tab"
         options={{
           href: null,
-          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-data"
         options={{
           href: null,
-          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-settings"
         options={{
           href: null,
-          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-monitor"
         options={{
           href: null,
-          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="admin-system-health"
         options={{
           href: null,
-          tabBarButton: () => null,
         }}
       />
     </Tabs>
