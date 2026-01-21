@@ -18,6 +18,7 @@ import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BUILD_ID } from '@/constants/appVersion';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -228,6 +229,7 @@ export default function WelcomeScreen() {
         <Text style={styles.footer}>
           Your privacy matters. All data is stored securely on your device.
         </Text>
+        <Text style={styles.buildId}>Build: {BUILD_ID}</Text>
       </View>
     );
   }
@@ -455,6 +457,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 24,
     marginTop: 'auto' as const,
+  },
+  buildId: {
+    fontSize: 10,
+    color: '#D1D5DB',
+    textAlign: 'center' as const,
+    paddingBottom: 8,
   },
   backButton: {
     alignSelf: 'flex-start',

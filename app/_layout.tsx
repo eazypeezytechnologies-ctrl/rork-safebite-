@@ -11,9 +11,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { restoreStorageFromServer, syncStorageToServer } from "@/utils/storageSync";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { trpc, trpcClient } from "@/lib/trpc";
+import { BUILD_ID } from "@/constants/appVersion";
 import "@/utils/globalErrorHandler";
 
 SplashScreen.preventAutoHideAsync();
+
+console.log('===========================================');
+console.log('[APP START] BUILD_ID:', BUILD_ID);
+console.log('===========================================');
 
 const MAX_LOADING_TIME = 1200; // 1.2s max loading time
 const SHOW_SKIP_AFTER = 600; // Show skip button after 0.6s
