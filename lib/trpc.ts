@@ -68,7 +68,12 @@ export const trpcClient = trpc.createClient({
         
         const fetchPromise = (async () => {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          const startTime = Date.now();
+          const urlStr = typeof url === 'string' ? url : url.toString();
+          const endpoint = urlStr.split('/').pop() || 'unknown';
+          
+          console.log(`[tRPC] Request started: ${endpoint}`);
           
           try {
             const response = await fetch(url, {
@@ -76,9 +81,13 @@ export const trpcClient = trpc.createClient({
               signal: controller.signal,
             });
             
+            const duration = Date.now() - startTime;
+            console.log(`[tRPC] Request completed: ${endpoint} (${duration}ms, status: ${response.status})`);
+            
             clearTimeout(timeoutId);
             
             if (response.status === 429) {
+              console.warn(`[tRPC] Rate limited on ${endpoint}`);
               const retryAfter = response.headers.get('Retry-After');
               const waitSecs = retryAfter ? parseInt(retryAfter) : 30;
               requestThrottler.recordError(true);
@@ -116,9 +125,10 @@ export const trpcClient = trpc.createClient({
             return response;
           } catch (error: any) {
             clearTimeout(timeoutId);
+            const duration = Date.now() - startTime;
             
             if (error?.name === 'AbortError') {
-              console.warn('[tRPC] Request timed out');
+              console.warn(`[tRPC] Request timed out: ${endpoint} (${duration}ms)`);
               return new Response(JSON.stringify({ result: { data: null } }), {
                 status: 200,
                 headers: { 'content-type': 'application/json' },
@@ -126,6 +136,7 @@ export const trpcClient = trpc.createClient({
             }
             
             if (error?.message?.includes('Network') || error?.message?.includes('fetch')) {
+              console.warn(`[tRPC] Network error on ${endpoint}: ${error?.message} (${duration}ms)`);
               requestThrottler.recordError(false);
               return new Response(JSON.stringify({ result: { data: null } }), {
                 status: 200,

@@ -396,11 +396,16 @@ export default function ScanScreen() {
 
   const analyzeProductImage = async (imageUri: string) => {
     setIsAnalyzing(true);
+    const startTime = Date.now();
     
     try {
-      console.log('Analyzing product image with AI...');
+      console.log('[PhotoRecognition] Starting image analysis...');
       
-      const analysisResult = await generateText({
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Analysis timed out after 30 seconds')), 30000);
+      });
+      
+      const analysisPromise = generateText({
         messages: [
           {
             role: 'user',
@@ -439,8 +444,11 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           },
         ],
       });
+      
+      const analysisResult = await Promise.race([analysisPromise, timeoutPromise]);
 
-      console.log('Image analysis complete:', analysisResult);
+      const duration = Date.now() - startTime;
+      console.log(`[PhotoRecognition] Analysis complete (${duration}ms):`, analysisResult.substring(0, 100) + '...');
       
       if (analysisResult.includes('IMAGE_QUALITY_ISSUE:')) {
         const issueMatch = analysisResult.match(/IMAGE_QUALITY_ISSUE:\s*(.+)/i);
@@ -550,10 +558,19 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         );
       }
     } catch (error) {
-      console.error('Error analyzing image:', error);
+      const duration = Date.now() - startTime;
+      console.error(`[PhotoRecognition] Error analyzing image (${duration}ms):`, error);
+      
+      const isTimeout = error instanceof Error && error.message.includes('timed out');
+      const isNetworkError = error instanceof Error && (error.message.includes('Network') || error.message.includes('fetch'));
+      
       Alert.alert(
-        'Analysis Failed',
-        `Could not analyze the product image: ${error instanceof Error ? error.message : 'Unknown error'}\n\n💡 Tips for better photos:\n\n• Hold phone steady and tap to focus\n• Ensure good lighting (avoid shadows)\n• Get close enough to read text clearly\n• Center the product name and ingredients\n• Make sure text is sharp and in focus\n• Avoid glare from plastic packaging\n• Try taking photo from straight angle`,
+        isTimeout ? 'Analysis Timed Out' : isNetworkError ? 'Connection Error' : 'Analysis Failed',
+        isTimeout 
+          ? 'The analysis took too long. Please try again with a clearer photo or better lighting.'
+          : isNetworkError
+            ? 'Could not connect to the server. Please check your internet connection and try again.'
+            : `Could not analyze the product image: ${error instanceof Error ? error.message : 'Unknown error'}\n\n💡 Tips for better photos:\n\n• Hold phone steady and tap to focus\n• Ensure good lighting (avoid shadows)\n• Get close enough to read text clearly\n• Center the product name and ingredients\n• Make sure text is sharp and in focus\n• Avoid glare from plastic packaging\n• Try taking photo from straight angle`,
         [
           {
             text: 'Take New Photo',
