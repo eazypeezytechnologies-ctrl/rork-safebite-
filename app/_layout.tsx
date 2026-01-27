@@ -12,7 +12,6 @@ import { restoreStorageFromServer, syncStorageToServer } from "@/utils/storageSy
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { BUILD_ID } from "@/constants/appVersion";
-import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 import "@/utils/globalErrorHandler";
 
 SplashScreen.preventAutoHideAsync();
@@ -26,7 +25,7 @@ const SHOW_SKIP_AFTER = 600; // Show skip button after 0.6s
 
 function RootLayoutNav() {
   const { isLoading: profilesLoading, profiles, clearAllData: clearProfileData, profilesFetchComplete, hasFetchError } = useProfiles();
-  const { isLoading: userLoading, currentUser, hasCompletedOnboarding, clearAllData: clearUserData, connectionStatus } = useUser();
+  const { isLoading: userLoading, currentUser, hasCompletedOnboarding, clearAllData: clearUserData } = useUser();
   const router = useRouter();
   const segments = useSegments();
   const [isInitialized, setIsInitialized] = useState(false);
@@ -316,10 +315,8 @@ function RootLayoutNav() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <NetworkStatusBanner connectionStatus={connectionStatus} />
-      <Stack screenOptions={{ headerBackTitle: "Back" }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="welcome" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="wizard" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="product/[code]" options={{ title: "Product Details" }} />
@@ -336,8 +333,7 @@ function RootLayoutNav() {
       <Stack.Screen name="welcome-tour" options={{ title: "Welcome Tour" }} />
       <Stack.Screen name="manual-ingredient-entry" options={{ title: "Manual Entry" }} />
       <Stack.Screen name="reset-password" options={{ headerShown: false }} />
-      </Stack>
-    </View>
+    </Stack>
   );
 }
 
