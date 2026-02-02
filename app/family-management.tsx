@@ -8,16 +8,28 @@ import {
   TextInput,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useFocusEffect } from 'expo-router';
-import { Users, Plus, Trash2, Check, UserPlus, X } from 'lucide-react-native';
+import { Users, Plus, Trash2, Check, UserPlus, X, Share2, Clock } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
+import { useUser } from '@/contexts/UserContext';
 import { FamilyGroup, Profile } from '@/types';
 import * as Haptics from 'expo-haptics';
+import { 
+  shareFamilyInvite, 
+  createFamilyInvitation, 
+  getFamilyInvitations,
+  revokeInvitation,
+  FamilyInvitation 
+} from '@/utils/invites';
+
+const MAX_FAMILY_MEMBERS = 6;
 
 export default function FamilyManagementScreen() {
   const { profiles } = useProfiles();
+  const { currentUser } = useUser();
   const {
     familyGroups,
     activeFamilyGroup,
@@ -32,12 +44,100 @@ export default function FamilyManagementScreen() {
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [invitations, setInvitations] = useState<Record<string, FamilyInvitation[]>>({});
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       refreshFamilyGroups();
-    }, [refreshFamilyGroups])
+      if (familyGroups.length > 0) {
+        loadAllInvitations();
+      }
+    }, [refreshFamilyGroups, familyGroups.length, loadAllInvitations])
   );
+
+  const loadAllInvitations = useCallback(async () => {
+    try {
+      const inviteMap: Record<string, FamilyInvitation[]> = {};
+      for (const group of familyGroups) {
+        const groupInvites = await getFamilyInvitations(group.id);
+        inviteMap[group.id] = groupInvites.filter(inv => inv.status === 'pending');
+      }
+      setInvitations(inviteMap);
+    } catch (error) {
+      console.error('Error loading invitations:', error);
+    }
+  }, [familyGroups]);
+
+  
+
+  const handleShareFamilyInvite = async (group: FamilyGroup) => {
+    if (!currentUser?.id) return;
+    
+    const memberCount = group.memberIds.length + (invitations[group.id]?.length || 0);
+    if (memberCount >= MAX_FAMILY_MEMBERS) {
+      Alert.alert(
+        'Member Limit Reached',
+        `This family group already has ${group.memberIds.length} members and ${invitations[group.id]?.length || 0} pending invites. Maximum is ${MAX_FAMILY_MEMBERS} total.`
+      );
+      return;
+    }
+    
+    setIsSendingInvite(true);
+    
+    try {
+      if (Platform.OS !== 'web') {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      
+      const { invitation, error } = await createFamilyInvitation(group.id, currentUser.id);
+      
+      if (error || !invitation) {
+        Alert.alert('Error', error || 'Failed to create invitation');
+        return;
+      }
+      
+      const userName = currentUser.email?.split('@')[0] || 'Someone';
+      const success = await shareFamilyInvite(userName, group.name, invitation.token);
+      
+      if (success) {
+        Alert.alert('Invitation Sent!', 'Family invite link has been shared. It will expire in 7 days.');
+        await loadAllInvitations();
+      }
+    } catch (error) {
+      console.error('Error sharing family invite:', error);
+      Alert.alert('Error', 'Failed to share family invite');
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
+
+  const handleRevokeInvite = async (invitationId: string) => {
+    if (!currentUser?.id) return;
+    
+    Alert.alert(
+      'Revoke Invitation',
+      'Are you sure you want to revoke this invitation?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Revoke',
+          style: 'destructive',
+          onPress: async () => {
+            const { success, error } = await revokeInvitation(invitationId, currentUser.id);
+            if (success) {
+              if (Platform.OS !== 'web') {
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+              await loadAllInvitations();
+            } else {
+              Alert.alert('Error', error || 'Failed to revoke invitation');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) {
@@ -342,6 +442,51 @@ export default function FamilyManagementScreen() {
                         )}
                       </View>
 
+                      <View style={styles.inviteSection}>
+                        <Text style={styles.inviteSectionTitle}>
+                          Members: {memberProfiles.length}/{MAX_FAMILY_MEMBERS}
+                        </Text>
+                        
+                        {invitations[group.id]?.length > 0 && (
+                          <View style={styles.pendingInvites}>
+                            <Text style={styles.pendingInvitesTitle}>
+                              <Clock size={12} color="#F59E0B" /> Pending invites: {invitations[group.id].length}
+                            </Text>
+                            {invitations[group.id].map((inv) => (
+                              <View key={inv.id} style={styles.pendingInviteItem}>
+                                <Text style={styles.pendingInviteText} numberOfLines={1}>
+                                  {inv.email || 'Link shared'}
+                                </Text>
+                                <TouchableOpacity
+                                  style={styles.revokeButton}
+                                  onPress={() => handleRevokeInvite(inv.id)}
+                                >
+                                  <X size={14} color="#DC2626" />
+                                </TouchableOpacity>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                        
+                        <TouchableOpacity
+                          style={[
+                            styles.inviteButton,
+                            (memberProfiles.length + (invitations[group.id]?.length || 0) >= MAX_FAMILY_MEMBERS) && styles.inviteButtonDisabled
+                          ]}
+                          onPress={() => handleShareFamilyInvite(group)}
+                          disabled={isSendingInvite || memberProfiles.length + (invitations[group.id]?.length || 0) >= MAX_FAMILY_MEMBERS}
+                        >
+                          {isSendingInvite ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <>
+                              <Share2 size={16} color="#FFFFFF" />
+                              <Text style={styles.inviteButtonText}>Invite Member</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+
                       <View style={styles.groupActions}>
                         <TouchableOpacity
                           style={styles.editButton}
@@ -629,5 +774,94 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  inviteSection: {
+    marginBottom: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  inviteSectionTitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  pendingInvites: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+  },
+  pendingInvitesTitle: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#92400E',
+    marginBottom: 6,
+  },
+  pendingInviteItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  pendingInviteText: {
+    fontSize: 12,
+    color: '#92400E',
+    flex: 1,
+  },
+  revokeButton: {
+    padding: 4,
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#0891B2',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  inviteButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
+  inviteButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+  appInviteCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  appInviteTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#111827',
+    marginBottom: 8,
+  },
+  appInviteText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  appInviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  appInviteButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
 });

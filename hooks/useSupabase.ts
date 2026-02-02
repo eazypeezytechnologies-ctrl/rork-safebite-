@@ -18,6 +18,8 @@ export interface SupabaseProfile {
   }[];
   medications: string[];
   avatar_color?: string;
+  track_eczema_triggers?: boolean;
+  eczema_trigger_groups?: string[];
   created_at: string;
   updated_at: string;
 }

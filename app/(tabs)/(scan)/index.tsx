@@ -14,11 +14,13 @@ import {
   Easing,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, Href } from 'expo-router';
 
-import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff } from 'lucide-react-native';
+import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
+import { useUser } from '@/contexts/UserContext';
 import { searchProductByBarcode, searchProductsByName, searchProductByUrl } from '@/api/products';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { getSearchHistory, addToSearchHistory } from '@/storage/searchHistory';
@@ -29,6 +31,7 @@ import { BUILD_ID } from '@/constants/appVersion';
 
 export default function ScanScreen() {
   const router = useRouter();
+  const { currentUser } = useUser();
   const { activeProfile, profiles, isLoading: profilesLoading, isSwitchingProfile, setActiveProfile } = useProfiles();
   
   const [permission, requestPermission] = useCameraPermissions();
@@ -250,7 +253,8 @@ export default function ScanScreen() {
           Alert.alert('Not Found', 'Product not found in database');
         }
       } else {
-        const result = await searchProductsByName(searchQuery);
+        // Pass userId for improved search (scan history + cached products)
+        const result = await searchProductsByName(searchQuery, 1, currentUser?.id);
         setSearchResults(result.products);
         if (result.products.length > 0) {
           await addToSearchHistory({ query: searchQuery, type: searchType });
@@ -332,6 +336,57 @@ export default function ScanScreen() {
     console.log('Camera permission granted, activating image recognition mode');
     setImageRecognitionMode(true);
     setCameraActive(true);
+  };
+
+  const pickImageFromGallery = async () => {
+    console.log('Opening image picker from gallery');
+    
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (!permissionResult.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Photo library access is required to select images.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => {
+              Alert.alert('Open Settings', 'Go to Settings > Allergy Guardian > Photos');
+            }}
+          ]
+        );
+        return;
+      }
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+      
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        console.log('Image selected from gallery');
+        
+        if (Platform.OS !== 'web') {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        
+        if (asset.base64) {
+          const imageUri = `data:image/jpeg;base64,${asset.base64}`;
+          setCapturedImage(imageUri);
+          analyzeProductImage(imageUri);
+        } else if (asset.uri) {
+          setCapturedImage(asset.uri);
+          analyzeProductImage(asset.uri);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image from gallery. Please try again.');
+    }
   };
 
   const capturePhoto = async () => {
@@ -899,31 +954,59 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           </TouchableOpacity>
         </Animated.View>
 
-        <TouchableOpacity 
-          style={styles.imageRecognitionButton} 
-          onPress={() => {
-            Animated.sequence([
-              Animated.timing(scaleAnim, {
-                toValue: 0.95,
-                duration: 100,
-                useNativeDriver: true,
-              }),
-              Animated.timing(scaleAnim, {
-                toValue: 1,
-                duration: 100,
-                useNativeDriver: true,
-              }),
-            ]).start();
-            openImageRecognition();
-          }}
-          activeOpacity={0.9}
-        >
-          <ImageIcon size={28} color="#FFFFFF" />
-          <View style={styles.imageButtonContent}>
-            <Text style={styles.imageButtonTitle}>Product Photo Recognition</Text>
-            <Text style={styles.imageButtonSubtitle}>Cannot find barcode? Take a clear photo of the label!</Text>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.photoOptionsContainer}>
+          <TouchableOpacity 
+            style={styles.imageRecognitionButton} 
+            onPress={() => {
+              Animated.sequence([
+                Animated.timing(scaleAnim, {
+                  toValue: 0.95,
+                  duration: 100,
+                  useNativeDriver: true,
+                }),
+                Animated.timing(scaleAnim, {
+                  toValue: 1,
+                  duration: 100,
+                  useNativeDriver: true,
+                }),
+              ]).start();
+              openImageRecognition();
+            }}
+            activeOpacity={0.9}
+          >
+            <Camera size={24} color="#FFFFFF" />
+            <View style={styles.imageButtonContent}>
+              <Text style={styles.imageButtonTitle}>Take Photo</Text>
+              <Text style={styles.imageButtonSubtitle}>Capture product label</Text>
+            </View>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.uploadPhotoButton} 
+            onPress={() => {
+              Animated.sequence([
+                Animated.timing(scaleAnim, {
+                  toValue: 0.95,
+                  duration: 100,
+                  useNativeDriver: true,
+                }),
+                Animated.timing(scaleAnim, {
+                  toValue: 1,
+                  duration: 100,
+                  useNativeDriver: true,
+                }),
+              ]).start();
+              pickImageFromGallery();
+            }}
+            activeOpacity={0.9}
+          >
+            <Upload size={24} color="#FFFFFF" />
+            <View style={styles.imageButtonContent}>
+              <Text style={styles.imageButtonTitle}>Upload Photo</Text>
+              <Text style={styles.imageButtonSubtitle}>From camera roll</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
@@ -1015,7 +1098,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             <Search size={48} color="#9CA3AF" />
             <Text style={styles.noResultsTitle}>No Results Found</Text>
             <Text style={styles.noResultsText}>
-              We couldn't find any products matching "{searchQuery}"
+              We could not find any products matching &quot;{searchQuery}&quot;
             </Text>
             <View style={styles.noResultsActions}>
               <TouchableOpacity 
@@ -1513,15 +1596,34 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#10B981',
   },
+  photoOptionsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
   imageRecognitionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
     backgroundColor: '#8B5CF6',
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
+    padding: 16,
     shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  uploadPhotoButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#059669',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#059669',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1531,14 +1633,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   imageButtonTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '700' as const,
     color: '#FFFFFF',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   imageButtonSubtitle: {
-    fontSize: 14,
-    color: '#F3E8FF',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
   },
 
   focusIndicator: {

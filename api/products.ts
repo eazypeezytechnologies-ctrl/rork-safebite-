@@ -2,6 +2,7 @@ import { Product, ProductSearchResult } from '@/types';
 import { getCachedProduct, cacheProduct } from '@/storage/productCache';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeFetch } from '@/utils/safeFetch';
+import { supabase } from '@/lib/supabase';
 
 const MANUAL_ENTRIES_KEY = 'manual_ingredient_entries';
 const OFFLINE_CACHE_KEY = '@allergy_guardian_offline_products';
@@ -318,32 +319,150 @@ export async function searchProductByBarcode(barcode: string, useCache: boolean 
   return null;
 }
 
-export async function searchProductsByName(query: string, page: number = 1): Promise<ProductSearchResult> {
-  console.log('Searching for product name:', query);
+export async function searchProductsByName(query: string, page: number = 1, userId?: string): Promise<ProductSearchResult> {
+  console.log('[Products] Searching for product name:', query, 'userId:', userId);
+  
+  const normalizedQuery = query.toLowerCase().trim();
+  const allProducts: Product[] = [];
+  const seenCodes = new Set<string>();
   
   try {
-    const data = await safeFetch(
-      `${OFF_API}/search?search_terms=${encodeURIComponent(query)}&page=${page}&page_size=20&fields=code,product_name,brands,image_url,image_front_url,ingredients_text,allergens,allergens_tags,traces,traces_tags,categories,categories_tags`
-    );
+    // 1. Search user's scan history first (most relevant)
+    if (userId) {
+      try {
+        console.log('[Products] Searching user scan history...');
+        const { data: scanHistory, error: scanError } = await supabase
+          .from('scan_history')
+          .select('product_code, product_name')
+          .eq('user_id', userId)
+          .ilike('product_name', `%${normalizedQuery}%`)
+          .order('scanned_at', { ascending: false })
+          .limit(10);
+        
+        if (!scanError && scanHistory && scanHistory.length > 0) {
+          console.log(`[Products] Found ${scanHistory.length} matches in scan history`);
+          for (const scan of scanHistory) {
+            if (scan.product_code && !seenCodes.has(scan.product_code)) {
+              seenCodes.add(scan.product_code);
+              // Get full product details from cache
+              const cachedProduct = await getCachedProduct(scan.product_code);
+              if (cachedProduct) {
+                allProducts.push(cachedProduct);
+              } else {
+                allProducts.push({
+                  code: scan.product_code,
+                  product_name: scan.product_name || 'Unknown Product',
+                  source: 'openfoodfacts' as const,
+                });
+              }
+            }
+          }
+        }
+      } catch (historyError) {
+        console.log('[Products] Scan history search failed (non-critical):', historyError);
+      }
+    }
     
-    const products = (data.products || []).map((p: Product) => ({
-      ...p,
-      source: 'openfoodfacts' as const,
-    }));
+    // 2. Search cached products table in Supabase
+    try {
+      console.log('[Products] Searching cached products...');
+      const { data: cachedProducts, error: cacheError } = await supabase
+        .from('products')
+        .select('*')
+        .or(`product_name.ilike.%${normalizedQuery}%,brands.ilike.%${normalizedQuery}%`)
+        .order('scan_count', { ascending: false, nullsFirst: false })
+        .limit(15);
+      
+      if (!cacheError && cachedProducts && cachedProducts.length > 0) {
+        console.log(`[Products] Found ${cachedProducts.length} matches in cached products`);
+        for (const p of cachedProducts) {
+          if (p.code && !seenCodes.has(p.code)) {
+            seenCodes.add(p.code);
+            allProducts.push({
+              code: p.code,
+              product_name: p.product_name,
+              brands: p.brands,
+              image_url: p.image_url,
+              image_front_url: p.image_front_url,
+              ingredients_text: p.ingredients_text,
+              allergens: p.allergens,
+              allergens_tags: p.allergens_tags || [],
+              traces: p.traces,
+              traces_tags: p.traces_tags || [],
+              categories: p.categories,
+              categories_tags: p.categories_tags || [],
+              source: (p.source || 'openfoodfacts') as Product['source'],
+            });
+          }
+        }
+      }
+    } catch (cacheSearchError) {
+      console.log('[Products] Cached products search failed (non-critical):', cacheSearchError);
+    }
+    
+    // 3. Search OpenFoodFacts API
+    try {
+      console.log('[Products] Searching OpenFoodFacts API...');
+      const data = await safeFetch(
+        `${OFF_API}/search?search_terms=${encodeURIComponent(query)}&page=${page}&page_size=20&fields=code,product_name,brands,image_url,image_front_url,ingredients_text,allergens,allergens_tags,traces,traces_tags,categories,categories_tags`
+      );
+      
+      const apiProducts = (data.products || []).map((p: Product) => ({
+        ...p,
+        source: 'openfoodfacts' as const,
+      }));
+      
+      for (const p of apiProducts) {
+        if (p.code && !seenCodes.has(p.code)) {
+          seenCodes.add(p.code);
+          allProducts.push(p);
+        }
+      }
+      
+      console.log(`[Products] Found ${apiProducts.length} from OpenFoodFacts API`);
+    } catch (apiError) {
+      console.log('[Products] OpenFoodFacts API search failed:', apiError);
+    }
+    
+    // 4. Search OpenBeautyFacts for skincare products
+    if (allProducts.length < 10) {
+      try {
+        console.log('[Products] Searching OpenBeautyFacts API...');
+        const beautyData = await safeFetch(
+          `${OBF_API}/search?search_terms=${encodeURIComponent(query)}&page=1&page_size=10&fields=code,product_name,brands,image_url,image_front_url,ingredients_text,allergens,allergens_tags,traces,traces_tags,categories,categories_tags`
+        );
+        
+        const beautyProducts = (beautyData.products || []).map((p: Product) => ({
+          ...p,
+          source: 'openbeautyfacts' as const,
+        }));
+        
+        for (const p of beautyProducts) {
+          if (p.code && !seenCodes.has(p.code)) {
+            seenCodes.add(p.code);
+            allProducts.push(p);
+          }
+        }
+        
+        console.log(`[Products] Found ${beautyProducts.length} from OpenBeautyFacts API`);
+      } catch (beautyError) {
+        console.log('[Products] OpenBeautyFacts search failed (non-critical):', beautyError);
+      }
+    }
 
-    console.log(`Found ${products.length} products`);
+    console.log(`[Products] Total search results: ${allProducts.length}`);
     
     return {
-      products,
-      count: data.count || 0,
-      page: data.page || 1,
-      page_size: data.page_size || 20,
+      products: allProducts,
+      count: allProducts.length,
+      page: page,
+      page_size: 20,
     };
   } catch (error) {
-    console.error('Error searching products:', error);
+    console.error('[Products] Error searching products:', error);
     return {
-      products: [],
-      count: 0,
+      products: allProducts.length > 0 ? allProducts : [],
+      count: allProducts.length,
       page: 1,
       page_size: 20,
     };

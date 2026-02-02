@@ -24,6 +24,8 @@ const convertSupabaseProfileToProfile = (sp: SupabaseProfile): Profile => ({
   emergencyContacts: sp.emergency_contacts,
   medications: sp.medications,
   avatarColor: sp.avatar_color,
+  trackEczemaTriggers: sp.track_eczema_triggers || false,
+  eczemaTriggerGroups: sp.eczema_trigger_groups || [],
   createdAt: sp.created_at,
   updatedAt: sp.updated_at,
 });
@@ -38,6 +40,8 @@ const convertProfileToSupabaseProfile = (p: Partial<Profile>): Partial<Omit<Supa
   emergency_contacts: p.emergencyContacts || [],
   medications: p.medications || [],
   avatar_color: p.avatarColor,
+  track_eczema_triggers: p.trackEczemaTriggers || false,
+  eczema_trigger_groups: p.eczemaTriggerGroups || [],
 });
 
 export const [ProfileProvider, useProfiles] = createContextHook(() => {
