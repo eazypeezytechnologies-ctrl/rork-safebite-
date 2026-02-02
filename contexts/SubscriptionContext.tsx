@@ -88,10 +88,6 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
   const [adminSettings, setAdminSettings] = useState<AdminSettings>(DEFAULT_ADMIN_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, [currentUser?.id, loadData]);
-
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -116,6 +112,10 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
       setIsLoading(false);
     }
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [currentUser?.id, loadData]);
 
   const updateAdminSettings = useCallback(async (updates: Partial<AdminSettings>) => {
     try {
