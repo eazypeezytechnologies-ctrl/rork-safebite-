@@ -1,2 +1,3 @@
-export const BUILD_ID = '2025-01-27-b1';
-export const BUILD_TIMESTAMP = '2025-01-27T12:00:00Z';
+export const BUILD_ID = '2026-02-02-v1';
+export const BUILD_TIMESTAMP = '2026-02-02T12:00:00Z';
+export const APP_VERSION = '1.0.0';

@@ -6,9 +6,17 @@ export interface AllergenMatch {
   matchedText?: string;
 }
 
+export interface EczemaTriggerMatch {
+  triggerName: string;
+  triggerGroup: string;
+  matchedText: string;
+  severityHint: 'low' | 'medium' | 'high';
+}
+
 export interface Verdict {
   level: VerdictLevel;
   matches: AllergenMatch[];
+  eczemaTriggers?: EczemaTriggerMatch[];
   message: string;
   missingData?: boolean;
 }
@@ -35,6 +43,8 @@ export interface Profile {
   updatedAt: string;
   isAdmin?: boolean;
   avatarColor?: string;
+  trackEczemaTriggers?: boolean;
+  eczemaTriggerGroups?: string[];
 }
 
 export interface User {
@@ -108,3 +118,29 @@ export interface FamilyGroup {
 }
 
 export type ViewMode = 'individual' | 'family';
+
+export type SubscriptionPlan = 'free' | 'individual' | 'family';
+export type SubscriptionStatus = 'active' | 'trialing' | 'canceled' | 'past_due' | 'expired';
+
+export interface UserSubscription {
+  id: string;
+  userId: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  trialEnd?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FamilyInvitation {
+  id: string;
+  familyGroupId: string;
+  email: string;
+  token: string;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  expiresAt: string;
+  createdAt: string;
+}

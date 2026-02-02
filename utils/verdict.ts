@@ -1,6 +1,7 @@
-import { Product, Profile, Verdict, AllergenMatch, VerdictLevel } from '@/types';
+import { Product, Profile, Verdict, AllergenMatch, VerdictLevel, EczemaTriggerMatch } from '@/types';
 import { calculateEnhancedVerdict, EnhancedVerdict, getConfidenceColor, getConfidenceLabel } from './advancedAllergenDetection';
 import { getAllSynonymsForAllergen } from '@/constants/scientificAllergenDatabase';
+import { findEczemaTriggerMatches } from '@/constants/eczemaTriggers';
 
 export type { EnhancedVerdict };
 export { getConfidenceColor, getConfidenceLabel };
@@ -321,10 +322,48 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
   
   console.log('Found matches:', uniqueMatches);
   
+  let eczemaTriggers: EczemaTriggerMatch[] = [];
+  if (profile.trackEczemaTriggers && profile.eczemaTriggerGroups && profile.eczemaTriggerGroups.length > 0) {
+    console.log('\n🧴 CHECKING ECZEMA TRIGGERS:');
+    console.log('   Enabled trigger groups:', profile.eczemaTriggerGroups.join(', '));
+    
+    const triggerMatches = findEczemaTriggerMatches(
+      product.ingredients_text || '',
+      profile.eczemaTriggerGroups
+    );
+    
+    eczemaTriggers = triggerMatches.map(m => ({
+      triggerName: m.trigger.name,
+      triggerGroup: m.trigger.triggerGroup,
+      matchedText: m.matchedText,
+      severityHint: m.trigger.severityHint,
+    }));
+    
+    if (eczemaTriggers.length > 0) {
+      console.log('   ⚠️ ECZEMA TRIGGERS FOUND:', eczemaTriggers.map(t => t.triggerName).join(', '));
+    } else {
+      console.log('   ✅ No eczema triggers detected');
+    }
+  }
+
   if (uniqueMatches.length === 0) {
+    if (eczemaTriggers.length > 0) {
+      const highSeverityTriggers = eczemaTriggers.filter(t => t.severityHint === 'high');
+      const triggerNames = eczemaTriggers.map(t => t.triggerName).join(', ');
+      
+      return {
+        level: highSeverityTriggers.length > 0 ? 'caution' : 'caution',
+        matches: [],
+        eczemaTriggers,
+        message: `No allergens found, but contains potential eczema triggers: ${triggerNames}`,
+        missingData: !hasAnyData,
+      };
+    }
+    
     return {
       level: 'safe',
       matches: [],
+      eczemaTriggers: [],
       message: hasAnyData 
         ? 'No listed allergens found for this profile.'
         : 'No ingredient data available - cannot verify safety.',
@@ -345,6 +384,7 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
     return {
       level: 'danger',
       matches: uniqueMatches,
+      eczemaTriggers,
       message: `Contains: ${allergenList}`,
       missingData: false,
     };
@@ -358,6 +398,7 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
   return {
     level: 'caution',
     matches: uniqueMatches,
+    eczemaTriggers,
     message: `May contain traces: ${traceAllergenList}`,
     missingData: false,
   };

@@ -5,6 +5,7 @@ import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users } from 'lu
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { getRelationshipLabel, getRelationshipIcon } from '@/constants/profileColors';
+import { BUILD_ID } from '@/constants/appVersion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
@@ -309,6 +310,8 @@ export default function ProfilesScreen() {
             This app is informational only. Always read labels and follow medical advice.
           </Text>
         </View>
+
+        <Text style={styles.buildId}>Build: {BUILD_ID}</Text>
       </ScrollView>
     </View>
   );
@@ -671,5 +674,12 @@ const styles = StyleSheet.create({
   inviteButtonSubtitle: {
     fontSize: 14,
     color: '#D1FAE5',
+  },
+  buildId: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'center' as const,
+    marginTop: 8,
+    marginBottom: 24,
   },
 });

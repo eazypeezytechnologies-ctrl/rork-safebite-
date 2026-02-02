@@ -6,6 +6,7 @@ import { ProfileProvider, useProfiles } from "@/contexts/ProfileContext";
 import { UserProvider, useUser } from "@/contexts/UserContext";
 import { LiveDataContext } from "@/contexts/LiveDataContext";
 import { FamilyProvider } from "@/contexts/FamilyContext";
+import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { View, ActivityIndicator, Platform, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { restoreStorageFromServer, syncStorageToServer } from "@/utils/storageSync";
@@ -333,6 +334,7 @@ function RootLayoutNav() {
       <Stack.Screen name="welcome-tour" options={{ title: "Welcome Tour" }} />
       <Stack.Screen name="manual-ingredient-entry" options={{ title: "Manual Entry" }} />
       <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+      <Stack.Screen name="subscription" options={{ title: "Subscription" }} />
     </Stack>
   );
 }
@@ -424,9 +426,11 @@ export default function RootLayout() {
             <UserProvider>
               <ProfileProvider>
                 <FamilyProvider>
-                  <LiveDataContext>
-                    <RootLayoutNav />
-                  </LiveDataContext>
+                  <SubscriptionProvider>
+                    <LiveDataContext>
+                      <RootLayoutNav />
+                    </LiveDataContext>
+                  </SubscriptionProvider>
                 </FamilyProvider>
               </ProfileProvider>
             </UserProvider>
