@@ -20,7 +20,6 @@ import {
   LogOut,
   ScanLine,
   Heart,
-  ShoppingCart,
   Clock,
   CheckCircle,
   Stethoscope,
@@ -28,9 +27,8 @@ import {
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { getScanHistory, ScanHistoryItem } from '@/storage/scanHistory';
-import { getFavorites, FavoriteItem } from '@/storage/favorites';
-import { getShoppingList, ShoppingListItem } from '@/storage/shoppingList';
+import { getAdminStats, getRecentScansForAdmin } from '@/services/supabaseProducts';
+import { BUILD_ID } from '@/constants/appVersion';
 
 interface ActivityItem {
   id: string;
@@ -49,66 +47,38 @@ export default function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
-  const [storageStats, setStorageStats] = useState({
-    scans: 0,
-    favorites: 0,
-    shoppingItems: 0,
+  const [dbStats, setDbStats] = useState({
+    totalUsers: 0,
+    adminUsers: 0,
+    regularUsers: 0,
+    totalProfiles: 0,
+    totalScans: 0,
+    totalFavorites: 0,
+    totalProducts: 0,
   });
+  const [statsLoaded, setStatsLoaded] = useState(false);
 
   const loadActivityData = useCallback(async () => {
     try {
-      const [scanHistory, favorites, shoppingList] = await Promise.all([
-        getScanHistory(),
-        getFavorites(),
-        getShoppingList(),
+      const [adminStats, recentScans] = await Promise.all([
+        getAdminStats(),
+        getRecentScansForAdmin(10),
       ]);
 
-      setStorageStats({
-        scans: scanHistory.length,
-        favorites: favorites.length,
-        shoppingItems: shoppingList.length,
-      });
+      setDbStats(adminStats);
+      setStatsLoaded(true);
 
-      const activities: ActivityItem[] = [];
-
-      scanHistory.slice(0, 5).forEach((item: ScanHistoryItem) => {
-        activities.push({
-          id: `scan-${item.id}`,
-          type: 'scan',
-          title: item.product?.product_name || 'Product Scanned',
-          subtitle: `Scanned by ${item.profileName}`,
-          timestamp: new Date(item.scannedAt),
-          icon: ScanLine,
-          color: '#3B82F6',
-        });
-      });
-
-      favorites.slice(0, 3).forEach((item: FavoriteItem) => {
-        activities.push({
-          id: `fav-${item.id}`,
-          type: 'favorite',
-          title: item.product?.product_name || 'Product Favorited',
-          subtitle: 'Added to favorites',
-          timestamp: new Date(item.addedAt),
-          icon: Heart,
-          color: '#EF4444',
-        });
-      });
-
-      shoppingList.slice(0, 3).forEach((item: ShoppingListItem) => {
-        activities.push({
-          id: `shop-${item.id}`,
-          type: 'shopping',
-          title: item.name,
-          subtitle: item.checked ? 'Completed' : 'Pending',
-          timestamp: new Date(item.addedAt),
-          icon: ShoppingCart,
-          color: '#10B981',
-        });
-      });
+      const activities: ActivityItem[] = recentScans.map((scan) => ({
+        id: `scan-${scan.id}`,
+        type: 'scan' as const,
+        title: scan.product_name || 'Product Scanned',
+        subtitle: `Verdict: ${scan.verdict}`,
+        timestamp: new Date(scan.scanned_at),
+        icon: ScanLine,
+        color: scan.verdict === 'danger' ? '#EF4444' : scan.verdict === 'caution' ? '#F59E0B' : '#3B82F6',
+      }));
 
       activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
       setRecentActivity(activities.slice(0, 8));
     } catch (error) {
       console.error('Error loading activity data:', error);
@@ -143,28 +113,28 @@ export default function AdminDashboardScreen() {
   const stats = [
     {
       label: 'Total Users',
-      value: users.length,
+      value: statsLoaded ? dbStats.totalUsers : users.length,
       icon: Users,
       color: '#7C3AED',
       bgColor: '#EDE9FE',
     },
     {
       label: 'Admin Users',
-      value: users.filter((u) => u.isAdmin).length,
+      value: statsLoaded ? dbStats.adminUsers : users.filter((u) => u.isAdmin).length,
       icon: Shield,
       color: '#DC2626',
       bgColor: '#FEE2E2',
     },
     {
       label: 'Regular Users',
-      value: users.filter((u) => !u.isAdmin).length,
+      value: statsLoaded ? dbStats.regularUsers : users.filter((u) => !u.isAdmin).length,
       icon: UserCheck,
       color: '#059669',
       bgColor: '#D1FAE5',
     },
     {
       label: 'Total Profiles',
-      value: profiles.length,
+      value: statsLoaded ? dbStats.totalProfiles : profiles.length,
       icon: Database,
       color: '#2563EB',
       bgColor: '#DBEAFE',
@@ -205,20 +175,20 @@ export default function AdminDashboardScreen() {
   const dataInsights = [
     {
       label: 'Total Scans',
-      value: storageStats.scans,
+      value: statsLoaded ? dbStats.totalScans : 0,
       icon: ScanLine,
       color: '#3B82F6',
     },
     {
       label: 'Favorites',
-      value: storageStats.favorites,
+      value: statsLoaded ? dbStats.totalFavorites : 0,
       icon: Heart,
       color: '#EF4444',
     },
     {
-      label: 'Shopping Items',
-      value: storageStats.shoppingItems,
-      icon: ShoppingCart,
+      label: 'Products',
+      value: statsLoaded ? dbStats.totalProducts : 0,
+      icon: Database,
       color: '#10B981',
     },
   ];
@@ -385,7 +355,7 @@ export default function AdminDashboardScreen() {
             <View style={styles.infoDivider} />
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>App Version</Text>
-              <Text style={styles.infoValue}>1.0.0</Text>
+              <Text style={styles.infoValue}>{BUILD_ID}</Text>
             </View>
             <View style={styles.infoDivider} />
             <View style={styles.infoRow}>

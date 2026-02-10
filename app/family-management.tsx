@@ -47,15 +47,6 @@ export default function FamilyManagementScreen() {
   const [invitations, setInvitations] = useState<Record<string, FamilyInvitation[]>>({});
   const [isSendingInvite, setIsSendingInvite] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshFamilyGroups();
-      if (familyGroups.length > 0) {
-        loadAllInvitations();
-      }
-    }, [refreshFamilyGroups, familyGroups.length, loadAllInvitations])
-  );
-
   const loadAllInvitations = useCallback(async () => {
     try {
       const inviteMap: Record<string, FamilyInvitation[]> = {};
@@ -68,6 +59,15 @@ export default function FamilyManagementScreen() {
       console.error('Error loading invitations:', error);
     }
   }, [familyGroups]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshFamilyGroups();
+      if (familyGroups.length > 0) {
+        loadAllInvitations();
+      }
+    }, [refreshFamilyGroups, familyGroups.length, loadAllInvitations])
+  );
 
   
 

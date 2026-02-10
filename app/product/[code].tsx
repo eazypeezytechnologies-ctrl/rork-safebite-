@@ -20,6 +20,7 @@ import { calculateVerdict, getVerdictColor, getVerdictLabel } from '@/utils/verd
 import { Product, RecallResult } from '@/types';
 import { addToScanHistory } from '@/storage/scanHistory';
 import { useUser } from '@/contexts/UserContext';
+import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { addToFavorites, removeFromFavorites, isFavorite } from '@/storage/favorites';
 import * as Haptics from 'expo-haptics';
 import { analyzeIngredient, parseIngredients, getOverallSafetyScore, IngredientInfo } from '@/utils/ingredientAnalysis';
@@ -176,8 +177,21 @@ export default function ProductDetailsScreen() {
           profileName: activeProfile.name,
           scannedAt: new Date().toISOString(),
         }, currentUser?.id);
-        
-        // Track scan activity for admin monitoring
+
+        upsertProduct(productData).catch(() => {});
+
+        if (currentUser?.id) {
+          recordScanEvent({
+            user_id: currentUser.id,
+            profile_id: activeProfile.id,
+            product_barcode: code,
+            product_name: productData.product_name || 'Unknown',
+            scan_type: 'barcode',
+            verdict: verdict.level,
+            verdict_details: verdict.message || null,
+          }).catch((err) => console.log('[ProductDetail] Non-critical scan event error:', err));
+        }
+
         trackActivity('product_scan', {
           productCode: code,
           productName: productData.product_name,

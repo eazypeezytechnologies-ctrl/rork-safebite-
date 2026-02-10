@@ -28,6 +28,7 @@ import { calculateVerdict, getVerdictColor, getVerdictIcon } from '@/utils/verdi
 import { Product } from '@/types';
 import { getRelationshipIcon } from '@/constants/profileColors';
 import { BUILD_ID } from '@/constants/appVersion';
+import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -535,7 +536,6 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         return;
       }
       
-      const extractedInfo = analysisResult.toLowerCase();
       let detectedBarcode: string | null = null;
       
       const barcodeMatch = analysisResult.match(/barcode:?\s*([0-9]{8,14})/i);
@@ -544,10 +544,55 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         console.log('Detected barcode from image:', detectedBarcode);
       }
       
-      if (detectedBarcode && extractedInfo.includes('product name') && !extractedInfo.includes('not visible')) {
+      const productNameMatch = analysisResult.match(/Product Name:\s*(.+?)(?:\n|$)/i);
+      const brandMatch = analysisResult.match(/Brand:\s*(.+?)(?:\n|$)/i);
+      const ingredientsMatch = analysisResult.match(/Ingredients:\s*(.+?)(?:\n|$)/i);
+      const allergensMatch = analysisResult.match(/Allergens:\s*(.+?)(?:\n|$)/i);
+
+      const extractedName = productNameMatch?.[1]?.trim();
+      const extractedBrand = brandMatch?.[1]?.trim();
+      const extractedIngredients = ingredientsMatch?.[1]?.trim();
+      const extractedAllergens = allergensMatch?.[1]?.trim();
+
+      const hasName = extractedName && !extractedName.toLowerCase().includes('not visible');
+      const hasBrand = extractedBrand && !extractedBrand.toLowerCase().includes('not visible');
+      const hasIngredients = extractedIngredients && !extractedIngredients.toLowerCase().includes('not visible');
+
+      const productCode = detectedBarcode || `photo_${Date.now()}`;
+      const photoProduct: Product = {
+        code: productCode,
+        product_name: hasName ? extractedName : 'Photo Scan Product',
+        brands: hasBrand ? extractedBrand : undefined,
+        ingredients_text: hasIngredients ? extractedIngredients : undefined,
+        allergens: extractedAllergens && !extractedAllergens.toLowerCase().includes('not visible') ? extractedAllergens : undefined,
+        allergens_tags: [],
+        traces_tags: [],
+        source: 'manual_entry' as const,
+      };
+
+      upsertProduct(photoProduct).then(() => {
+        console.log('[ScanScreen] Photo product saved to Supabase');
+      }).catch((err) => {
+        console.log('[ScanScreen] Non-critical: failed to save photo product:', err);
+      });
+
+      if (currentUser?.id && activeProfile) {
+        const verdict = calculateVerdict(photoProduct, activeProfile);
+        recordScanEvent({
+          user_id: currentUser.id,
+          profile_id: activeProfile.id,
+          product_barcode: productCode,
+          product_name: photoProduct.product_name || 'Photo Scan',
+          scan_type: 'photo',
+          verdict: verdict.level,
+          verdict_details: verdict.message || null,
+        }).catch(() => {});
+      }
+
+      if (detectedBarcode) {
         Alert.alert(
-          '✅ Product Recognized!',
-          `We detected a barcode: ${detectedBarcode}\n\nWould you like to look up this product?`,
+          'Product Recognized!',
+          `Barcode: ${detectedBarcode}\nName: ${hasName ? extractedName : 'Unknown'}\n\nProduct saved. Would you like to view details?`,
           [
             {
               text: 'View Product',
@@ -558,19 +603,10 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
               }
             },
             {
-              text: 'See Details',
+              text: 'Done',
               onPress: () => {
                 setCapturedImage(null);
                 setIsAnalyzing(false);
-                Alert.alert('Product Information', analysisResult);
-              },
-            },
-            {
-              text: 'Try Again',
-              onPress: () => {
-                setCapturedImage(null);
-                setIsAnalyzing(false);
-                openImageRecognition();
               },
               style: 'cancel'
             }
@@ -578,26 +614,32 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         );
       } else {
         Alert.alert(
-          'Product Information',
-          analysisResult + '\n\nYou can now search for this product by name in the search box.',
+          'Product Saved',
+          `${hasName ? extractedName : 'Product'} has been saved and is now searchable.\n\n${analysisResult}`,
           [
             {
               text: 'Search Now',
               onPress: () => {
-                const productNameMatch = analysisResult.match(/Product Name:\s*(.+?)(?:\n|$)/i);
-                if (productNameMatch && productNameMatch[1] && !productNameMatch[1].toLowerCase().includes('not visible')) {
-                  setSearchQuery(productNameMatch[1].trim());
+                if (hasName) {
+                  setSearchQuery(extractedName!);
                 }
                 setCapturedImage(null);
                 setIsAnalyzing(false);
               }
             },
             {
-              text: 'Try Again',
+              text: 'Take Another',
               onPress: () => {
                 setCapturedImage(null);
                 setIsAnalyzing(false);
                 openImageRecognition();
+              },
+            },
+            {
+              text: 'Done',
+              onPress: () => {
+                setCapturedImage(null);
+                setIsAnalyzing(false);
               },
               style: 'cancel'
             }

@@ -10,49 +10,68 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { History, Heart, Trash2, Clock, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react-native';
+import { useRouter, useFocusEffect, Href } from 'expo-router';
+import { History, Heart, Trash2, Clock, AlertCircle, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
-import { getScanHistory, clearScanHistory, removeFromScanHistory, ScanHistoryItem } from '@/storage/scanHistory';
 import { getFavorites, removeFromFavorites, addToFavorites, FavoriteItem } from '@/storage/favorites';
 import { getVerdictColor } from '@/utils/verdict';
 import { SwipeableListItem } from '@/components/SwipeableListItem';
 import * as Haptics from 'expo-haptics';
+import {
+  getScanHistory as getSupabaseScanHistory,
+  clearUserScanHistory,
+  removeOneScanHistory,
+} from '@/services/supabaseProducts';
 
 type TabType = 'history' | 'favorites';
+
+interface SupabaseHistoryItem {
+  id: string;
+  product_code: string;
+  product_name: string;
+  verdict: string;
+  scanned_at: string;
+  profile_id: string;
+}
 
 export default function HistoryScreen() {
   const router = useRouter();
   const { activeProfile } = useProfiles();
   const { currentUser } = useUser();
   const [activeTab, setActiveTab] = useState<TabType>('history');
-  const [history, setHistory] = useState<ScanHistoryItem[]>([]);
+  const [history, setHistory] = useState<SupabaseHistoryItem[]>([]);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const userId = currentUser?.id;
 
   const loadData = useCallback(async () => {
     try {
+      setLoadError(null);
       console.log('[History] Loading data for user:', userId);
+
+      const profileId = activeProfile?.id;
+
       const [historyData, favoritesData] = await Promise.all([
-        getScanHistory(userId),
+        userId ? getSupabaseScanHistory(userId, profileId, 50) : Promise.resolve([]),
         getFavorites(userId),
       ]);
-      
+
       console.log('[History] Loaded', historyData.length, 'history items and', favoritesData.length, 'favorites');
-      
+
+      setHistory(historyData);
+
       if (activeProfile) {
-        setHistory(historyData.filter(item => item.profileId === activeProfile.id));
         setFavorites(favoritesData.filter(item => item.profileId === activeProfile.id));
       } else {
-        setHistory(historyData);
         setFavorites(favoritesData);
       }
     } catch (err) {
-      console.error('Error loading data:', err);
+      console.error('[History] Error loading data:', err);
+      setLoadError('Failed to load history. Pull down to retry.');
     } finally {
       setIsLoading(false);
     }
@@ -73,16 +92,24 @@ export default function HistoryScreen() {
   const handleClearHistory = () => {
     Alert.alert(
       'Clear History',
-      'Are you sure you want to clear all scan history?',
+      'Are you sure you want to clear all scan history? This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
+            if (!userId) return;
             try {
-              await clearScanHistory(userId);
-              await loadData();
+              const result = await clearUserScanHistory(userId);
+              if (result.success) {
+                setHistory([]);
+                if (Platform.OS !== 'web') {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+              } else {
+                Alert.alert('Error', result.error || 'Failed to clear history');
+              }
             } catch {
               Alert.alert('Error', 'Failed to clear history');
             }
@@ -139,7 +166,7 @@ export default function HistoryScreen() {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    
+
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -183,6 +210,16 @@ export default function HistoryScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {loadError && (
+          <View style={styles.errorBanner}>
+            <AlertCircle size={18} color="#DC2626" />
+            <Text style={styles.errorBannerText}>{loadError}</Text>
+            <TouchableOpacity onPress={onRefresh}>
+              <RefreshCw size={18} color="#DC2626" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {activeTab === 'history' && (
           <>
             {history.length > 0 && (
@@ -192,41 +229,41 @@ export default function HistoryScreen() {
               </TouchableOpacity>
             )}
 
-            {history.length === 0 ? (
+            {history.length === 0 && !loadError ? (
               <View style={styles.emptyState}>
                 <History size={64} color="#D1D5DB" />
                 <Text style={styles.emptyText}>No scan history</Text>
                 <Text style={styles.emptySubtext}>
-                  Products you scan will appear here
+                  Products you scan will appear here and sync across all your devices
                 </Text>
               </View>
             ) : (
               history.map((item) => {
-                const VerdictIcon = item.verdict ? getVerdictIcon(item.verdict.level) : AlertCircle;
-                const verdictColor = item.verdict ? getVerdictColor(item.verdict.level) : '#9CA3AF';
+                const VerdictIcon = getVerdictIcon(item.verdict);
+                const verdictColor = getVerdictColor(item.verdict as any) || '#9CA3AF';
 
                 const handleNavigate = () => {
-                  const productCode = item.product?.code;
-                  
+                  const productCode = item.product_code;
                   if (!productCode || productCode === 'undefined' || productCode === 'null' || productCode.trim() === '') {
-                    Alert.alert('Error', 'This product has an invalid code and cannot be viewed. Please scan it again.');
+                    Alert.alert('Error', 'This product has an invalid code. Please scan it again.');
                     return;
                   }
-                  
-                  router.push(`/product/${encodeURIComponent(productCode)}`);
+                  router.push(`/product/${encodeURIComponent(productCode)}` as Href);
                 };
 
                 const handleAddToFavorites = async () => {
                   if (!activeProfile) return;
-                  
                   try {
                     await addToFavorites({
-                      id: `${item.product.code}_${activeProfile.id}_${Date.now()}`,
-                      product: item.product,
+                      id: `${item.product_code}_${activeProfile.id}_${Date.now()}`,
+                      product: {
+                        code: item.product_code,
+                        product_name: item.product_name,
+                        source: 'openfoodfacts' as const,
+                      },
                       profileId: activeProfile.id,
                       addedAt: new Date().toISOString(),
                     }, userId);
-                    
                     if (Platform.OS !== 'web') {
                       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     }
@@ -249,8 +286,12 @@ export default function HistoryScreen() {
                       color: '#DC2626',
                       onPress: async () => {
                         try {
-                          await removeFromScanHistory(item.id, userId);
-                          await loadData();
+                          const result = await removeOneScanHistory(item.id);
+                          if (result.success) {
+                            setHistory(prev => prev.filter(h => h.id !== item.id));
+                          } else {
+                            Alert.alert('Error', 'Failed to remove item');
+                          }
                         } catch {
                           Alert.alert('Error', 'Failed to remove item');
                         }
@@ -265,16 +306,11 @@ export default function HistoryScreen() {
                         </View>
                         <View style={styles.itemInfo}>
                           <Text style={styles.itemName} numberOfLines={2}>
-                            {item.product.product_name || 'Unknown Product'}
+                            {item.product_name || 'Unknown Product'}
                           </Text>
-                          {item.product.brands && (
-                            <Text style={styles.itemBrand} numberOfLines={1}>
-                              {item.product.brands}
-                            </Text>
-                          )}
                           <View style={styles.itemMeta}>
                             <Clock size={12} color="#9CA3AF" />
-                            <Text style={styles.itemDate}>{formatDate(item.scannedAt)}</Text>
+                            <Text style={styles.itemDate}>{formatDate(item.scanned_at)}</Text>
                           </View>
                         </View>
                       </View>
@@ -303,22 +339,11 @@ export default function HistoryScreen() {
                     style={styles.itemContent}
                     onPress={() => {
                       const productCode = item.product?.code;
-                      console.log('=== Favorite Item Clicked ===');
-                      console.log('Full item:', JSON.stringify(item, null, 2));
-                      console.log('Product object:', JSON.stringify(item.product, null, 2));
-                      console.log('Product code:', productCode);
-                      console.log('Product code type:', typeof productCode);
-                      console.log('Product name:', item.product?.product_name);
-                      console.log('Navigating to:', `/product/${productCode}`);
-                      
                       if (!productCode || productCode === 'undefined' || productCode === 'null' || productCode.trim() === '') {
-                        console.error('Invalid product code detected in favorite item');
-                        Alert.alert('Error', 'This product has an invalid code and cannot be viewed. Please scan it again.');
+                        Alert.alert('Error', 'This product has an invalid code. Please scan it again.');
                         return;
                       }
-                      
-                      console.log('Pushing to router with path:', `/product/${encodeURIComponent(productCode)}`);
-                      router.push(`/product/${encodeURIComponent(productCode)}`);
+                      router.push(`/product/${encodeURIComponent(productCode)}` as Href);
                     }}
                   >
                     <View style={styles.favoriteIcon}>
@@ -423,6 +448,22 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderRadius: 12,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#DC2626',
+  },
   clearButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -455,7 +496,8 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 16,
     color: '#6B7280',
-    textAlign: 'center',
+    textAlign: 'center' as const,
+    paddingHorizontal: 32,
   },
   itemCard: {
     flexDirection: 'row',

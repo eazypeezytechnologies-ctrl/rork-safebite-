@@ -2,7 +2,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from '
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useState } from 'react';
 import { Stack, router } from 'expo-router';
-import { AlertCircle, Phone, Pill, X, Camera } from 'lucide-react-native';
+import { AlertCircle, Phone, Pill, X, Camera, Flashlight, FlashlightOff } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { EmergencyContact } from '@/types';
 
 interface EmergencyCardData {
@@ -22,6 +23,7 @@ export default function ScanEmergencyQRScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scannedData, setScannedData] = useState<EmergencyCardData | null>(null);
   const [error, setError] = useState<string>('');
+  const [torchEnabled, setTorchEnabled] = useState(false);
 
   const handleBarCodeScanned = ({ data }: { data: string }) => {
     try {
@@ -201,6 +203,7 @@ export default function ScanEmergencyQRScreen() {
         <CameraView
           style={styles.camera}
           facing="back"
+          enableTorch={torchEnabled}
           onBarcodeScanned={handleBarCodeScanned}
           barcodeScannerSettings={{
             barcodeTypes: ['qr'],
@@ -224,6 +227,27 @@ export default function ScanEmergencyQRScreen() {
             ) : null}
           </View>
         </CameraView>
+
+        <TouchableOpacity
+          style={styles.flashButton}
+          onPress={async () => {
+            if (Platform.OS !== 'web') {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+            setTorchEnabled(!torchEnabled);
+          }}
+          testID="qr-flash-button"
+          activeOpacity={0.7}
+        >
+          {torchEnabled ? (
+            <Flashlight size={24} color="#FBBF24" />
+          ) : (
+            <FlashlightOff size={24} color="#FFFFFF" />
+          )}
+          <Text style={[styles.flashButtonText, torchEnabled && styles.flashButtonTextActive]}>
+            {torchEnabled ? 'ON' : 'OFF'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </>
   );
@@ -536,5 +560,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700' as const,
     color: '#FFFFFF',
+  },
+  flashButton: {
+    position: 'absolute' as const,
+    bottom: 40,
+    left: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  flashButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  flashButtonTextActive: {
+    color: '#FBBF24',
   },
 });
