@@ -373,12 +373,12 @@ export default function ProfileWizard() {
       case 6:
         return (
           <View style={styles.stepContent}>
-            <Text style={styles.stepTitle}>Skin Sensitivity</Text>
+            <Text style={styles.stepTitle}>Skin Sensitivity (Eczema Triggers)</Text>
             <Text style={styles.stepSubtitle}>
-              Do you have eczema, dermatitis, or skin reactions to certain ingredients?
+              Track ingredients that may trigger eczema flare-ups, dermatitis, or skin reactions.
             </Text>
             <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Track skin sensitivity triggers</Text>
+              <Text style={styles.switchLabel}>Track skin sensitivity (eczema flare triggers)</Text>
               <Switch
                 value={trackEczemaTriggers}
                 onValueChange={setTrackEczemaTriggers}
@@ -387,8 +387,15 @@ export default function ProfileWizard() {
               />
             </View>
             {trackEczemaTriggers && (
+              <View style={styles.sensitivityHelperBox}>
+                <Text style={styles.sensitivityHelperText}>
+                  These are sensitivity triggers (not allergies). We&apos;ll warn you if ingredients may cause flare-ups.
+                </Text>
+              </View>
+            )}
+            {trackEczemaTriggers && (
               <>
-                <Text style={styles.triggerLabel}>Select triggers to watch for:</Text>
+                <Text style={styles.triggerLabel}>Food-based triggers to watch for:</Text>
                 <View style={styles.triggerGrid}>
                   {FOOD_SENSITIVITY_TRIGGERS.map(trigger => {
                     const isSelected = eczemaTriggerGroups.includes(trigger.id);
@@ -738,6 +745,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#92400E',
     flex: 1,
+  },
+  sensitivityHelperBox: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  sensitivityHelperText: {
+    fontSize: 13,
+    color: '#92400E',
+    lineHeight: 19,
   },
   switchRow: {
     flexDirection: 'row',

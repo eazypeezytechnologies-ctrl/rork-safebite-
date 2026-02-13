@@ -45,7 +45,7 @@ function generateProductCode(product: Partial<Product>): string {
   return `manual_${brand}_${name}_${Date.now()}`.replace(/\s+/g, '_').substring(0, 100);
 }
 
-export async function upsertProduct(product: Product): Promise<{ success: boolean; error?: string }> {
+export async function upsertProduct(product: Product): Promise<{ success: boolean; error?: string; verified?: boolean }> {
   try {
     const barcode = product.code && /^\d{8,14}$/.test(product.code) ? product.code : null;
     const name = product.product_name || 'Unknown Product';
@@ -91,11 +91,11 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
 
       if (error) {
         console.error('[SupabaseProducts] Update error:', error.message);
-        return { success: false, error: error.message };
+        return { success: false, error: error.message, verified: false };
       }
 
       console.log('[SupabaseProducts] Updated existing product, scan_count:', updates.scan_count);
-      return { success: true };
+      return { success: true, verified: true };
     }
 
     const insertPayload = {
@@ -129,55 +129,59 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
 
       if (insertError) {
         console.error('[SupabaseProducts] Insert also failed:', insertError.message);
-        return { success: false, error: insertError.message };
+        return { success: false, error: insertError.message, verified: false };
       }
     }
 
     const { data: verify } = await supabase
       .from('products')
-      .select('id, code')
+      .select('id, code, product_name')
       .eq('code', code)
       .maybeSingle();
 
     if (verify) {
-      console.log('[SupabaseProducts] Verified product saved:', code, 'id:', verify.id);
+      console.log('[SupabaseProducts] ✅ VERIFIED product saved:', code, 'id:', verify.id, 'name:', verify.product_name);
+      return { success: true, verified: true };
     } else {
-      console.warn('[SupabaseProducts] Product may not have saved correctly:', code);
+      console.warn('[SupabaseProducts] ⚠️ Product NOT verified after save:', code);
+      return { success: true, verified: false, error: 'Save appeared to succeed but verification failed' };
     }
-
-    return { success: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[SupabaseProducts] upsertProduct exception:', msg);
-    return { success: false, error: msg };
+    return { success: false, error: msg, verified: false };
   }
 }
 
 export async function recordScanEvent(event: SupabaseScanEvent): Promise<{ success: boolean; error?: string }> {
   try {
+    const productCode = event.product_barcode || `manual_${Date.now()}`;
     console.log('[SupabaseProducts] Recording scan event:', {
       user: event.user_id?.substring(0, 8),
       type: event.scan_type,
       product: event.product_name?.substring(0, 30),
+      code: productCode,
     });
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('scan_history')
       .insert({
         user_id: event.user_id,
         profile_id: event.profile_id,
-        product_code: event.product_barcode || `manual_${Date.now()}`,
+        product_code: productCode,
         product_name: event.product_name || 'Unknown Product',
         verdict: event.verdict,
         scanned_at: new Date().toISOString(),
-      });
+      })
+      .select('id')
+      .single();
 
     if (error) {
       console.error('[SupabaseProducts] recordScanEvent error:', error.message);
       return { success: false, error: error.message };
     }
 
-    console.log('[SupabaseProducts] Scan event recorded successfully');
+    console.log('[SupabaseProducts] ✅ Scan event recorded, id:', data?.id);
     return { success: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -438,11 +442,12 @@ function mapSupabaseToProduct(data: any): Product {
 
 export async function getProductByCode(code: string): Promise<Product | null> {
   try {
-    console.log('[SupabaseProducts] getProductByCode:', code);
+    const normalizedCode = code.trim();
+    console.log('[SupabaseProducts] getProductByCode:', normalizedCode);
     const { data, error } = await supabase
       .from('products')
       .select('*')
-      .eq('code', code)
+      .eq('code', normalizedCode)
       .maybeSingle();
 
     if (error) {
@@ -450,7 +455,7 @@ export async function getProductByCode(code: string): Promise<Product | null> {
       return null;
     }
     if (!data) {
-      console.log('[SupabaseProducts] No product found for code:', code);
+      console.log('[SupabaseProducts] No product found for code:', normalizedCode);
       return null;
     }
     console.log('[SupabaseProducts] Found product:', data.product_name, 'source:', data.source);
@@ -460,3 +465,5 @@ export async function getProductByCode(code: string): Promise<Product | null> {
     return null;
   }
 }
+
+

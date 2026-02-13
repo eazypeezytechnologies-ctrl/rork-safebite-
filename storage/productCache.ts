@@ -55,6 +55,21 @@ export async function cacheProduct(product: Product): Promise<void> {
   }
 }
 
+export async function removeCachedProduct(barcode: string): Promise<void> {
+  try {
+    const cacheStr = await AsyncStorage.getItem(CACHE_KEY);
+    if (!cacheStr) return;
+    const cache: ProductCache = JSON.parse(cacheStr);
+    if (cache[barcode]) {
+      delete cache[barcode];
+      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      console.log('[ProductCache] Removed cached product:', barcode);
+    }
+  } catch (error) {
+    console.error('[ProductCache] Error removing cached product:', error);
+  }
+}
+
 export async function clearProductCache(): Promise<void> {
   try {
     await AsyncStorage.removeItem(CACHE_KEY);

@@ -12,6 +12,12 @@ const BARCODE_DEBOUNCE_MS = 500;
 let lastBarcodeTime = 0;
 let lastBarcode = '';
 
+export function resetBarcodeDebounce(): void {
+  lastBarcode = '';
+  lastBarcodeTime = 0;
+  console.log('[Products] Barcode debounce reset');
+}
+
 interface OfflineCacheEntry {
   product: Product;
   cachedAt: string;
@@ -71,20 +77,21 @@ const WORLD_UPC_API = 'https://api.worldupc.com/api/v2';
 const DATAKICK_API = 'https://www.datakick.org/api/items';
 
 export async function searchProductByBarcode(barcode: string, useCache: boolean = true): Promise<Product | null> {
+  const normalizedBarcode = barcode.trim();
   const now = Date.now();
-  if (barcode === lastBarcode && now - lastBarcodeTime < BARCODE_DEBOUNCE_MS) {
+  if (normalizedBarcode === lastBarcode && now - lastBarcodeTime < BARCODE_DEBOUNCE_MS) {
     if (__DEV__) console.log('[Products] Debouncing duplicate barcode request');
     return null;
   }
-  lastBarcode = barcode;
+  lastBarcode = normalizedBarcode;
   lastBarcodeTime = now;
 
-  if (__DEV__) console.log('[Products] Searching for barcode:', barcode);
+  if (__DEV__) console.log('[Products] Searching for barcode:', normalizedBarcode);
 
   try {
-    const supabaseProduct = await getProductByCode(barcode);
+    const supabaseProduct = await getProductByCode(normalizedBarcode);
     if (supabaseProduct && supabaseProduct.product_name && supabaseProduct.product_name !== 'Unknown Product') {
-      console.log('[Products] Found in Supabase products table:', supabaseProduct.product_name);
+      console.log('[Products] ✅ Found in Supabase products table:', supabaseProduct.product_name);
       await cacheProduct(supabaseProduct);
       return supabaseProduct;
     }

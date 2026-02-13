@@ -258,7 +258,7 @@ export default function EditProfileScreen() {
             <Text style={styles.sensitivityTitle}>Skin Sensitivity / Eczema</Text>
           </View>
           <Text style={styles.sensitivitySubtitle}>
-            Track ingredients that may trigger eczema, dermatitis, or skin reactions
+            These are sensitivity triggers (not allergies). We&apos;ll warn you if ingredients may cause flare-ups.
           </Text>
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>Enable sensitivity tracking</Text>

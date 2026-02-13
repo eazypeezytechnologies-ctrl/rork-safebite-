@@ -33,6 +33,8 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { calculateVerdict } from '@/utils/verdict';
 import { addToScanHistory } from '@/storage/scanHistory';
+import { cacheProduct } from '@/storage/productCache';
+import { resetBarcodeDebounce } from '@/api/products';
 
 interface ProductCaptureWizardProps {
   barcode: string;
@@ -265,7 +267,7 @@ Format response exactly as above, one per line.`;
 
     setIsSaving(true);
     try {
-      const productCode = barcode && /^\d{8,14}$/.test(barcode) ? barcode : `manual_${Date.now()}`;
+      const productCode = barcode && /^\d{8,14}$/.test(barcode) ? barcode.trim() : `manual_${Date.now()}`;
 
       const allergensFromText: string[] = [];
       if (extractedData.allergens) {
@@ -293,29 +295,53 @@ Format response exactly as above, one per line.`;
 
       const upsertResult = await upsertProduct(product);
       if (!upsertResult.success) {
-        console.warn('[CaptureWizard] Upsert warning:', upsertResult.error);
+        console.error('[CaptureWizard] ❌ Upsert FAILED:', upsertResult.error);
+        Alert.alert(
+          'Save Issue',
+          `Product could not be saved to the database: ${upsertResult.error || 'Unknown error'}. You can retry or continue.`,
+          [
+            { text: 'Retry', onPress: () => handleSave() },
+            { text: 'Continue Anyway', style: 'cancel', onPress: () => {
+              onProductSaved(product);
+            }},
+          ]
+        );
+        setIsSaving(false);
+        return;
       }
+
+      if (!upsertResult.verified) {
+        console.warn('[CaptureWizard] ⚠️ Save not verified - product may not be queryable');
+      } else {
+        console.log('[CaptureWizard] ✅ Product verified in database');
+      }
+
+      await cacheProduct(product);
+      resetBarcodeDebounce();
 
       if (currentUser?.id && activeProfile) {
         const verdict = calculateVerdict(product, activeProfile);
-        await addToScanHistory({
-          id: `${productCode}_${activeProfile.id}_${Date.now()}`,
-          product,
-          verdict,
-          profileId: activeProfile.id,
-          profileName: activeProfile.name,
-          scannedAt: new Date().toISOString(),
-        }, currentUser.id);
+        const [, scanResult] = await Promise.all([
+          addToScanHistory({
+            id: `${productCode}_${activeProfile.id}_${Date.now()}`,
+            product,
+            verdict,
+            profileId: activeProfile.id,
+            profileName: activeProfile.name,
+            scannedAt: new Date().toISOString(),
+          }, currentUser.id),
+          recordScanEvent({
+            user_id: currentUser.id,
+            profile_id: activeProfile.id,
+            product_barcode: productCode,
+            product_name: product.product_name || 'Manual Entry',
+            scan_type: 'manual',
+            verdict: verdict.level,
+            verdict_details: verdict.message || null,
+          }),
+        ]);
 
-        await recordScanEvent({
-          user_id: currentUser.id,
-          profile_id: activeProfile.id,
-          product_barcode: productCode,
-          product_name: product.product_name || 'Manual Entry',
-          scan_type: 'manual',
-          verdict: verdict.level,
-          verdict_details: verdict.message || null,
-        });
+        console.log('[CaptureWizard] History saved, scan event:', scanResult.success ? 'OK' : scanResult.error);
       }
 
       if (Platform.OS !== 'web') {
@@ -323,14 +349,15 @@ Format response exactly as above, one per line.`;
       }
 
       setSaveSuccess(true);
-      console.log('[CaptureWizard] Product saved successfully');
+      console.log('[CaptureWizard] ✅ Product saved and verified successfully');
 
       setTimeout(() => {
         onProductSaved(product);
       }, 300);
     } catch (error) {
       console.error('[CaptureWizard] Save error:', error);
-      Alert.alert('Save Failed', 'Could not save the product. Please try again.');
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      Alert.alert('Save Failed', `Could not save the product: ${msg}. Please try again.`);
     } finally {
       setIsSaving(false);
     }

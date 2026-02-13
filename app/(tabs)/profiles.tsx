@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, RefreshControl } from 'react-native';
 import React from 'react';
 import { useRouter } from 'expo-router';
-import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus } from 'lucide-react-native';
+import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus, AlertTriangle } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { getRelationshipLabel, getRelationshipIcon } from '@/constants/profileColors';
@@ -202,6 +202,12 @@ export default function ProfilesScreen() {
                       <View style={styles.anaphylaxisBadge}>
                         <AlertCircle size={12} color="#DC2626" />
                         <Text style={styles.anaphylaxisText}>Anaphylaxis risk</Text>
+                      </View>
+                    )}
+                    {profile.trackEczemaTriggers && (
+                      <View style={styles.sensitivityBadge}>
+                        <AlertTriangle size={12} color="#D97706" />
+                        <Text style={styles.sensitivityBadgeText}>Skin Sensitivity: ON</Text>
                       </View>
                     )}
                   </View>
@@ -460,6 +466,22 @@ const styles = StyleSheet.create({
   anaphylaxisText: {
     fontSize: 12,
     color: '#DC2626',
+    fontWeight: '600' as const,
+  },
+  sensitivityBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    marginTop: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start' as const,
+  },
+  sensitivityBadgeText: {
+    fontSize: 11,
+    color: '#D97706',
     fontWeight: '600' as const,
   },
   activeBadge: {
