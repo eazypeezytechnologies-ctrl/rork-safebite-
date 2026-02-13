@@ -11,7 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Camera, Upload, Edit3 } from 'lucide-react-native';
+import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb } from 'lucide-react-native';
+import ProductCaptureWizard from '@/components/ProductCaptureWizard';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { searchProductByBarcode } from '@/api/products';
@@ -342,102 +343,18 @@ export default function ProductDetailsScreen() {
   if (showCaptureWizard && !product) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Help Us Add This Product' }} />
-        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.captureWizardHeader}>
-            <View style={styles.captureIconCircle}>
-              <AlertCircle size={32} color="#D97706" />
-            </View>
-            <Text style={styles.captureTitle}>Product Not Found</Text>
-            <Text style={styles.captureSubtitle}>
-              We couldn&apos;t find this item yet. Help us add it so it&apos;s available for everyone.
-            </Text>
-            {code && /^\d{8,14}$/.test(code) && (
-              <View style={styles.barcodeTag}>
-                <Text style={styles.barcodeTagText}>Barcode: {code}</Text>
-              </View>
-            )}
-          </View>
-
-          <Text style={styles.captureStepHeader}>Choose how to add this product:</Text>
-
-          <TouchableOpacity
-            style={styles.captureOptionCard}
-            onPress={() => {
-              router.back();
-              setTimeout(() => {
-                router.push('/(tabs)/(scan)' as any);
-              }, 100);
-            }}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.captureOptionIcon, { backgroundColor: '#DBEAFE' }]}>
-              <Camera size={24} color="#2563EB" />
-            </View>
-            <View style={styles.captureOptionContent}>
-              <Text style={styles.captureOptionTitle}>Take Photo of Product</Text>
-              <Text style={styles.captureOptionDesc}>
-                Our AI will read the product name, ingredients, and allergens from the label
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.captureOptionCard}
-            onPress={() => {
-              router.back();
-              setTimeout(() => {
-                router.push('/(tabs)/(scan)' as any);
-              }, 100);
-            }}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.captureOptionIcon, { backgroundColor: '#D1FAE5' }]}>
-              <Upload size={24} color="#059669" />
-            </View>
-            <View style={styles.captureOptionContent}>
-              <Text style={styles.captureOptionTitle}>Upload Photo from Gallery</Text>
-              <Text style={styles.captureOptionDesc}>
-                Select a photo you already took of the ingredients label
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.captureOptionCard}
-            onPress={() => router.push(`/manual-ingredient-entry?code=${code}` as any)}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.captureOptionIcon, { backgroundColor: '#FEF3C7' }]}>
-              <Edit3 size={24} color="#D97706" />
-            </View>
-            <View style={styles.captureOptionContent}>
-              <Text style={styles.captureOptionTitle}>Enter Ingredients Manually</Text>
-              <Text style={styles.captureOptionDesc}>
-                Type the product name and ingredients from the label
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.captureTips}>
-            <Text style={styles.captureTipsTitle}>Tips for best results</Text>
-            <Text style={styles.captureTipItem}>• Take a clear photo of the ingredients list</Text>
-            <Text style={styles.captureTipItem}>• Include the allergen statement if visible</Text>
-            <Text style={styles.captureTipItem}>• A photo of the front helps identify the product</Text>
-          </View>
-
-          <View style={styles.captureActions}>
-            <TouchableOpacity style={styles.retryButton} onPress={loadProduct}>
-              <Text style={styles.retryButtonText}>Retry Lookup</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: '#6B7280', marginTop: 10 }]}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.retryButtonText}>Go Back</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+        <Stack.Screen options={{ title: 'Add Product' }} />
+        <ProductCaptureWizard
+          barcode={code}
+          onProductSaved={(savedProduct) => {
+            console.log('[ProductDetail] Product saved via wizard:', savedProduct.product_name);
+            setProduct(savedProduct);
+            setShowCaptureWizard(false);
+            setIsLoading(false);
+            setError(null);
+          }}
+          onCancel={() => router.back()}
+        />
       </>
     );
   }

@@ -50,84 +50,101 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
     const barcode = product.code && /^\d{8,14}$/.test(product.code) ? product.code : null;
     const name = product.product_name || 'Unknown Product';
     const brand = product.brands || null;
+    const code = barcode || product.code || generateProductCode(product);
 
-    console.log('[SupabaseProducts] Upserting product:', { barcode, name, brand, source: product.source });
+    console.log('[SupabaseProducts] Upserting product:', { code, barcode, name, brand, source: product.source });
 
-    if (barcode) {
-      const { data: existing } = await supabase
+    const { data: existing } = await supabase
+      .from('products')
+      .select('id, scan_count, ingredients_text, allergens_tags')
+      .eq('code', code)
+      .maybeSingle();
+
+    if (existing) {
+      const updates: Record<string, any> = {
+        last_fetched_at: new Date().toISOString(),
+        scan_count: (existing.scan_count || 0) + 1,
+      };
+
+      if (product.product_name && product.product_name !== 'Unknown Product') {
+        updates.product_name = product.product_name;
+      }
+      if (product.brands) updates.brands = product.brands;
+      if (product.ingredients_text && (!existing.ingredients_text || product.ingredients_text.length > (existing.ingredients_text?.length || 0))) {
+        updates.ingredients_text = product.ingredients_text;
+      }
+      if (product.allergens) updates.allergens = product.allergens;
+      if (product.allergens_tags && product.allergens_tags.length > 0) {
+        updates.allergens_tags = product.allergens_tags;
+      }
+      if (product.traces_tags && product.traces_tags.length > 0) {
+        updates.traces_tags = product.traces_tags;
+      }
+      if (product.image_url) updates.image_url = product.image_url;
+      if (product.image_front_url) updates.image_front_url = product.image_front_url;
+      if (product.categories) updates.categories = product.categories;
+
+      const { error } = await supabase
         .from('products')
-        .select('id, scan_count, ingredients_text, allergens_tags')
-        .eq('code', barcode)
-        .maybeSingle();
+        .update(updates)
+        .eq('id', existing.id);
 
-      if (existing) {
-        const updates: Record<string, any> = {
-          last_fetched_at: new Date().toISOString(),
-          scan_count: (existing.scan_count || 0) + 1,
-        };
+      if (error) {
+        console.error('[SupabaseProducts] Update error:', error.message);
+        return { success: false, error: error.message };
+      }
 
-        if (product.product_name && product.product_name !== 'Unknown Product') {
-          updates.product_name = product.product_name;
-        }
-        if (product.brands) updates.brands = product.brands;
-        if (product.ingredients_text && (!existing.ingredients_text || product.ingredients_text.length > (existing.ingredients_text?.length || 0))) {
-          updates.ingredients_text = product.ingredients_text;
-        }
-        if (product.allergens) updates.allergens = product.allergens;
-        if (product.allergens_tags && product.allergens_tags.length > 0) {
-          updates.allergens_tags = product.allergens_tags;
-        }
-        if (product.traces_tags && product.traces_tags.length > 0) {
-          updates.traces_tags = product.traces_tags;
-        }
-        if (product.image_url) updates.image_url = product.image_url;
-        if (product.image_front_url) updates.image_front_url = product.image_front_url;
-        if (product.categories) updates.categories = product.categories;
+      console.log('[SupabaseProducts] Updated existing product, scan_count:', updates.scan_count);
+      return { success: true };
+    }
 
-        const { error } = await supabase
-          .from('products')
-          .update(updates)
-          .eq('id', existing.id);
+    const insertPayload = {
+      code,
+      product_name: name,
+      brands: brand,
+      ingredients_text: product.ingredients_text || null,
+      allergens: product.allergens || null,
+      allergens_tags: product.allergens_tags || [],
+      traces: product.traces || null,
+      traces_tags: product.traces_tags || [],
+      categories: product.categories || null,
+      categories_tags: product.categories_tags || [],
+      image_url: product.image_url || null,
+      image_front_url: product.image_front_url || null,
+      source: product.source || 'manual_entry',
+      scan_count: 1,
+      cached_at: new Date().toISOString(),
+      last_fetched_at: new Date().toISOString(),
+    };
 
-        if (error) {
-          console.error('[SupabaseProducts] Update error:', error.message);
-          return { success: false, error: error.message };
-        }
+    const { error: upsertError } = await supabase
+      .from('products')
+      .upsert(insertPayload, { onConflict: 'code' });
 
-        console.log('[SupabaseProducts] Updated existing product, scan_count:', updates.scan_count);
-        return { success: true };
+    if (upsertError) {
+      console.log('[SupabaseProducts] Upsert failed, trying direct insert:', upsertError.message);
+      const { error: insertError } = await supabase
+        .from('products')
+        .insert(insertPayload);
+
+      if (insertError) {
+        console.error('[SupabaseProducts] Insert also failed:', insertError.message);
+        return { success: false, error: insertError.message };
       }
     }
 
-    const code = barcode || generateProductCode(product);
-
-    const { error } = await supabase
+    const { data: verify } = await supabase
       .from('products')
-      .upsert({
-        code,
-        product_name: name,
-        brands: brand,
-        ingredients_text: product.ingredients_text || null,
-        allergens: product.allergens || null,
-        allergens_tags: product.allergens_tags || [],
-        traces: product.traces || null,
-        traces_tags: product.traces_tags || [],
-        categories: product.categories || null,
-        categories_tags: product.categories_tags || [],
-        image_url: product.image_url || null,
-        image_front_url: product.image_front_url || null,
-        source: product.source || 'manual_entry',
-        scan_count: 1,
-        cached_at: new Date().toISOString(),
-        last_fetched_at: new Date().toISOString(),
-      }, { onConflict: 'code' });
+      .select('id, code')
+      .eq('code', code)
+      .maybeSingle();
 
-    if (error) {
-      console.error('[SupabaseProducts] Insert error:', error.message);
-      return { success: false, error: error.message };
+    if (verify) {
+      console.log('[SupabaseProducts] Verified product saved:', code, 'id:', verify.id);
+    } else {
+      console.warn('[SupabaseProducts] Product may not have saved correctly:', code);
     }
 
-    console.log('[SupabaseProducts] Inserted new product:', code);
     return { success: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -181,6 +198,20 @@ export async function searchProducts(
   console.log('[SupabaseProducts] Searching for:', normalizedQuery, 'userId:', userId?.substring(0, 8));
 
   try {
+    if (/^\d{8,14}$/.test(normalizedQuery)) {
+      const { data: barcodeMatch } = await supabase
+        .from('products')
+        .select('*')
+        .eq('code', normalizedQuery)
+        .maybeSingle();
+
+      if (barcodeMatch) {
+        seenCodes.add(barcodeMatch.code);
+        allProducts.push(mapSupabaseToProduct(barcodeMatch));
+        console.log('[SupabaseProducts] Found exact barcode match:', barcodeMatch.product_name);
+      }
+    }
+
     if (userId) {
       const { data: scanHistory, error: scanError } = await supabase
         .from('scan_history')
@@ -208,7 +239,7 @@ export async function searchProducts(
               allProducts.push({
                 code: scan.product_code,
                 product_name: scan.product_name || 'Unknown Product',
-                source: 'openfoodfacts' as const,
+                source: 'manual_entry' as const,
               });
             }
           }
@@ -216,10 +247,12 @@ export async function searchProducts(
       }
     }
 
+    const searchFilter = `product_name.ilike.%${normalizedQuery}%,brands.ilike.%${normalizedQuery}%,ingredients_text.ilike.%${normalizedQuery}%`;
+
     const { data: cachedProducts, error: cacheError } = await supabase
       .from('products')
       .select('*')
-      .or(`product_name.ilike.%${normalizedQuery}%,brands.ilike.%${normalizedQuery}%`)
+      .or(searchFilter)
       .order('scan_count', { ascending: false })
       .limit(limit);
 
@@ -231,6 +264,8 @@ export async function searchProducts(
           allProducts.push(mapSupabaseToProduct(p));
         }
       }
+    } else if (cacheError) {
+      console.error('[SupabaseProducts] Products search error:', cacheError.message);
     }
   } catch (err) {
     console.error('[SupabaseProducts] searchProducts error:', err);
@@ -403,15 +438,25 @@ function mapSupabaseToProduct(data: any): Product {
 
 export async function getProductByCode(code: string): Promise<Product | null> {
   try {
+    console.log('[SupabaseProducts] getProductByCode:', code);
     const { data, error } = await supabase
       .from('products')
       .select('*')
       .eq('code', code)
       .maybeSingle();
 
-    if (error || !data) return null;
+    if (error) {
+      console.log('[SupabaseProducts] getProductByCode error:', error.message);
+      return null;
+    }
+    if (!data) {
+      console.log('[SupabaseProducts] No product found for code:', code);
+      return null;
+    }
+    console.log('[SupabaseProducts] Found product:', data.product_name, 'source:', data.source);
     return mapSupabaseToProduct(data);
-  } catch {
+  } catch (err) {
+    console.error('[SupabaseProducts] getProductByCode exception:', err);
     return null;
   }
 }
