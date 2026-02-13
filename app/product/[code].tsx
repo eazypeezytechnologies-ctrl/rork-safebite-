@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb } from 'lucide-react-native';
+import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Camera, Upload, Edit3 } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { searchProductByBarcode } from '@/api/products';
@@ -91,6 +91,7 @@ export default function ProductDetailsScreen() {
   const [noDataAlternatives, setNoDataAlternatives] = useState<string>('');
   const [isLoadingNoDataAlternatives, setIsLoadingNoDataAlternatives] = useState(false);
   const [showNoDataAlternatives, setShowNoDataAlternatives] = useState(false);
+  const [showCaptureWizard, setShowCaptureWizard] = useState(false);
 
   useEffect(() => {
     console.log('=== useEffect triggered ===');
@@ -148,8 +149,8 @@ export default function ProductDetailsScreen() {
       console.log('API response received:', productData ? 'Product found' : 'No product');
       
       if (!productData) {
-        console.error('Product not found for code:', code);
-        setError('Product not found in database');
+        console.log('[ProductDetail] Product not found, showing capture wizard for code:', code);
+        setShowCaptureWizard(true);
         setIsLoading(false);
         return;
       }
@@ -338,76 +339,123 @@ export default function ProductDetailsScreen() {
     );
   }
 
+  if (showCaptureWizard && !product) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Help Us Add This Product' }} />
+        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.captureWizardHeader}>
+            <View style={styles.captureIconCircle}>
+              <AlertCircle size={32} color="#D97706" />
+            </View>
+            <Text style={styles.captureTitle}>Product Not Found</Text>
+            <Text style={styles.captureSubtitle}>
+              We couldn&apos;t find this item yet. Help us add it so it&apos;s available for everyone.
+            </Text>
+            {code && /^\d{8,14}$/.test(code) && (
+              <View style={styles.barcodeTag}>
+                <Text style={styles.barcodeTagText}>Barcode: {code}</Text>
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.captureStepHeader}>Choose how to add this product:</Text>
+
+          <TouchableOpacity
+            style={styles.captureOptionCard}
+            onPress={() => {
+              router.back();
+              setTimeout(() => {
+                router.push('/(tabs)/(scan)' as any);
+              }, 100);
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.captureOptionIcon, { backgroundColor: '#DBEAFE' }]}>
+              <Camera size={24} color="#2563EB" />
+            </View>
+            <View style={styles.captureOptionContent}>
+              <Text style={styles.captureOptionTitle}>Take Photo of Product</Text>
+              <Text style={styles.captureOptionDesc}>
+                Our AI will read the product name, ingredients, and allergens from the label
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.captureOptionCard}
+            onPress={() => {
+              router.back();
+              setTimeout(() => {
+                router.push('/(tabs)/(scan)' as any);
+              }, 100);
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.captureOptionIcon, { backgroundColor: '#D1FAE5' }]}>
+              <Upload size={24} color="#059669" />
+            </View>
+            <View style={styles.captureOptionContent}>
+              <Text style={styles.captureOptionTitle}>Upload Photo from Gallery</Text>
+              <Text style={styles.captureOptionDesc}>
+                Select a photo you already took of the ingredients label
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.captureOptionCard}
+            onPress={() => router.push(`/manual-ingredient-entry?code=${code}` as any)}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.captureOptionIcon, { backgroundColor: '#FEF3C7' }]}>
+              <Edit3 size={24} color="#D97706" />
+            </View>
+            <View style={styles.captureOptionContent}>
+              <Text style={styles.captureOptionTitle}>Enter Ingredients Manually</Text>
+              <Text style={styles.captureOptionDesc}>
+                Type the product name and ingredients from the label
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.captureTips}>
+            <Text style={styles.captureTipsTitle}>Tips for best results</Text>
+            <Text style={styles.captureTipItem}>• Take a clear photo of the ingredients list</Text>
+            <Text style={styles.captureTipItem}>• Include the allergen statement if visible</Text>
+            <Text style={styles.captureTipItem}>• A photo of the front helps identify the product</Text>
+          </View>
+
+          <View style={styles.captureActions}>
+            <TouchableOpacity style={styles.retryButton} onPress={loadProduct}>
+              <Text style={styles.retryButtonText}>Retry Lookup</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: '#6B7280', marginTop: 10 }]}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.retryButtonText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </>
+    );
+  }
+
   if (error || !product) {
     console.log('Rendering error state:', { error, hasProduct: !!product });
     return (
       <>
-        <Stack.Screen options={{ title: 'Not Found' }} />
+        <Stack.Screen options={{ title: 'Error' }} />
         <ScrollView style={styles.container} contentContainerStyle={styles.centerContainer}>
           <AlertCircle size={64} color="#DC2626" />
           <Text style={styles.errorText}>{error || 'Product not found'}</Text>
-          <Text style={styles.errorSubtext}>This product may not be in our database yet</Text>
-          
-          <View style={styles.notFoundCard}>
-            <Text style={styles.notFoundTitle}>Why was this product not found?</Text>
-            <Text style={styles.notFoundReason}>• Product not yet added to Open Food Facts database</Text>
-            <Text style={styles.notFoundReason}>• Regional/local products may not be included</Text>
-            <Text style={styles.notFoundReason}>• New products take time to be added</Text>
-            <Text style={styles.notFoundReason}>• Barcode may be incorrect or damaged</Text>
-          </View>
-
-          <View style={styles.alternativeCard}>
-            <Text style={styles.alternativeTitle}>What you can do:</Text>
-            
-            <TouchableOpacity 
-              style={styles.alternativeButton}
-              onPress={() => {
-                router.back();
-                setTimeout(() => {
-                  Alert.alert(
-                    'Use Photo Recognition',
-                    'Tap the "Product Photo Recognition" button to take a picture of the product. Our AI will analyze the packaging to identify the product.',
-                    [{ text: 'Got it' }]
-                  );
-                }, 500);
-              }}
-            >
-              <Text style={styles.alternativeButtonText}>📸 Try Photo Recognition</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.alternativeButton, { backgroundColor: '#10B981' }]}
-              onPress={() => {
-                router.push(`/manual-ingredient-entry?code=${code}`);
-              }}
-            >
-              <Text style={styles.alternativeButtonText}>✏️ Enter Ingredients Manually</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.alternativeButton, { backgroundColor: '#6B7280' }]}
-              onPress={() => {
-                Alert.alert(
-                  'Report Missing Product',
-                  `Barcode: ${code}\n\nYou can help by adding this product to Open Food Facts at world.openfoodfacts.org. This helps everyone with allergies!`,
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Learn More', onPress: () => {
-                      Alert.alert('Contribute', 'Visit world.openfoodfacts.org on your browser to add products to the database.');
-                    }}
-                  ]
-                );
-              }}
-            >
-              <Text style={styles.alternativeButtonText}>📝 Report Missing</Text>
-            </TouchableOpacity>
-          </View>
-
+          <Text style={styles.errorSubtext}>Something went wrong loading this product</Text>
           <TouchableOpacity style={styles.retryButton} onPress={loadProduct}>
-            <Text style={styles.retryButtonText}>Retry Scan</Text>
+            <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.retryButton, { backgroundColor: '#0891B2', marginTop: 12 }]} 
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: '#0891B2', marginTop: 12 }]}
             onPress={() => router.back()}
           >
             <Text style={styles.retryButtonText}>Go Back</Text>
@@ -1776,5 +1824,115 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600' as const,
     color: '#FFFFFF',
+  },
+  captureWizardHeader: {
+    alignItems: 'center',
+    marginBottom: 28,
+    paddingTop: 8,
+  },
+  captureIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#FDE68A',
+  },
+  captureTitle: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  captureSubtitle: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 16,
+  },
+  barcodeTag: {
+    marginTop: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  barcodeTagText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#6B7280',
+    fontVariant: ['tabular-nums'] as any,
+  },
+  captureStepHeader: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: '#111827',
+    marginBottom: 14,
+  },
+  captureOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  captureOptionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  captureOptionContent: {
+    flex: 1,
+  },
+  captureOptionTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#111827',
+    marginBottom: 4,
+  },
+  captureOptionDesc: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 19,
+  },
+  captureTips: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  captureTipsTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#0369A1',
+    marginBottom: 10,
+  },
+  captureTipItem: {
+    fontSize: 13,
+    color: '#0C4A6E',
+    marginBottom: 6,
+    lineHeight: 19,
+  },
+  captureActions: {
+    marginBottom: 32,
   },
 });

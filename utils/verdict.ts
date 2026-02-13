@@ -2,6 +2,7 @@ import { Product, Profile, Verdict, AllergenMatch, VerdictLevel, EczemaTriggerMa
 import { calculateEnhancedVerdict, EnhancedVerdict, getConfidenceColor, getConfidenceLabel } from './advancedAllergenDetection';
 import { getAllSynonymsForAllergen } from '@/constants/scientificAllergenDatabase';
 import { findEczemaTriggerMatches } from '@/constants/eczemaTriggers';
+import { findFoodSensitivityMatches } from '@/constants/sensitivityTriggers';
 
 export type { EnhancedVerdict };
 export { getConfidenceColor, getConfidenceLabel };
@@ -324,25 +325,42 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
   
   let eczemaTriggers: EczemaTriggerMatch[] = [];
   if (profile.trackEczemaTriggers && profile.eczemaTriggerGroups && profile.eczemaTriggerGroups.length > 0) {
-    console.log('\n🧴 CHECKING ECZEMA TRIGGERS:');
+    console.log('\n🧴 CHECKING SENSITIVITY TRIGGERS:');
     console.log('   Enabled trigger groups:', profile.eczemaTriggerGroups.join(', '));
     
-    const triggerMatches = findEczemaTriggerMatches(
+    const skincareTriggerMatches = findEczemaTriggerMatches(
       product.ingredients_text || '',
       profile.eczemaTriggerGroups
     );
     
-    eczemaTriggers = triggerMatches.map(m => ({
+    eczemaTriggers = skincareTriggerMatches.map(m => ({
       triggerName: m.trigger.name,
       triggerGroup: m.trigger.triggerGroup,
       matchedText: m.matchedText,
       severityHint: m.trigger.severityHint,
     }));
+
+    const foodTriggerMatches = findFoodSensitivityMatches(
+      product.ingredients_text || '',
+      profile.eczemaTriggerGroups
+    );
+
+    for (const fm of foodTriggerMatches) {
+      const alreadyFound = eczemaTriggers.some(e => e.triggerName === fm.trigger.label);
+      if (!alreadyFound) {
+        eczemaTriggers.push({
+          triggerName: fm.trigger.label,
+          triggerGroup: fm.trigger.id,
+          matchedText: fm.matchedKeyword,
+          severityHint: 'medium',
+        });
+      }
+    }
     
     if (eczemaTriggers.length > 0) {
-      console.log('   ⚠️ ECZEMA TRIGGERS FOUND:', eczemaTriggers.map(t => t.triggerName).join(', '));
+      console.log('   ⚠️ SENSITIVITY TRIGGERS FOUND:', eczemaTriggers.map(t => t.triggerName).join(', '));
     } else {
-      console.log('   ✅ No eczema triggers detected');
+      console.log('   ✅ No sensitivity triggers detected');
     }
   }
 

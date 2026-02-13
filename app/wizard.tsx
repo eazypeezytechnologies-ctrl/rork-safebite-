@@ -10,11 +10,13 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { Profile, EmergencyContact, ProfileRelationship } from '@/types';
 import * as Crypto from 'expo-crypto';
 import { PROFILE_RELATIONSHIPS, getRandomAvatarColor } from '@/constants/profileColors';
+import { FOOD_SENSITIVITY_TRIGGERS } from '@/constants/sensitivityTriggers';
+import { ECZEMA_TRIGGER_GROUPS } from '@/constants/eczemaTriggers';
 
 const COMMON_ALLERGENS = [
   'Milk', 'Eggs', 'Fish', 'Shellfish', 'Tree Nuts', 'Peanuts',
@@ -40,6 +42,8 @@ export default function ProfileWizard() {
   const [contactPhone, setContactPhone] = useState('');
   const [contactRelationship, setContactRelationship] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [trackEczemaTriggers, setTrackEczemaTriggers] = useState(false);
+  const [eczemaTriggerGroups, setEczemaTriggerGroups] = useState<string[]>([]);
 
   const toggleAllergen = (allergen: string) => {
     setSelectedAllergens(prev =>
@@ -94,6 +98,14 @@ export default function ProfileWizard() {
     setContacts(prev => prev.filter((_, i) => i !== index));
   };
 
+  const toggleTriggerGroup = (groupId: string) => {
+    setEczemaTriggerGroups(prev =>
+      prev.includes(groupId)
+        ? prev.filter(g => g !== groupId)
+        : [...prev, groupId]
+    );
+  };
+
   const canProceed = () => {
     switch (step) {
       case 1:
@@ -105,6 +117,7 @@ export default function ProfileWizard() {
       case 4:
       case 5:
       case 6:
+      case 7:
         return true;
       default:
         return false;
@@ -112,7 +125,7 @@ export default function ProfileWizard() {
   };
 
   const handleNext = async () => {
-    if (step < 6) {
+    if (step < 7) {
       setStep(step + 1);
     } else {
       await handleFinish();
@@ -137,6 +150,8 @@ export default function ProfileWizard() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         avatarColor: getRandomAvatarColor(),
+        trackEczemaTriggers,
+        eczemaTriggerGroups: trackEczemaTriggers ? eczemaTriggerGroups : [],
       };
 
       if (__DEV__) console.log('[Wizard] Creating profile:', profile.name);
@@ -358,6 +373,92 @@ export default function ProfileWizard() {
       case 6:
         return (
           <View style={styles.stepContent}>
+            <Text style={styles.stepTitle}>Skin Sensitivity</Text>
+            <Text style={styles.stepSubtitle}>
+              Do you have eczema, dermatitis, or skin reactions to certain ingredients?
+            </Text>
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Track skin sensitivity triggers</Text>
+              <Switch
+                value={trackEczemaTriggers}
+                onValueChange={setTrackEczemaTriggers}
+                trackColor={{ false: '#D1D5DB', true: '#D97706' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            {trackEczemaTriggers && (
+              <>
+                <Text style={styles.triggerLabel}>Select triggers to watch for:</Text>
+                <View style={styles.triggerGrid}>
+                  {FOOD_SENSITIVITY_TRIGGERS.map(trigger => {
+                    const isSelected = eczemaTriggerGroups.includes(trigger.id);
+                    return (
+                      <TouchableOpacity
+                        key={trigger.id}
+                        style={[
+                          styles.triggerChip,
+                          isSelected && styles.triggerChipSelected,
+                        ]}
+                        onPress={() => toggleTriggerGroup(trigger.id)}
+                      >
+                        <Text style={styles.triggerIcon}>{trigger.icon}</Text>
+                        <Text
+                          style={[
+                            styles.triggerChipText,
+                            isSelected && styles.triggerChipTextSelected,
+                          ]}
+                        >
+                          {trigger.label}
+                        </Text>
+                        {isSelected && <Check size={14} color="#FFFFFF" />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.triggerLabel}>Skincare irritants:</Text>
+                <View style={styles.triggerGrid}>
+                  {ECZEMA_TRIGGER_GROUPS.map(group => {
+                    const isSelected = eczemaTriggerGroups.includes(group.id);
+                    return (
+                      <TouchableOpacity
+                        key={group.id}
+                        style={[
+                          styles.triggerChip,
+                          isSelected && styles.triggerChipSelected,
+                        ]}
+                        onPress={() => toggleTriggerGroup(group.id)}
+                      >
+                        <Text style={styles.triggerIcon}>{group.icon}</Text>
+                        <Text
+                          style={[
+                            styles.triggerChipText,
+                            isSelected && styles.triggerChipTextSelected,
+                          ]}
+                        >
+                          {group.label}
+                        </Text>
+                        {isSelected && <Check size={14} color="#FFFFFF" />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <View style={styles.sensitivityDisclaimer}>
+                  <AlertTriangle size={14} color="#92400E" />
+                  <Text style={styles.disclaimerText}>
+                    Triggers vary by person. Not medical advice.
+                  </Text>
+                </View>
+              </>
+            )}
+            <TouchableOpacity style={styles.skipButton} onPress={handleNext}>
+              <Text style={styles.skipButtonText}>Skip this step</Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 7:
+        return (
+          <View style={styles.stepContent}>
             <Text style={styles.stepTitle}>Emergency contacts</Text>
             <Text style={styles.stepSubtitle}>Add people to contact in case of emergency</Text>
             <TextInput
@@ -425,7 +526,7 @@ export default function ProfileWizard() {
           <ChevronLeft size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.progressContainer}>
-          {[1, 2, 3, 4, 5, 6].map(s => (
+          {[1, 2, 3, 4, 5, 6, 7].map(s => (
             <View
               key={s}
               style={[styles.progressDot, s <= step && styles.progressDotActive]}
@@ -446,9 +547,9 @@ export default function ProfileWizard() {
           disabled={!canProceed() || isSubmitting}
         >
           <Text style={styles.nextButtonText}>
-            {isSubmitting ? 'Creating...' : step === 6 ? 'Finish' : 'Next'}
+            {isSubmitting ? 'Creating...' : step === 7 ? 'Finish' : 'Next'}
           </Text>
-          {step < 6 && !isSubmitting && <ChevronRight size={20} color="#FFFFFF" />}
+          {step < 7 && !isSubmitting && <ChevronRight size={20} color="#FFFFFF" />}
         </TouchableOpacity>
       </View>
     </View>
@@ -584,6 +685,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
     color: '#DC2626',
+  },
+  triggerLabel: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#92400E',
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  triggerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
+  },
+  triggerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+  },
+  triggerChipSelected: {
+    backgroundColor: '#D97706',
+    borderColor: '#D97706',
+  },
+  triggerIcon: {
+    fontSize: 16,
+  },
+  triggerChipText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#374151',
+  },
+  triggerChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  sensitivityDisclaimer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 4,
+  },
+  disclaimerText: {
+    fontSize: 12,
+    color: '#92400E',
+    flex: 1,
   },
   switchRow: {
     flexDirection: 'row',

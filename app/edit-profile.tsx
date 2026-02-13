@@ -10,9 +10,11 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Check, X } from 'lucide-react-native';
+import { Check, X, AlertTriangle } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { EmergencyContact } from '@/types';
+import { FOOD_SENSITIVITY_TRIGGERS } from '@/constants/sensitivityTriggers';
+import { ECZEMA_TRIGGER_GROUPS } from '@/constants/eczemaTriggers';
 
 const COMMON_ALLERGENS = [
   'Milk', 'Eggs', 'Fish', 'Shellfish', 'Tree Nuts', 'Peanuts',
@@ -35,6 +37,11 @@ export default function EditProfileScreen() {
   const [medications, setMedications] = useState<string[]>([]);
   const [medication, setMedication] = useState('');
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [trackEczemaTriggers, setTrackEczemaTriggers] = useState(false);
+  const [eczemaTriggerGroups, setEczemaTriggerGroups] = useState<string[]>([]);
+  const [customTrigger, setCustomTrigger] = useState('');
+  const [customSensitivityTriggers, setCustomSensitivityTriggers] = useState<string[]>([]);
+  const [sensitivityNotes, setSensitivityNotes] = useState('');
 
   useEffect(() => {
     if (profile) {
@@ -44,6 +51,15 @@ export default function EditProfileScreen() {
       setHasAnaphylaxis(profile.hasAnaphylaxis);
       setMedications(profile.medications);
       setContacts(profile.emergencyContacts);
+      setTrackEczemaTriggers(profile.trackEczemaTriggers || false);
+      const groups = profile.eczemaTriggerGroups || [];
+      const knownIds = [
+        ...FOOD_SENSITIVITY_TRIGGERS.map(t => t.id),
+        ...ECZEMA_TRIGGER_GROUPS.map(g => g.id),
+      ];
+      setEczemaTriggerGroups(groups.filter(g => knownIds.includes(g)));
+      setCustomSensitivityTriggers(groups.filter(g => !knownIds.includes(g)));
+      setSensitivityNotes('');
     }
   }, [profile]);
 
@@ -76,6 +92,22 @@ export default function EditProfileScreen() {
     }
   };
 
+  const addCustomTrigger = () => {
+    const trimmed = customTrigger.trim();
+    if (trimmed && !customSensitivityTriggers.includes(trimmed)) {
+      setCustomSensitivityTriggers(prev => [...prev, trimmed]);
+      setCustomTrigger('');
+    }
+  };
+
+  const toggleTriggerGroup = (groupId: string) => {
+    setEczemaTriggerGroups(prev =>
+      prev.includes(groupId)
+        ? prev.filter(g => g !== groupId)
+        : [...prev, groupId]
+    );
+  };
+
   const removeItem = (list: string[], setList: (items: string[]) => void, item: string) => {
     setList(list.filter(i => i !== item));
   };
@@ -94,6 +126,7 @@ export default function EditProfileScreen() {
     }
 
     try {
+      const allTriggerGroups = [...eczemaTriggerGroups, ...customSensitivityTriggers];
       await updateProfile({
         ...profile,
         name: name.trim(),
@@ -102,6 +135,8 @@ export default function EditProfileScreen() {
         hasAnaphylaxis,
         medications,
         emergencyContacts: contacts,
+        trackEczemaTriggers,
+        eczemaTriggerGroups: trackEczemaTriggers ? allTriggerGroups : [],
         updatedAt: new Date().toISOString(),
       });
       router.back();
@@ -217,6 +252,127 @@ export default function EditProfileScreen() {
           )}
         </View>
 
+        <View style={[styles.section, styles.sensitivitySection]}>
+          <View style={styles.sensitivityHeader}>
+            <AlertTriangle size={20} color="#D97706" />
+            <Text style={styles.sensitivityTitle}>Skin Sensitivity / Eczema</Text>
+          </View>
+          <Text style={styles.sensitivitySubtitle}>
+            Track ingredients that may trigger eczema, dermatitis, or skin reactions
+          </Text>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Enable sensitivity tracking</Text>
+            <Switch
+              value={trackEczemaTriggers}
+              onValueChange={setTrackEczemaTriggers}
+              trackColor={{ false: '#D1D5DB', true: '#D97706' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+          {trackEczemaTriggers && (
+            <>
+              <Text style={styles.triggerCategoryLabel}>Food Sensitivities</Text>
+              <View style={styles.triggerGrid}>
+                {FOOD_SENSITIVITY_TRIGGERS.map(trigger => {
+                  const isSelected = eczemaTriggerGroups.includes(trigger.id);
+                  return (
+                    <TouchableOpacity
+                      key={trigger.id}
+                      style={[
+                        styles.triggerChip,
+                        isSelected && styles.triggerChipSelected,
+                      ]}
+                      onPress={() => toggleTriggerGroup(trigger.id)}
+                    >
+                      <Text style={styles.triggerChipIcon}>{trigger.icon}</Text>
+                      <Text
+                        style={[
+                          styles.triggerChipText,
+                          isSelected && styles.triggerChipTextSelected,
+                        ]}
+                      >
+                        {trigger.label}
+                      </Text>
+                      {isSelected && <Check size={14} color="#FFFFFF" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.triggerCategoryLabel}>Skincare / Cosmetic Irritants</Text>
+              <View style={styles.triggerGrid}>
+                {ECZEMA_TRIGGER_GROUPS.map(group => {
+                  const isSelected = eczemaTriggerGroups.includes(group.id);
+                  return (
+                    <TouchableOpacity
+                      key={group.id}
+                      style={[
+                        styles.triggerChip,
+                        isSelected && styles.triggerChipSelected,
+                      ]}
+                      onPress={() => toggleTriggerGroup(group.id)}
+                    >
+                      <Text style={styles.triggerChipIcon}>{group.icon}</Text>
+                      <Text
+                        style={[
+                          styles.triggerChipText,
+                          isSelected && styles.triggerChipTextSelected,
+                        ]}
+                      >
+                        {group.label}
+                      </Text>
+                      {isSelected && <Check size={14} color="#FFFFFF" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.triggerCategoryLabel}>Custom Triggers</Text>
+              <View style={styles.customInput}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Add custom trigger (e.g., avocado)"
+                  value={customTrigger}
+                  onChangeText={setCustomTrigger}
+                  onSubmitEditing={addCustomTrigger}
+                />
+                <TouchableOpacity style={[styles.addButton, { backgroundColor: '#D97706' }]} onPress={addCustomTrigger}>
+                  <Text style={styles.addButtonText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+              {customSensitivityTriggers.length > 0 && (
+                <View style={styles.customList}>
+                  {customSensitivityTriggers.map(t => (
+                    <View key={t} style={[styles.customItem, { borderColor: '#FDE68A' }]}>
+                      <Text style={styles.customItemText}>{t}</Text>
+                      <TouchableOpacity
+                        onPress={() => removeItem(customSensitivityTriggers, setCustomSensitivityTriggers, t)}
+                      >
+                        <X size={20} color="#DC2626" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <TextInput
+                style={[styles.textInput, styles.notesInput]}
+                placeholder="Optional notes (e.g., flare-up patterns, severity)"
+                value={sensitivityNotes}
+                onChangeText={setSensitivityNotes}
+                multiline
+                numberOfLines={3}
+              />
+
+              <View style={styles.disclaimerBox}>
+                <Text style={styles.disclaimerText}>
+                  Triggers vary by person. This is informational only and not medical advice. Consult a dermatologist for personalized guidance.
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Anaphylaxis Risk</Text>
           <View style={styles.switchRow}>
@@ -288,6 +444,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 32,
   },
   section: {
     marginBottom: 24,
@@ -299,6 +456,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   textInput: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
@@ -384,6 +542,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#111827',
+    flex: 1,
+    marginRight: 12,
   },
   medicationLabel: {
     fontSize: 16,
@@ -412,5 +572,87 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600' as const,
     color: '#DC2626',
+  },
+  sensitivitySection: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  sensitivityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  sensitivityTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#92400E',
+  },
+  sensitivitySubtitle: {
+    fontSize: 14,
+    color: '#A16207',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  triggerCategoryLabel: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#92400E',
+    marginBottom: 10,
+    marginTop: 8,
+  },
+  triggerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
+  },
+  triggerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+  },
+  triggerChipSelected: {
+    backgroundColor: '#D97706',
+    borderColor: '#D97706',
+  },
+  triggerChipIcon: {
+    fontSize: 16,
+  },
+  triggerChipText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#374151',
+  },
+  triggerChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  notesInput: {
+    minHeight: 80,
+    textAlignVertical: 'top' as const,
+    marginTop: 8,
+  },
+  disclaimerBox: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  disclaimerText: {
+    fontSize: 12,
+    color: '#92400E',
+    lineHeight: 18,
+    textAlign: 'center' as const,
   },
 });

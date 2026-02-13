@@ -1,13 +1,14 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, RefreshControl, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, RefreshControl } from 'react-native';
 import React from 'react';
 import { useRouter } from 'expo-router';
-import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users } from 'lucide-react-native';
+import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { getRelationshipLabel, getRelationshipIcon } from '@/constants/profileColors';
 import { BUILD_ID } from '@/constants/appVersion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { shareAppInvite } from '@/utils/invites';
 
 function SkeletonProfileCard() {
   return (
@@ -85,32 +86,26 @@ export default function ProfilesScreen() {
     );
   };
 
-  const handleInviteOthers = async () => {
+  const handleAppInvite = async () => {
     try {
-      const message = `🛡️ Join me on Allergy Guardian!\n\nI'm using Allergy Guardian to manage my food allergies and scan products for safety. It's been really helpful!\n\nKey features:\n• Scan barcodes to check for allergens\n• Create multiple allergy profiles\n• Get instant safety verdicts\n• Track scan history\n• Emergency allergy cards\n\nDownload it now and take control of your allergy safety!`;
-      
-      if (Platform.OS === 'web') {
-        if (navigator.share) {
-          await navigator.share({
-            title: 'Join me on Allergy Guardian',
-            text: message,
-          });
-        } else {
-          await navigator.clipboard.writeText(message);
-          Alert.alert('Copied!', 'Invitation message copied to clipboard. Share it with your friends and family!');
-        }
-      } else {
-        await Share.share({
-          message: message,
-          title: 'Join me on Allergy Guardian',
-        });
+      const userName = currentUser?.email?.split('@')[0] || 'A friend';
+      if (Platform.OS !== 'web') {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
+      await shareAppInvite(userName);
     } catch (error: any) {
       if (error?.message !== 'User did not share') {
-        console.error('Error sharing:', error);
+        console.error('Error sharing app invite:', error);
         Alert.alert('Error', 'Failed to share invitation');
       }
     }
+  };
+
+  const handleFamilyInviteNav = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    router.push('/family-management' as any);
   };
 
 
@@ -259,16 +254,27 @@ export default function ProfilesScreen() {
           )}
         </View>
 
-        <TouchableOpacity
-          style={styles.inviteButton}
-          onPress={handleInviteOthers}
-        >
-          <Users size={24} color="#FFFFFF" />
-          <View style={styles.inviteButtonContent}>
-            <Text style={styles.inviteButtonTitle}>Invite Friends & Family</Text>
-            <Text style={styles.inviteButtonSubtitle}>Share Allergy Guardian with others</Text>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.inviteCardsRow}>
+          <TouchableOpacity
+            style={styles.appInviteCard}
+            onPress={handleAppInvite}
+            activeOpacity={0.8}
+          >
+            <Send size={22} color="#FFFFFF" />
+            <Text style={styles.inviteCardTitle}>Invite to App</Text>
+            <Text style={styles.inviteCardSubtitle}>Share download link</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.familyInviteCard}
+            onPress={handleFamilyInviteNav}
+            activeOpacity={0.8}
+          >
+            <UserPlus size={22} color="#FFFFFF" />
+            <Text style={styles.inviteCardTitle}>Family Invite</Text>
+            <Text style={styles.inviteCardSubtitle}>Add to family group</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.settingsSection}>
           <Text style={styles.settingsSectionTitle}>Settings</Text>
@@ -647,33 +653,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5E7EB',
     borderRadius: 4,
   },
-  inviteButton: {
+  inviteCardsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    backgroundColor: '#10B981',
-    borderRadius: 16,
-    padding: 20,
+    gap: 12,
     marginTop: 24,
     marginBottom: 8,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  inviteButtonContent: {
+  appInviteCard: {
     flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  inviteButtonTitle: {
-    fontSize: 18,
+  familyInviteCard: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  inviteCardTitle: {
+    fontSize: 15,
     fontWeight: '700' as const,
     color: '#FFFFFF',
+    marginTop: 10,
     marginBottom: 4,
   },
-  inviteButtonSubtitle: {
-    fontSize: 14,
-    color: '#D1FAE5',
+  inviteCardSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
   },
   buildId: {
     fontSize: 11,
