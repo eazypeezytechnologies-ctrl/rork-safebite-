@@ -7,6 +7,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { migrateToSupabase, checkMigrationStatus } from '@/utils/supabaseMigration';
 import { withTimeout, withRetry, getAuthErrorMessage } from '@/utils/authTimeout';
 import { AppState, AppStateStatus } from 'react-native';
+import { logAuditEvent } from '@/utils/auditLog';
+import { actionRateLimiter } from '@/utils/actionRateLimiter';
 
 const ONBOARDING_KEY = '@allergy_guardian_onboarding_complete';
 const CACHED_AUTH_KEY = '@allergy_guardian_cached_auth';
@@ -180,6 +182,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
         
         if (session?.user) {
           if (__DEV__) console.log('[UserContext] Found active session:', session.user.email);
+          logAuditEvent({ eventType: 'auth.sign_in', userId: session.user.id, metadata: { method: 'session_restore' } });
           setConnectionStatus('connected');
           const isAdmin = ADMIN_EMAILS.includes(session.user.email?.toLowerCase() || '');
           
@@ -355,6 +358,12 @@ export const [UserProvider, useUser] = createContextHook(() => {
     try {
       console.log(isSignup ? 'Creating account:' : 'Signing in:', email);
       
+      const rateLimitAction = isSignup ? 'auth.signup' : 'auth.login';
+      const rateCheck = actionRateLimiter.check(rateLimitAction);
+      if (!rateCheck.allowed) {
+        throw new Error(rateCheck.message);
+      }
+
       if (isSignup) {
         const { data, error } = await withRetry(
           () => supabase.auth.signUp({ email, password }),
@@ -399,6 +408,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
           setCurrentUser(user);
           setConnectionStatus('idle');
           console.log('Account created successfully, isAdmin:', isAdminByEmail);
+          logAuditEvent({ eventType: 'auth.sign_up', userId: user.id });
         }
       } else {
         const { data, error } = await withRetry(
@@ -471,6 +481,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
           setCurrentUser(user);
           setConnectionStatus('idle');
           console.log('Signed in successfully, isAdmin:', finalIsAdmin);
+          logAuditEvent({ eventType: 'auth.sign_in', userId: user.id, metadata: { method: 'password' } });
           
           // ALWAYS set onboarding complete for sign-in (not signup)
           // If user can sign in, they've already completed signup before
@@ -509,6 +520,9 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
   const signOut = useCallback(async () => {
     console.log('Signing out...');
+    if (currentUser?.id) {
+      logAuditEvent({ eventType: 'auth.sign_out', userId: currentUser.id });
+    }
     setIsLoading(true);
     try {
       await AsyncStorage.removeItem(CACHED_AUTH_KEY);

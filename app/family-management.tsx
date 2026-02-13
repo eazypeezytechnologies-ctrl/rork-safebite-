@@ -18,12 +18,20 @@ import { useUser } from '@/contexts/UserContext';
 import { FamilyGroup, Profile } from '@/types';
 import * as Haptics from 'expo-haptics';
 import { 
-  shareFamilyInvite, 
-  createFamilyInvitation, 
   getFamilyInvitations,
   revokeInvitation,
   FamilyInvitation 
 } from '@/utils/invites';
+import {
+  createSecureFamilyInvite,
+  shareSecureFamilyInvite,
+  getSecureFamilyInvites,
+  revokeSecureInvite,
+  SecureInvitation,
+  shareAppDownloadInvite,
+} from '@/utils/secureInvites';
+import { logAuditEvent } from '@/utils/auditLog';
+import { actionRateLimiter } from '@/utils/actionRateLimiter';
 
 const MAX_FAMILY_MEMBERS = 6;
 
@@ -45,16 +53,21 @@ export default function FamilyManagementScreen() {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [invitations, setInvitations] = useState<Record<string, FamilyInvitation[]>>({});
+  const [secureInvitations, setSecureInvitations] = useState<Record<string, SecureInvitation[]>>({});
   const [isSendingInvite, setIsSendingInvite] = useState(false);
 
   const loadAllInvitations = useCallback(async () => {
     try {
       const inviteMap: Record<string, FamilyInvitation[]> = {};
+      const secureMap: Record<string, SecureInvitation[]> = {};
       for (const group of familyGroups) {
         const groupInvites = await getFamilyInvitations(group.id);
         inviteMap[group.id] = groupInvites.filter(inv => inv.status === 'pending');
+        const secureGroupInvites = await getSecureFamilyInvites(group.id);
+        secureMap[group.id] = secureGroupInvites;
       }
       setInvitations(inviteMap);
+      setSecureInvitations(secureMap);
     } catch (error) {
       console.error('Error loading invitations:', error);
     }
@@ -73,12 +86,18 @@ export default function FamilyManagementScreen() {
 
   const handleShareFamilyInvite = async (group: FamilyGroup) => {
     if (!currentUser?.id) return;
+
+    const rateCheck = actionRateLimiter.check('invite.create');
+    if (!rateCheck.allowed) {
+      Alert.alert('Slow Down', rateCheck.message);
+      return;
+    }
     
-    const memberCount = group.memberIds.length + (invitations[group.id]?.length || 0);
+    const memberCount = group.memberIds.length + (secureInvitations[group.id]?.length || 0) + (invitations[group.id]?.length || 0);
     if (memberCount >= MAX_FAMILY_MEMBERS) {
       Alert.alert(
         'Member Limit Reached',
-        `This family group already has ${group.memberIds.length} members and ${invitations[group.id]?.length || 0} pending invites. Maximum is ${MAX_FAMILY_MEMBERS} total.`
+        `This family group already has ${group.memberIds.length} members and pending invites. Maximum is ${MAX_FAMILY_MEMBERS} total.`
       );
       return;
     }
@@ -90,48 +109,71 @@ export default function FamilyManagementScreen() {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       
-      const { invitation, error } = await createFamilyInvitation(group.id, currentUser.id);
+      const { token, invitation, error } = await createSecureFamilyInvite(group.id, currentUser.id);
       
-      if (error || !invitation) {
+      if (error || !invitation || !token) {
         Alert.alert('Error', error || 'Failed to create invitation');
         return;
       }
       
       const userName = currentUser.email?.split('@')[0] || 'Someone';
-      const success = await shareFamilyInvite(userName, group.name, invitation.token);
+      const success = await shareSecureFamilyInvite(userName, group.name, token);
       
       if (success) {
-        Alert.alert('Invitation Sent!', 'Family invite link has been shared. It will expire in 7 days.');
+        Alert.alert('Invitation Sent!', 'Family invite link has been shared. It expires in 72 hours and can only be used once.');
         await loadAllInvitations();
       }
     } catch (error) {
       console.error('Error sharing family invite:', error);
       Alert.alert('Error', 'Failed to share family invite');
+      logAuditEvent({
+        eventType: 'error.invite_failed',
+        userId: currentUser.id,
+        metadata: { error: error instanceof Error ? error.message : 'unknown' },
+      });
     } finally {
       setIsSendingInvite(false);
     }
   };
 
-  const handleRevokeInvite = async (invitationId: string) => {
+  const handleShareAppInvite = async () => {
+    if (!currentUser?.email) return;
+    try {
+      if (Platform.OS !== 'web') {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      const userName = currentUser.email.split('@')[0] || 'Someone';
+      await shareAppDownloadInvite(userName);
+    } catch (error) {
+      console.error('Error sharing app invite:', error);
+    }
+  };
+
+  const handleRevokeInvite = async (invitationId: string, isSecure: boolean = false) => {
     if (!currentUser?.id) return;
     
     Alert.alert(
       'Revoke Invitation',
-      'Are you sure you want to revoke this invitation?',
+      'Are you sure you want to revoke this invitation? The link will no longer work.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Revoke',
           style: 'destructive',
           onPress: async () => {
-            const { success, error } = await revokeInvitation(invitationId, currentUser.id);
-            if (success) {
+            let result;
+            if (isSecure) {
+              result = await revokeSecureInvite(invitationId, currentUser.id);
+            } else {
+              result = await revokeInvitation(invitationId, currentUser.id);
+            }
+            if (result.success) {
               if (Platform.OS !== 'web') {
                 await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               }
               await loadAllInvitations();
             } else {
-              Alert.alert('Error', error || 'Failed to revoke invitation');
+              Alert.alert('Error', result.error || 'Failed to revoke invitation');
             }
           }
         }
@@ -446,20 +488,36 @@ export default function FamilyManagementScreen() {
                         <Text style={styles.inviteSectionTitle}>
                           Members: {memberProfiles.length}/{MAX_FAMILY_MEMBERS}
                         </Text>
-                        
-                        {invitations[group.id]?.length > 0 && (
+
+                        {(secureInvitations[group.id]?.length > 0 || invitations[group.id]?.length > 0) && (
                           <View style={styles.pendingInvites}>
                             <Text style={styles.pendingInvitesTitle}>
-                              <Clock size={12} color="#F59E0B" /> Pending invites: {invitations[group.id].length}
+                              Pending invites: {(secureInvitations[group.id]?.length || 0) + (invitations[group.id]?.length || 0)}
                             </Text>
-                            {invitations[group.id].map((inv) => (
+                            {(secureInvitations[group.id] || []).map((inv) => (
+                              <View key={inv.id} style={styles.pendingInviteItem}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                  <Clock size={12} color="#F59E0B" />
+                                  <Text style={[styles.pendingInviteText, { marginLeft: 4 }]} numberOfLines={1}>
+                                    {inv.invited_email || 'Secure link'}
+                                  </Text>
+                                </View>
+                                <TouchableOpacity
+                                  style={styles.revokeButton}
+                                  onPress={() => handleRevokeInvite(inv.id, true)}
+                                >
+                                  <X size={14} color="#DC2626" />
+                                </TouchableOpacity>
+                              </View>
+                            ))}
+                            {(invitations[group.id] || []).map((inv) => (
                               <View key={inv.id} style={styles.pendingInviteItem}>
                                 <Text style={styles.pendingInviteText} numberOfLines={1}>
-                                  {inv.email || 'Link shared'}
+                                  {inv.email || 'Legacy link'}
                                 </Text>
                                 <TouchableOpacity
                                   style={styles.revokeButton}
-                                  onPress={() => handleRevokeInvite(inv.id)}
+                                  onPress={() => handleRevokeInvite(inv.id, false)}
                                 >
                                   <X size={14} color="#DC2626" />
                                 </TouchableOpacity>
@@ -467,24 +525,33 @@ export default function FamilyManagementScreen() {
                             ))}
                           </View>
                         )}
-                        
-                        <TouchableOpacity
-                          style={[
-                            styles.inviteButton,
-                            (memberProfiles.length + (invitations[group.id]?.length || 0) >= MAX_FAMILY_MEMBERS) && styles.inviteButtonDisabled
-                          ]}
-                          onPress={() => handleShareFamilyInvite(group)}
-                          disabled={isSendingInvite || memberProfiles.length + (invitations[group.id]?.length || 0) >= MAX_FAMILY_MEMBERS}
-                        >
-                          {isSendingInvite ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
-                          ) : (
-                            <>
-                              <Share2 size={16} color="#FFFFFF" />
-                              <Text style={styles.inviteButtonText}>Invite Member</Text>
-                            </>
-                          )}
-                        </TouchableOpacity>
+
+                        <View style={{ gap: 8 }}>
+                          <TouchableOpacity
+                            style={[
+                              styles.inviteButton,
+                              (memberProfiles.length + (secureInvitations[group.id]?.length || 0) + (invitations[group.id]?.length || 0) >= MAX_FAMILY_MEMBERS) && styles.inviteButtonDisabled
+                            ]}
+                            onPress={() => handleShareFamilyInvite(group)}
+                            disabled={isSendingInvite || memberProfiles.length + (secureInvitations[group.id]?.length || 0) + (invitations[group.id]?.length || 0) >= MAX_FAMILY_MEMBERS}
+                          >
+                            {isSendingInvite ? (
+                              <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                              <>
+                                <Share2 size={16} color="#FFFFFF" />
+                                <Text style={styles.inviteButtonText}>Invite to Family</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.appInviteSmallButton}
+                            onPress={handleShareAppInvite}
+                          >
+                            <UserPlus size={14} color="#0891B2" />
+                            <Text style={styles.appInviteSmallText}>Invite to Download App</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
 
                       <View style={styles.groupActions}>
@@ -863,5 +930,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
     color: '#FFFFFF',
+  },
+  appInviteSmallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F0F9FF',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0891B2',
+  },
+  appInviteSmallText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: '#0891B2',
   },
 });
