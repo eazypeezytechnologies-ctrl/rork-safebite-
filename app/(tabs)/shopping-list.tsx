@@ -10,7 +10,7 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, Href } from 'expo-router';
 import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
@@ -302,7 +302,7 @@ export default function ShoppingListScreen() {
 
                     <TouchableOpacity
                       style={styles.itemContent}
-                      onPress={() => item.barcode && router.push(`/product/${item.barcode}`)}
+                      onPress={() => item.barcode && router.push(`/product/${item.barcode}` as Href)}
                       disabled={!item.barcode}
                     >
                       <View style={styles.itemInfo}>

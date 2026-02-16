@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { KeyRound, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
@@ -139,7 +139,7 @@ export default function ResetPasswordScreen() {
       setIsSuccess(true);
       
       setTimeout(() => {
-        router.replace('/welcome');
+        router.replace('/welcome' as Href);
       }, 2000);
     } catch (error: any) {
       console.error('Error resetting password:', error);
@@ -172,7 +172,7 @@ export default function ResetPasswordScreen() {
           </Text>
           <TouchableOpacity
             style={styles.submitButton}
-            onPress={() => router.replace('/forgot-password')}
+            onPress={() => router.replace('/forgot-password' as Href)}
           >
             <Text style={styles.submitButtonText}>Request New Link</Text>
           </TouchableOpacity>

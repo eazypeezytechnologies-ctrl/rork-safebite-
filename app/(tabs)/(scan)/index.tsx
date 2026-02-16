@@ -1154,7 +1154,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.noResultsButtonSecondary}
-                onPress={() => router.push('/manual-ingredient-entry')}
+                onPress={() => router.push('/manual-ingredient-entry' as Href)}
               >
                 <Text style={styles.noResultsButtonSecondaryText}>Enter Ingredients Manually</Text>
               </TouchableOpacity>

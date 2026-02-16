@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@/contexts/UserContext';
 import SystemHealthDashboard from '@/components/SystemHealthDashboard';
@@ -16,7 +16,7 @@ export default function AdminSystemHealthScreen() {
   useEffect(() => {
     if (!isLoading && !isAdmin) {
       console.log('[AdminSystemHealth] Non-admin user detected, redirecting');
-      router.replace('/(tabs)/(scan)');
+      router.replace('/(tabs)/(scan)' as Href);
     }
   }, [isLoading, isAdmin, router]);
 

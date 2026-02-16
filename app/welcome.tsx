@@ -12,7 +12,7 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
@@ -299,7 +299,7 @@ export default function WelcomeScreen() {
           {mode === 'signin' && (
             <TouchableOpacity
               style={styles.forgotPasswordButton}
-              onPress={() => router.push('/forgot-password')}
+              onPress={() => router.push('/forgot-password' as Href)}
             >
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>

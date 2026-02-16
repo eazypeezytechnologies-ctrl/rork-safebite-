@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { KeyRound, ArrowLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
@@ -51,7 +51,7 @@ export default function ForgotPasswordScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.replace('/welcome'),
+            onPress: () => router.replace('/welcome' as Href),
           },
         ]
       );

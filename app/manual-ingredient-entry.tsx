@@ -9,7 +9,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack, Href } from 'expo-router';
 import { AlertCircle, Save } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { calculateVerdict, getVerdictLabel } from '@/utils/verdict';
@@ -97,7 +97,7 @@ export default function ManualIngredientEntryScreen() {
             {
               text: 'View Details',
               onPress: () => {
-                router.replace(`/product/${barcode}`);
+                router.replace(`/product/${barcode}` as Href);
               },
             },
             { text: 'OK' },

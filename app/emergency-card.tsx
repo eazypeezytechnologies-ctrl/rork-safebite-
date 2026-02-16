@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert } from 'react-native';
 import { AlertCircle, Phone, Pill, Share2, QrCode, ScanLine } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
-import { Stack, router } from 'expo-router';
+import { Stack, router, Href } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 
 export default function EmergencyCardScreen() {
@@ -193,7 +193,7 @@ export default function EmergencyCardScreen() {
 
       <TouchableOpacity
         style={styles.scanButton}
-        onPress={() => router.push('/scan-emergency-qr')}
+        onPress={() => router.push('/scan-emergency-qr' as Href)}
       >
         <ScanLine size={24} color="#0891B2" />
         <Text style={styles.scanButtonText}>Scan Someone&apos;s Emergency QR</Text>

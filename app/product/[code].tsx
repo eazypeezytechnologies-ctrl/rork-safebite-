@@ -12,7 +12,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack, Href } from 'expo-router';
 import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle } from 'lucide-react-native';
 import ProductCaptureWizard from '@/components/ProductCaptureWizard';
 import { useProfiles } from '@/contexts/ProfileContext';
@@ -232,7 +232,7 @@ export default function ProductDetailsScreen() {
             [
               { text: 'Understood', style: 'default' },
               { text: 'Exposure Help', onPress: () => {
-                router.push('/exposure-guidance');
+                router.push('/exposure-guidance' as Href);
               }}
             ]
           );
@@ -1090,7 +1090,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
         {activeProfile && product.ingredients_text && (
           <TouchableOpacity
             style={styles.aiButton}
-            onPress={() => router.push(`/ai-analysis/${code}`)}
+            onPress={() => router.push(`/ai-analysis/${code}` as Href)}
           >
             <Sparkles size={24} color="#FFFFFF" />
             <View style={styles.aiButtonContent}>
@@ -1107,7 +1107,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
           {product.source === 'manual_entry' && (
             <TouchableOpacity
               style={styles.editManualButton}
-              onPress={() => router.push(`/manual-ingredient-entry?code=${code}&productName=${encodeURIComponent(product.product_name || '')}`)}
+              onPress={() => router.push(`/manual-ingredient-entry?code=${code}&productName=${encodeURIComponent(product.product_name || '')}` as Href)}
             >
               <Text style={styles.editManualButtonText}>Edit Manual Entry</Text>
             </TouchableOpacity>

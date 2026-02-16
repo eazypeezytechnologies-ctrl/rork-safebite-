@@ -9,7 +9,7 @@ import {
   Switch,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { Profile, EmergencyContact, ProfileRelationship } from '@/types';
@@ -159,7 +159,7 @@ export default function ProfileWizard() {
       await addProfile(profile);
       
       if (__DEV__) console.log('[Wizard] Profile created, navigating to home screen');
-      router.replace('/(tabs)/(scan)');
+      router.replace('/(tabs)/(scan)' as Href);
     } catch (error) {
       console.error('[Wizard] Error creating profile:', error);
       setIsSubmitting(false);
@@ -526,7 +526,7 @@ export default function ProfileWizard() {
             if (step > 1) {
               setStep(step - 1);
             } else {
-              router.replace('/welcome');
+              router.replace('/welcome' as Href);
             }
           }}
         >

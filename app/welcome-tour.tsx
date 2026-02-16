@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { Camera, Heart, Users, Shield, CheckCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -68,7 +68,7 @@ export default function WelcomeTourScreen() {
       setCurrentSlide(currentSlide + 1);
     } else {
       await markTourComplete();
-      router.replace('/wizard');
+      router.replace('/wizard' as Href);
     }
   };
 
@@ -77,7 +77,7 @@ export default function WelcomeTourScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     await markTourComplete();
-    router.replace('/wizard');
+    router.replace('/wizard' as Href);
   };
 
   const markTourComplete = async () => {

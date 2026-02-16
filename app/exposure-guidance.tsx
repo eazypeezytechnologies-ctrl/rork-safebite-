@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform, Alert } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, Href } from 'expo-router';
 import { AlertCircle, Phone, AlertTriangle, Info, Heart, Stethoscope, Syringe } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
@@ -229,7 +229,7 @@ export default function ExposureGuidanceScreen() {
         <View style={styles.actionButtons}>
           <TouchableOpacity 
             style={styles.epipenDemoButton}
-            onPress={() => router.push('/epipen-demo')}
+            onPress={() => router.push('/epipen-demo' as Href)}
           >
             <Syringe size={24} color="#FFFFFF" />
             <View style={styles.buttonContent}>
@@ -240,7 +240,7 @@ export default function ExposureGuidanceScreen() {
 
           <TouchableOpacity 
             style={styles.emergencyCardButton}
-            onPress={() => router.push('/emergency-card')}
+            onPress={() => router.push('/emergency-card' as Href)}
           >
             <Text style={styles.emergencyCardButtonText}>View My Emergency Card</Text>
           </TouchableOpacity>
