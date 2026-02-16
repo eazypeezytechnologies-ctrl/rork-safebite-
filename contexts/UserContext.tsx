@@ -13,11 +13,10 @@ import { actionRateLimiter } from '@/utils/actionRateLimiter';
 const ONBOARDING_KEY = '@allergy_guardian_onboarding_complete';
 const CACHED_AUTH_KEY = '@allergy_guardian_cached_auth';
 const USER_ACTIVITY_KEY = '@allergy_guardian_user_activity';
-const AUTH_TIMEOUT = 10000; // 10 seconds - balanced timeout
-const SESSION_TIMEOUT = 6000; // 6 seconds for initial session check - fail fast
+const AUTH_TIMEOUT = 10000;
+const SESSION_TIMEOUT = 6000;
 const ADMIN_EMAILS = [
   'eazypeezytechnologies@gmail.com',
-  // Add more admin emails here if needed
 ];
 
 export const [UserProvider, useUser] = createContextHook(() => {
@@ -30,7 +29,6 @@ export const [UserProvider, useUser] = createContextHook(() => {
   const queryClient = useQueryClient();
   const loadingAbortRef = useRef<boolean>(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  
 
   const triggerMigration = useCallback(async (userId: string) => {
     try {
@@ -53,16 +51,13 @@ export const [UserProvider, useUser] = createContextHook(() => {
     }
   }, []);
 
-  // Handle app state changes to prevent freezing
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       console.log('[UserContext] App state changed:', appStateRef.current, '->', nextAppState);
       
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
         console.log('[UserContext] App came to foreground - refreshing state');
-        // App has come to the foreground - ensure UI is responsive
         if (isLoading && connectionStatus === 'connecting') {
-          // If still loading after coming back, force complete
           console.log('[UserContext] Force completing load after app resume');
           setConnectionStatus('idle');
           setIsLoading(false);
@@ -86,14 +81,12 @@ export const [UserProvider, useUser] = createContextHook(() => {
         console.log('[UserContext] Loading user session...');
         setConnectionStatus('connecting');
         
-        // Show slow connection warning after 2 seconds
         slowConnectionTimer = setTimeout(() => {
           if (!loadingAbortRef.current) {
             setConnectionStatus('slow');
           }
         }, 2000);
 
-        // Force complete loading after 5 seconds max to prevent UI freeze
         loadingTimeoutTimer = setTimeout(() => {
           if (!loadingAbortRef.current && isLoading) {
             console.log('[UserContext] Force completing load due to timeout');
@@ -146,7 +139,6 @@ export const [UserProvider, useUser] = createContextHook(() => {
           
           if (loadingAbortRef.current) return;
           
-          // If we have cached auth, use it and proceed
           const cachedAuthData = await AsyncStorage.getItem(CACHED_AUTH_KEY);
           if (cachedAuthData) {
             try {
@@ -206,13 +198,9 @@ export const [UserProvider, useUser] = createContextHook(() => {
             createdAt: userData?.created_at || session.user.created_at,
           };
 
-          // Check if user has completed onboarding from Supabase settings
-          // Use local variable 'onboarding' instead of state to avoid dependency issues
           const serverOnboardingComplete = userData?.settings?.onboarding_complete === true;
           const localOnboardingComplete = onboarding === 'true';
           
-          // For returning users: if they have a user record in database, they've completed onboarding
-          // This handles cases where settings might not have onboarding_complete set
           const isReturningUser = userData !== null && userData !== undefined;
           
           if ((serverOnboardingComplete || isReturningUser) && !localOnboardingComplete) {
@@ -220,7 +208,6 @@ export const [UserProvider, useUser] = createContextHook(() => {
             setHasCompletedOnboarding(true);
             AsyncStorage.setItem(ONBOARDING_KEY, 'true').catch(() => {});
             
-            // Also update server settings if not already set
             if (!serverOnboardingComplete && isReturningUser) {
               console.log('[UserContext] Syncing onboarding_complete flag to server for returning user');
               supabase.from('users').update({ 
@@ -391,7 +378,6 @@ export const [UserProvider, useUser] = createContextHook(() => {
           const isAdminByEmail = ADMIN_EMAILS.includes(email.toLowerCase());
           console.log('Signup - email:', email, 'isAdmin:', isAdminByEmail);
           
-          // Non-blocking DB insert
           supabase.from('users').insert({
             id: data.user.id,
             email: email,
@@ -441,7 +427,6 @@ export const [UserProvider, useUser] = createContextHook(() => {
           const isAdminByEmail = ADMIN_EMAILS.includes(email.toLowerCase());
           console.log('Sign in - email:', email, 'isAdminByEmail:', isAdminByEmail);
           
-          // First check database for existing admin status (with timeout, non-blocking for user)
           let userData = null;
           try {
             const result = await withTimeout(
@@ -453,7 +438,6 @@ export const [UserProvider, useUser] = createContextHook(() => {
             console.log('[signIn] User data fetch timed out, proceeding with email-based admin check');
           }
           
-          // Admin if email matches OR already admin in database
           const finalIsAdmin = isAdminByEmail || (userData?.is_admin === true);
           
           const user: User = {
@@ -463,7 +447,6 @@ export const [UserProvider, useUser] = createContextHook(() => {
             createdAt: data.user.created_at,
           };
 
-          // Non-blocking DB operations
           if (isAdminByEmail && userData && !userData.is_admin) {
             console.log('Updating database to grant admin rights');
             supabase.from('users').update({ is_admin: true }).eq('id', data.user.id).then(() => {});
@@ -483,13 +466,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
           console.log('Signed in successfully, isAdmin:', finalIsAdmin);
           logAuditEvent({ eventType: 'auth.sign_in', userId: user.id, metadata: { method: 'password' } });
           
-          // ALWAYS set onboarding complete for sign-in (not signup)
-          // If user can sign in, they've already completed signup before
           console.log('[signIn] User signed in successfully, marking onboarding complete');
           setHasCompletedOnboarding(true);
           await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
           
-          // Cache auth for faster subsequent loads
           await AsyncStorage.setItem(CACHED_AUTH_KEY, JSON.stringify({
             id: user.id,
             email: user.email,
@@ -506,10 +486,8 @@ export const [UserProvider, useUser] = createContextHook(() => {
       if (__DEV__) console.log('[UserContext] Auth error:', error);
       setConnectionStatus('error');
       
-      // Convert to user-friendly message
       const friendlyMessage = getAuthErrorMessage(error);
       
-      // For timeout errors, provide more helpful guidance
       if (friendlyMessage.includes('timed out') || friendlyMessage.includes('timeout')) {
         throw new Error('Connection is slow. Please check your internet connection and try again. If the problem persists, try again later.');
       }
@@ -566,7 +544,6 @@ export const [UserProvider, useUser] = createContextHook(() => {
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
       console.log('Onboarding saved to local storage successfully');
       
-      // Also save to Supabase so returning users don't have to re-onboard
       if (currentUser?.id) {
         console.log('[UserContext] Syncing onboarding status to Supabase...');
         const { error } = await supabase
@@ -602,7 +579,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
   const resetApp = useCallback(async () => {
     try {
-      console.log('🔄 RESETTING APP - Clearing all data...');
+      console.log('[UserContext] RESETTING APP - Clearing all data...');
       
       await AsyncStorage.clear();
       await supabase.auth.signOut();
@@ -611,9 +588,9 @@ export const [UserProvider, useUser] = createContextHook(() => {
       setUsers([]);
       setHasCompletedOnboarding(false);
       
-      console.log('✅ APP RESET COMPLETE - All data cleared');
+      console.log('[UserContext] APP RESET COMPLETE - All data cleared');
     } catch (error) {
-      console.error('❌ Error resetting app:', error);
+      console.error('[UserContext] Error resetting app:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error details:', errorMessage);
       throw new Error(`Failed to reset app: ${errorMessage}`);
