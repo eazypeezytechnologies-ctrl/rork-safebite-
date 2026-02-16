@@ -23,6 +23,7 @@ import { calculateVerdict, getVerdictColor, getVerdictLabel } from '@/utils/verd
 import { Product, RecallResult } from '@/types';
 import { addToScanHistory } from '@/storage/scanHistory';
 import { useUser } from '@/contexts/UserContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { addToFavorites, removeFromFavorites, isFavorite } from '@/storage/favorites';
 import * as Haptics from 'expo-haptics';
@@ -39,6 +40,7 @@ export default function ProductDetailsScreen() {
   const { activeProfile, profiles } = useProfiles();
   const { trackActivity, currentUser } = useUser();
   const { viewMode, getFamilyMembers, activeFamilyGroup } = useFamily();
+  const queryClient = useQueryClient();
   
   const rawCode = Array.isArray(params.code) ? params.code[0] : params.code;
   
@@ -359,6 +361,9 @@ export default function ProductDetailsScreen() {
             setShowCaptureWizard(false);
             setIsLoading(false);
             setError(null);
+            queryClient.invalidateQueries({ queryKey: ['supabase-scan-history'] });
+            queryClient.invalidateQueries({ queryKey: ['supabase-product', code] });
+            queryClient.removeQueries({ queryKey: ['supabase-product', code] });
           }}
           onCancel={() => router.back()}
         />

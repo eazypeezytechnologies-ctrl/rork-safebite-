@@ -356,17 +356,22 @@ export async function searchProductsByName(query: string, page: number = 1, user
     }
     console.log(`[Products] Found ${supabaseResults.length} from Supabase`);
 
-    if (allProducts.length < 5) {
+    if (allProducts.length === 0) {
       try {
-        console.log('[Products] Supplementing with OpenFoodFacts API...');
+        console.log('[Products] No Supabase results, trying OpenFoodFacts API...');
         const data = await safeFetch(
-          `${OFF_API}/search?search_terms=${encodeURIComponent(query)}&page=${page}&page_size=20&fields=code,product_name,brands,image_url,image_front_url,ingredients_text,allergens,allergens_tags,traces,traces_tags,categories,categories_tags`
+          `${OFF_API}/search?search_terms=${encodeURIComponent(query)}&page=${page}&page_size=10&fields=code,product_name,brands,image_url,image_front_url,ingredients_text,allergens,allergens_tags,traces,traces_tags,categories,categories_tags`
         );
         
         const apiProducts = (data.products || []).map((p: Product) => ({
           ...p,
           source: 'openfoodfacts' as const,
-        }));
+        })).filter((p: Product) => {
+          const pName = (p.product_name || '').toLowerCase();
+          const pBrand = (p.brands || '').toLowerCase();
+          const q = query.toLowerCase();
+          return pName.includes(q) || pBrand.includes(q) || q.includes(pName);
+        });
         
         for (const p of apiProducts) {
           if (p.code && !seenCodes.has(p.code)) {
@@ -376,32 +381,9 @@ export async function searchProductsByName(query: string, page: number = 1, user
           }
         }
         
-        console.log(`[Products] Found ${apiProducts.length} from OpenFoodFacts API`);
+        console.log(`[Products] Found ${apiProducts.length} relevant results from OpenFoodFacts API`);
       } catch (apiError) {
         console.log('[Products] OpenFoodFacts API search failed:', apiError);
-      }
-    }
-
-    if (allProducts.length < 5) {
-      try {
-        const beautyData = await safeFetch(
-          `${OBF_API}/search?search_terms=${encodeURIComponent(query)}&page=1&page_size=10&fields=code,product_name,brands,image_url,image_front_url,ingredients_text,allergens,allergens_tags,traces,traces_tags,categories,categories_tags`
-        );
-        
-        const beautyProducts = (beautyData.products || []).map((p: Product) => ({
-          ...p,
-          source: 'openbeautyfacts' as const,
-        }));
-        
-        for (const p of beautyProducts) {
-          if (p.code && !seenCodes.has(p.code)) {
-            seenCodes.add(p.code);
-            allProducts.push(p);
-            upsertProduct(p).catch(() => {});
-          }
-        }
-      } catch (beautyError) {
-        console.log('[Products] OpenBeautyFacts search failed (non-critical):', beautyError);
       }
     }
 

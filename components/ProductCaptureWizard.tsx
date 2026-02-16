@@ -31,6 +31,7 @@ import { Product } from '@/types';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { calculateVerdict } from '@/utils/verdict';
 import { addToScanHistory } from '@/storage/scanHistory';
 import { cacheProduct } from '@/storage/productCache';
@@ -54,6 +55,7 @@ interface ExtractedData {
 export default function ProductCaptureWizard({ barcode, onProductSaved, onCancel }: ProductCaptureWizardProps) {
   const { activeProfile } = useProfiles();
   const { currentUser } = useUser();
+  const queryClient = useQueryClient();
   const [permission, requestPermission] = useCameraPermissions();
 
   const [step, setStep] = useState<WizardStep>(1);
@@ -348,8 +350,14 @@ Format response exactly as above, one per line.`;
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
+      console.log('[CaptureWizard] Invalidating all caches after save...');
+      await queryClient.invalidateQueries({ queryKey: ['supabase-scan-history'] });
+      await queryClient.invalidateQueries({ queryKey: ['supabase-product', productCode] });
+      queryClient.invalidateQueries({ queryKey: ['supabase-favorites'] });
+      queryClient.removeQueries({ queryKey: ['supabase-product', productCode] });
+
       setSaveSuccess(true);
-      console.log('[CaptureWizard] ✅ Product saved and verified successfully');
+      console.log('[CaptureWizard] ✅ Product saved, verified, and caches invalidated');
 
       setTimeout(() => {
         onProductSaved(product);
@@ -482,6 +490,14 @@ Format response exactly as above, one per line.`;
         <Text style={styles.successSubtitle}>
           {extractedData.name} is now searchable and in your history.
         </Text>
+        <View style={styles.comingSoonCard}>
+          <Text style={styles.comingSoonIcon}>🛒</Text>
+          <Text style={styles.comingSoonTitle}>Add to Shopping List</Text>
+          <Text style={styles.comingSoonLabel}>Coming Soon</Text>
+          <Text style={styles.comingSoonDesc}>
+            Save products to a shared shopping list with price comparison and store locations.
+          </Text>
+        </View>
       </View>
     );
   }
@@ -1210,5 +1226,44 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  comingSoonCard: {
+    marginTop: 28,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E0E7FF',
+    borderStyle: 'dashed' as const,
+    width: '100%',
+    maxWidth: 320,
+  },
+  comingSoonIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  comingSoonTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#374151',
+    marginBottom: 4,
+  },
+  comingSoonLabel: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: '#6366F1',
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden' as const,
+    marginBottom: 8,
+  },
+  comingSoonDesc: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center' as const,
+    lineHeight: 18,
   },
 });

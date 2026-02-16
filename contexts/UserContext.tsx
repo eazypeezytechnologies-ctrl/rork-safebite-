@@ -529,6 +529,8 @@ export const [UserProvider, useUser] = createContextHook(() => {
       await AsyncStorage.removeItem(ONBOARDING_KEY);
       await AsyncStorage.removeItem(USER_ACTIVITY_KEY);
       
+      queryClient.cancelQueries();
+      queryClient.removeQueries();
       queryClient.clear();
       console.log('[UserContext] Cleared ALL query caches on logout');
       
@@ -538,12 +540,20 @@ export const [UserProvider, useUser] = createContextHook(() => {
       setConnectionStatus('idle');
       setRetryCount(0);
       
+      try {
+        await AsyncStorage.removeItem('@allergy_guardian_offline_products');
+        await AsyncStorage.removeItem('manual_ingredient_entries');
+      } catch {
+        console.log('[UserContext] Non-critical: failed to clear product caches');
+      }
+      
       await supabase.auth.signOut();
-      console.log('[UserContext] Sign out complete - all state cleared');
+      console.log('[UserContext] Sign out complete - all state and caches cleared');
     } catch (error) {
       console.error('Error signing out:', error);
       setCurrentUser(null);
       setHasCompletedOnboarding(false);
+      queryClient.clear();
     } finally {
       setIsLoading(false);
     }
