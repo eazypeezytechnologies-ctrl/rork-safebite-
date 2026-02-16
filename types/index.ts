@@ -55,6 +55,8 @@ export interface User {
   createdAt: string;
 }
 
+export type ProductType = 'food' | 'skin' | 'hair' | 'other';
+
 export interface Product {
   code: string;
   product_name?: string;
@@ -68,6 +70,7 @@ export interface Product {
   traces_tags?: string[];
   categories?: string;
   categories_tags?: string[];
+  product_type?: ProductType;
   source: 'openfoodfacts' | 'openbeautyfacts' | 'openproductsfacts' | 'upcdatabase' | 'upcitemdb' | 'barcodelookup' | 'worldupc' | 'eansearch' | 'datakick' | 'usda' | 'nutritionix' | 'edamam' | 'manual_entry';
 }
 

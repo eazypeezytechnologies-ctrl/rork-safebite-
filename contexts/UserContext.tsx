@@ -497,41 +497,54 @@ export const [UserProvider, useUser] = createContextHook(() => {
   }, [triggerMigration]);
 
   const signOut = useCallback(async () => {
-    console.log('Signing out...');
+    console.log('[UserContext] === SIGN OUT START ===');
     if (currentUser?.id) {
       logAuditEvent({ eventType: 'auth.sign_out', userId: currentUser.id });
     }
     setIsLoading(true);
     try {
-      await AsyncStorage.removeItem(CACHED_AUTH_KEY);
-      await AsyncStorage.removeItem(ONBOARDING_KEY);
-      await AsyncStorage.removeItem(USER_ACTIVITY_KEY);
-      
-      queryClient.cancelQueries();
-      queryClient.removeQueries();
-      queryClient.clear();
-      console.log('[UserContext] Cleared ALL query caches on logout');
-      
       setCurrentUser(null);
       setUsers([]);
       setHasCompletedOnboarding(false);
       setConnectionStatus('idle');
       setRetryCount(0);
-      
-      try {
-        await AsyncStorage.removeItem('@allergy_guardian_offline_products');
-        await AsyncStorage.removeItem('manual_ingredient_entries');
-      } catch {
-        console.log('[UserContext] Non-critical: failed to clear product caches');
-      }
-      
+      console.log('[UserContext] State cleared immediately');
+
+      queryClient.cancelQueries();
+      queryClient.removeQueries();
+      queryClient.clear();
+      console.log('[UserContext] Query cache cleared');
+
+      const keysToRemove = [
+        CACHED_AUTH_KEY,
+        ONBOARDING_KEY,
+        USER_ACTIVITY_KEY,
+        '@allergy_guardian_offline_products',
+        'manual_ingredient_entries',
+        '@allergy_guardian_admin_settings',
+        '@allergy_guardian_search_history',
+        '@allergy_guardian_shopping_list',
+        '@allergy_guardian_favorites',
+      ];
+
+      await Promise.all(
+        keysToRemove.map(key =>
+          AsyncStorage.removeItem(key).catch(() =>
+            console.log('[UserContext] Non-critical: failed to remove', key)
+          )
+        )
+      );
+      console.log('[UserContext] AsyncStorage keys cleared');
+
       await supabase.auth.signOut();
-      console.log('[UserContext] Sign out complete - all state and caches cleared');
+      console.log('[UserContext] === SIGN OUT COMPLETE ===');
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('[UserContext] Error during sign out:', error);
       setCurrentUser(null);
       setHasCompletedOnboarding(false);
+      setConnectionStatus('idle');
       queryClient.clear();
+      try { await supabase.auth.signOut(); } catch { /* ignore */ }
     } finally {
       setIsLoading(false);
     }

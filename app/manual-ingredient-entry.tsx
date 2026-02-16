@@ -8,35 +8,136 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack, Href } from 'expo-router';
-import { AlertCircle, Save } from 'lucide-react-native';
+import { AlertCircle, Save, Upload, Camera } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
+import { useUser } from '@/contexts/UserContext';
 import { calculateVerdict, getVerdictLabel } from '@/utils/verdict';
+import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
+import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
+import { ProductType } from '@/types';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const MANUAL_ENTRIES_KEY = 'manual_ingredient_entries';
-
-interface ManualEntry {
-  barcode: string;
-  productName: string;
-  brand: string;
-  ingredients: string;
-  enteredAt: string;
-  updatedAt: string;
-}
+import * as ImagePicker from 'expo-image-picker';
+import { generateText } from '@rork-ai/toolkit-sdk';
 
 export default function ManualIngredientEntryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string; productName?: string }>();
   const { activeProfile } = useProfiles();
+  const { currentUser } = useUser();
 
   const [barcode, setBarcode] = useState(params.code || '');
   const [productName, setProductName] = useState(params.productName || '');
   const [brand, setBrand] = useState('');
   const [ingredients, setIngredients] = useState('');
+  const [productType, setProductType] = useState<ProductType>('food');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleUploadIngredientsPhoto = async () => {
+    console.log('[ManualEntry] Opening image picker for ingredients photo');
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Photo library access is required to upload images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setIsUploading(true);
+
+        if (Platform.OS !== 'web') {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+
+        const imageUri = asset.base64
+          ? `data:image/jpeg;base64,${asset.base64}`
+          : asset.uri;
+
+        try {
+          const analysisResult = await generateText({
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image', image: imageUri },
+                {
+                  type: 'text',
+                  text: `Read the ingredients list from this product label image. Extract:
+1. Product Name (if visible)
+2. Brand (if visible)  
+3. Full ingredients list (comma-separated)
+
+Format your response as:
+PRODUCT_NAME: [name or UNKNOWN]
+BRAND: [brand or UNKNOWN]
+INGREDIENTS: [full comma-separated ingredients list]
+
+If you cannot read the ingredients, respond with: CANNOT_READ`,
+                },
+              ],
+            }],
+          });
+
+          console.log('[ManualEntry] Ingredients analysis result:', analysisResult.substring(0, 200));
+
+          if (analysisResult.includes('CANNOT_READ')) {
+            Alert.alert(
+              'Could Not Read',
+              'We could not read the ingredients from this photo. Please try a clearer photo or enter them manually.',
+              [
+                { text: 'Try Again', onPress: handleUploadIngredientsPhoto },
+                { text: 'OK', style: 'cancel' },
+              ]
+            );
+          } else {
+            const nameMatch = analysisResult.match(/PRODUCT_NAME:\s*(.+?)(?:\n|$)/i);
+            const brandMatch = analysisResult.match(/BRAND:\s*(.+?)(?:\n|$)/i);
+            const ingredientsMatch = analysisResult.match(/INGREDIENTS:\s*(.+?)$/ims);
+
+            const extractedName = nameMatch?.[1]?.trim();
+            const extractedBrand = brandMatch?.[1]?.trim();
+            const extractedIngredients = ingredientsMatch?.[1]?.trim();
+
+            if (extractedName && extractedName !== 'UNKNOWN' && !productName) {
+              setProductName(extractedName);
+            }
+            if (extractedBrand && extractedBrand !== 'UNKNOWN' && !brand) {
+              setBrand(extractedBrand);
+            }
+            if (extractedIngredients) {
+              setIngredients(extractedIngredients);
+              const guessed = guessProductType(extractedIngredients, extractedName, '');
+              setProductType(guessed);
+            }
+
+            if (Platform.OS !== 'web') {
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+            Alert.alert('Ingredients Extracted', 'We filled in the ingredients from your photo. Please review and edit if needed.');
+          }
+        } catch (aiError) {
+          console.error('[ManualEntry] AI analysis error:', aiError);
+          Alert.alert('Analysis Failed', 'Could not analyze the image. Please enter ingredients manually.');
+        } finally {
+          setIsUploading(false);
+        }
+      }
+    } catch (error) {
+      console.error('[ManualEntry] Error picking image:', error);
+      setIsUploading(false);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
 
   const handleSave = async () => {
     if (!productName.trim()) {
@@ -52,64 +153,70 @@ export default function ManualIngredientEntryScreen() {
     setIsSaving(true);
 
     try {
-      const entry: ManualEntry = {
-        barcode: barcode.trim(),
-        productName: productName.trim(),
-        brand: brand.trim(),
-        ingredients: ingredients.trim(),
-        enteredAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+      const code = barcode.trim() || `manual_${Date.now()}`;
+      const product = {
+        code,
+        product_name: productName.trim(),
+        brands: brand.trim() || undefined,
+        ingredients_text: ingredients.trim(),
+        allergens_tags: [] as string[],
+        traces_tags: [] as string[],
+        product_type: productType,
+        source: 'manual_entry' as const,
       };
 
-      const stored = await AsyncStorage.getItem(MANUAL_ENTRIES_KEY);
-      const entries: ManualEntry[] = stored ? JSON.parse(stored) : [];
+      const saveResult = await upsertProduct(product);
+      console.log('[ManualEntry] Save result:', saveResult);
 
-      const existingIndex = entries.findIndex(e => e.barcode === entry.barcode);
-      if (existingIndex >= 0) {
-        entries[existingIndex] = entry;
-      } else {
-        entries.push(entry);
+      if (currentUser?.id && activeProfile) {
+        const verdict = calculateVerdict(product, activeProfile);
+        await recordScanEvent({
+          user_id: currentUser.id,
+          profile_id: activeProfile.id,
+          product_barcode: code,
+          product_name: productName.trim(),
+          scan_type: 'manual',
+          verdict: verdict.level,
+          verdict_details: verdict.message || null,
+        });
       }
-
-      await AsyncStorage.setItem(MANUAL_ENTRIES_KEY, JSON.stringify(entries));
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
       if (activeProfile && ingredients.trim()) {
-        const mockProduct = {
-          code: barcode,
-          product_name: productName,
-          brands: brand,
-          ingredients_text: ingredients,
-          allergens_tags: [],
-          traces_tags: [],
-          source: 'manual_entry' as const,
-        };
-
-        const verdict = calculateVerdict(mockProduct, activeProfile);
+        const verdict = calculateVerdict(product, activeProfile);
 
         Alert.alert(
-          '✓ Saved Successfully',
-          `Ingredients saved for ${productName}\n\nSafety Check: ${getVerdictLabel(verdict.level)}\n${verdict.message}`,
+          'Product Saved!',
+          `${productName} saved successfully.\n\nSafety Check: ${getVerdictLabel(verdict.level)}\n${verdict.message}`,
           [
             {
-              text: 'View Details',
+              text: 'Back to Scan',
+              onPress: () => router.back(),
+            },
+            {
+              text: 'View Product',
               onPress: () => {
-                router.replace(`/product/${barcode}` as Href);
+                router.replace(`/product/${encodeURIComponent(code)}` as Href);
               },
             },
-            { text: 'OK' },
           ]
         );
       } else {
-        Alert.alert('✓ Saved', 'Ingredients saved successfully');
-        router.back();
+        Alert.alert(
+          'Product Saved!',
+          'Your product has been saved and is now searchable.',
+          [
+            { text: 'Back to Scan', onPress: () => router.back() },
+            { text: 'OK' },
+          ]
+        );
       }
     } catch (error) {
-      console.error('Error saving manual entry:', error);
-      Alert.alert('Error', 'Failed to save ingredient information');
+      console.error('[ManualEntry] Error saving:', error);
+      Alert.alert('Error', 'Failed to save product. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -131,8 +238,8 @@ export default function ManualIngredientEntryScreen() {
       product_name: productName || 'Manual Entry',
       brands: brand,
       ingredients_text: ingredients,
-      allergens_tags: [],
-      traces_tags: [],
+      allergens_tags: [] as string[],
+      traces_tags: [] as string[],
       source: 'manual_entry' as const,
     };
 
@@ -157,11 +264,13 @@ export default function ManualIngredientEntryScreen() {
     );
   };
 
+  const productTypes: ProductType[] = ['food', 'skin', 'hair', 'other'];
+
   return (
     <View style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
       <Stack.Screen
         options={{
-          title: 'Manual Ingredient Entry',
+          title: 'Add Product',
           headerRight: () => (
             <TouchableOpacity onPress={handleSave} disabled={isSaving}>
               <Save size={24} color={isSaving ? '#9CA3AF' : '#0891B2'} />
@@ -171,11 +280,61 @@ export default function ManualIngredientEntryScreen() {
       />
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.infoCard}>
-          <AlertCircle size={48} color="#0891B2" />
-          <Text style={styles.infoTitle}>Manual Ingredient Entry</Text>
+          <AlertCircle size={40} color="#0891B2" />
+          <Text style={styles.infoTitle}>Add Product Manually</Text>
           <Text style={styles.infoText}>
-            When a product is not in our database, you can manually enter its ingredients. This helps you check for allergens and saves the information for future scans.
+            Enter product details or upload a photo of the ingredients label to auto-fill.
           </Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.uploadButton, isUploading && styles.uploadButtonDisabled]}
+          onPress={handleUploadIngredientsPhoto}
+          disabled={isUploading}
+          activeOpacity={0.8}
+        >
+          {isUploading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Upload size={22} color="#FFFFFF" />
+          )}
+          <View style={styles.uploadButtonContent}>
+            <Text style={styles.uploadButtonTitle}>
+              {isUploading ? 'Analyzing Photo...' : 'Upload Ingredients Photo'}
+            </Text>
+            <Text style={styles.uploadButtonSubtitle}>
+              AI will extract ingredients automatically
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Product Category</Text>
+          <View style={styles.typeSelector}>
+            {productTypes.map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[
+                  styles.typeChip,
+                  productType === type && { backgroundColor: getProductTypeColor(type) + '20', borderColor: getProductTypeColor(type) },
+                ]}
+                onPress={() => {
+                  setProductType(type);
+                  if (Platform.OS !== 'web') {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                }}
+              >
+                <Text style={styles.typeEmoji}>{getProductTypeEmoji(type)}</Text>
+                <Text style={[
+                  styles.typeLabel,
+                  productType === type && { color: getProductTypeColor(type), fontWeight: '700' as const },
+                ]}>
+                  {getProductTypeLabel(type)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -215,13 +374,13 @@ export default function ManualIngredientEntryScreen() {
         <View style={styles.section}>
           <Text style={styles.label}>Ingredients List *</Text>
           <Text style={styles.helperText}>
-            Copy the full ingredients list from the product label, separated by commas
+            Copy from label or upload a photo above to auto-fill
           </Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={ingredients}
             onChangeText={setIngredients}
-            placeholder="e.g., Water, Butyrospermum Parkii (Shea Butter), Cetyl Alcohol, Glycerin, Fragrance..."
+            placeholder="e.g., Water, Butyrospermum Parkii (Shea Butter), Cetyl Alcohol..."
             multiline
             numberOfLines={8}
             textAlignVertical="top"
@@ -229,20 +388,12 @@ export default function ManualIngredientEntryScreen() {
           />
         </View>
 
-        <View style={styles.tipCard}>
-          <Text style={styles.tipTitle}>💡 Tips for Accuracy</Text>
-          <Text style={styles.tipText}>• Copy the exact ingredients from the label</Text>
-          <Text style={styles.tipText}>• Include parenthetical scientific names (e.g., Shea Butter becomes Butyrospermum Parkii)</Text>
-          <Text style={styles.tipText}>• Separate ingredients with commas</Text>
-          <Text style={styles.tipText}>• Check both sides of the package</Text>
-        </View>
-
         {activeProfile && (
           <TouchableOpacity
             style={styles.quickCheckButton}
             onPress={performQuickCheck}
           >
-            <Text style={styles.quickCheckText}>⚡ Quick Safety Check for {activeProfile.name}</Text>
+            <Text style={styles.quickCheckText}>Quick Safety Check for {activeProfile.name}</Text>
           </TouchableOpacity>
         )}
 
@@ -253,14 +404,14 @@ export default function ManualIngredientEntryScreen() {
         >
           <Save size={24} color="#FFFFFF" />
           <Text style={styles.saveButtonText}>
-            {isSaving ? 'Saving...' : 'Save Ingredients'}
+            {isSaving ? 'Saving...' : 'Save Product'}
           </Text>
         </TouchableOpacity>
 
         <View style={styles.disclaimer}>
           <AlertCircle size={16} color="#92400E" />
           <Text style={styles.disclaimerText}>
-            Manually entered data is stored locally on your device. Always verify ingredients on the actual product label before use.
+            Products are saved to your account and are searchable across devices. Always verify ingredients on the actual product label.
           </Text>
         </View>
       </ScrollView>
@@ -280,24 +431,54 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0F2FE',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 24,
+    marginBottom: 16,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#0891B2',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
   },
   infoTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700' as const,
     color: '#111827',
-    marginTop: 12,
-    marginBottom: 8,
-    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 6,
+    textAlign: 'center' as const,
   },
   infoText: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#374151',
-    textAlign: 'center',
-    lineHeight: 22,
+    textAlign: 'center' as const,
+    lineHeight: 20,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 20,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  uploadButtonDisabled: {
+    opacity: 0.7,
+  },
+  uploadButtonContent: {
+    flex: 1,
+  },
+  uploadButtonTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  uploadButtonSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
   },
   section: {
     marginBottom: 20,
@@ -327,25 +508,29 @@ const styles = StyleSheet.create({
     minHeight: 150,
     paddingTop: 16,
   },
-  tipCard: {
-    backgroundColor: '#FEF3C7',
+  typeSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  typeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
-  tipTitle: {
+  typeEmoji: {
     fontSize: 16,
-    fontWeight: '700' as const,
-    color: '#92400E',
-    marginBottom: 12,
   },
-  tipText: {
+  typeLabel: {
     fontSize: 14,
-    color: '#78350F',
-    marginBottom: 6,
-    lineHeight: 20,
+    fontWeight: '500' as const,
+    color: '#6B7280',
   },
   quickCheckButton: {
     backgroundColor: '#8B5CF6',

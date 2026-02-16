@@ -1,6 +1,6 @@
-export const BUILD_ID = '2026-02-16-v14-resolve-fix';
-export const BUILD_TIMESTAMP = '2026-02-16T19:00:00Z';
-export const APP_VERSION = '1.5.1';
+export const BUILD_ID = '2026-02-16-v15-invites-scan-shopping';
+export const BUILD_TIMESTAMP = '2026-02-16T21:00:00Z';
+export const APP_VERSION = '1.6.0';
 export const APP_FEATURES = {
   familyInvites: true,
   eczemaTriggers: true,

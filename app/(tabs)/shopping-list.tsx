@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect, Href } from 'expo-router';
-import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X } from 'lucide-react-native';
+import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X, DollarSign, MapPin, Share2, Bell } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { ViewModeToggle } from '@/components/ViewModeToggle';
@@ -363,6 +363,54 @@ export default function ShoppingListScreen() {
             )}
           </>
         )}
+        <View style={styles.comingSoonSection}>
+          <Text style={styles.comingSoonSectionTitle}>Coming Soon</Text>
+
+          <View style={styles.comingSoonCard}>
+            <View style={styles.comingSoonIconWrap}>
+              <DollarSign size={24} color="#F59E0B" />
+            </View>
+            <View style={styles.comingSoonContent}>
+              <Text style={styles.comingSoonTitle}>Price Compare</Text>
+              <Text style={styles.comingSoonDesc}>
+                Compare prices across stores for items on your list. Find the best deals for allergy-safe products.
+              </Text>
+            </View>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonBadgeText}>Soon</Text>
+            </View>
+          </View>
+
+          <View style={styles.comingSoonCard}>
+            <View style={styles.comingSoonIconWrap}>
+              <MapPin size={24} color="#3B82F6" />
+            </View>
+            <View style={styles.comingSoonContent}>
+              <Text style={styles.comingSoonTitle}>Store Distance & Pickup</Text>
+              <Text style={styles.comingSoonDesc}>
+                See which nearby stores carry your items and get directions or schedule pickup.
+              </Text>
+            </View>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonBadgeText}>Soon</Text>
+            </View>
+          </View>
+
+          <View style={styles.comingSoonCard}>
+            <View style={styles.comingSoonIconWrap}>
+              <Share2 size={24} color="#8B5CF6" />
+            </View>
+            <View style={styles.comingSoonContent}>
+              <Text style={styles.comingSoonTitle}>Share with Friends</Text>
+              <Text style={styles.comingSoonDesc}>
+                Share your shopping list with friends and family outside your family group.
+              </Text>
+            </View>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonBadgeText}>Soon</Text>
+            </View>
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -585,5 +633,61 @@ const styles = StyleSheet.create({
   removeButton: {
     padding: 8,
     marginLeft: 8,
+  },
+  comingSoonSection: {
+    marginTop: 24,
+    marginBottom: 32,
+  },
+  comingSoonSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#111827',
+    marginBottom: 12,
+  },
+  comingSoonCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed' as const,
+  },
+  comingSoonIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  comingSoonContent: {
+    flex: 1,
+    marginRight: 10,
+  },
+  comingSoonTitle: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#111827',
+    marginBottom: 3,
+  },
+  comingSoonDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 17,
+  },
+  comingSoonBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  comingSoonBadgeText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: '#D97706',
   },
 });

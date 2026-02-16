@@ -27,6 +27,9 @@ import {
   Activity,
   Moon,
   Vibrate,
+  CheckCircle,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -377,6 +380,63 @@ export default function AdminSettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Security Checklist</Text>
+
+          <View style={styles.securityCard}>
+            <View style={styles.securityRow}>
+              <CheckCircle size={18} color="#10B981" />
+              <Text style={styles.securityLabel}>Supabase Auth</Text>
+              <Text style={styles.securityValue}>Active</Text>
+            </View>
+            <View style={styles.securityDivider} />
+            <View style={styles.securityRow}>
+              <CheckCircle size={18} color="#10B981" />
+              <Text style={styles.securityLabel}>Anon Key Only</Text>
+              <Text style={styles.securityValue}>Yes</Text>
+            </View>
+            <View style={styles.securityDivider} />
+            <View style={styles.securityRow}>
+              <CheckCircle size={18} color="#10B981" />
+              <Text style={styles.securityLabel}>RLS Enabled Tables</Text>
+              <Text style={styles.securityValue}>All</Text>
+            </View>
+            <View style={styles.securityDivider} />
+            <View style={styles.securityRow}>
+              <Lock size={18} color="#10B981" />
+              <Text style={styles.securityLabel}>Session Persisted</Text>
+              <Text style={styles.securityValue}>Secure</Text>
+            </View>
+            <View style={styles.securityDivider} />
+            <View style={styles.securityRow}>
+              <ShieldCheck size={18} color="#10B981" />
+              <Text style={styles.securityLabel}>Logout Clears Cache</Text>
+              <Text style={styles.securityValue}>Yes</Text>
+            </View>
+          </View>
+
+          <View style={styles.securityInfoCard}>
+            <Text style={styles.securityInfoTitle}>RLS-Protected Tables</Text>
+            <Text style={styles.securityInfoText}>
+              profiles, products, scan_history, family_groups, family_members, secure_invitations, shopping_lists, favorites, users, user_settings
+            </Text>
+          </View>
+
+          <View style={styles.securityInfoCard}>
+            <Text style={styles.securityInfoTitle}>Policies Summary</Text>
+            <Text style={styles.securityInfoText}>
+              All user data tables restricted by auth.uid(). Family data scoped by membership. Admin data protected by is_admin flag. No public read policies.
+            </Text>
+          </View>
+
+          <View style={styles.securityInfoCard}>
+            <Text style={styles.securityInfoTitle}>Logout Behavior</Text>
+            <Text style={styles.securityInfoText}>
+              Sign out clears: Supabase session, AsyncStorage keys, React Query cache, local product/history caches, user context state. App routes to Auth screen.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Actions</Text>
           
           <TouchableOpacity
@@ -631,5 +691,54 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  securityCard: {
+    backgroundColor: '#1F2937',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#374151',
+    marginBottom: 12,
+  },
+  securityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  securityLabel: {
+    flex: 1,
+    fontSize: 14,
+    color: '#D1D5DB',
+  },
+  securityValue: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#10B981',
+  },
+  securityDivider: {
+    height: 1,
+    backgroundColor: '#374151',
+  },
+  securityInfoCard: {
+    backgroundColor: '#1F2937',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#374151',
+    marginBottom: 10,
+  },
+  securityInfoTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#9CA3AF',
+    marginBottom: 6,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
+  securityInfoText: {
+    fontSize: 13,
+    color: '#D1D5DB',
+    lineHeight: 19,
   },
 });

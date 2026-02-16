@@ -390,6 +390,94 @@ export default function ScanScreen() {
     }
   };
 
+  const handleUploadBarcodePhoto = async () => {
+    console.log('Opening image picker for barcode photo');
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Photo library access is required to upload barcode images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        console.log('Barcode image selected from gallery');
+
+        if (Platform.OS !== 'web') {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+
+        setIsAnalyzing(true);
+        const imageUri = asset.base64
+          ? `data:image/jpeg;base64,${asset.base64}`
+          : asset.uri;
+
+        try {
+          const analysisResult = await generateText({
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image', image: imageUri },
+                { type: 'text', text: 'Look at this image and find any barcode (UPC, EAN, etc). Return ONLY the barcode number digits. If you cannot find a readable barcode, respond with: NO_BARCODE_FOUND' },
+              ],
+            }],
+          });
+
+          setIsAnalyzing(false);
+
+          const barcodeMatch = analysisResult.match(/\b(\d{8,14})\b/);
+          if (barcodeMatch && barcodeMatch[1]) {
+            const extractedBarcode = barcodeMatch[1];
+            console.log('Extracted barcode from photo:', extractedBarcode);
+
+            if (Platform.OS !== 'web') {
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+
+            router.push(`/product/${encodeURIComponent(extractedBarcode)}` as Href);
+          } else {
+            Alert.alert(
+              'Barcode Not Found',
+              'Could not read a barcode from this photo. You can try again or enter the barcode manually.',
+              [
+                { text: 'Try Again', onPress: handleUploadBarcodePhoto },
+                {
+                  text: 'Enter Manually',
+                  onPress: () => {
+                    router.push('/manual-ingredient-entry' as Href);
+                  },
+                },
+                { text: 'Cancel', style: 'cancel' },
+              ]
+            );
+          }
+        } catch (aiError) {
+          setIsAnalyzing(false);
+          console.error('Barcode photo analysis error:', aiError);
+          Alert.alert(
+            'Analysis Failed',
+            'Could not analyze the barcode image. Please try scanning directly or enter manually.',
+            [
+              { text: 'Enter Manually', onPress: () => router.push('/manual-ingredient-entry' as Href) },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error picking barcode image:', error);
+      setIsAnalyzing(false);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
+
   const capturePhoto = async () => {
     if (!cameraRef.current) {
       Alert.alert('Error', 'Camera not ready');
@@ -849,6 +937,26 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             {torchEnabled ? 'ON' : 'OFF'}
           </Text>
         </TouchableOpacity>
+
+        {/* Upload Barcode Photo - Bottom Right */}
+        {!imageRecognitionMode && (
+          <TouchableOpacity
+            style={styles.uploadBarcodeButton}
+            onPress={async () => {
+              console.log('Upload barcode photo pressed');
+              if (Platform.OS !== 'web') {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }
+              setCameraActive(false);
+              handleUploadBarcodePhoto();
+            }}
+            testID="upload-barcode-button"
+            activeOpacity={0.7}
+          >
+            <Upload size={20} color="#FFFFFF" />
+            <Text style={styles.uploadBarcodeText}>Upload</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Bottom Status Card */}
         <View style={styles.bottomCard}>
@@ -1798,6 +1906,24 @@ const styles = StyleSheet.create({
   },
   flashButtonTextActive: {
     color: '#FBBF24',
+  },
+  uploadBarcodeButton: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 140 : 120,
+    right: 20,
+    backgroundColor: 'rgba(30, 30, 30, 0.9)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 10,
+  },
+  uploadBarcodeText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
   errorContainer: {
     backgroundColor: '#FEF2F2',
