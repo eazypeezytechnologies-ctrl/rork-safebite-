@@ -526,24 +526,28 @@ export const [UserProvider, useUser] = createContextHook(() => {
     setIsLoading(true);
     try {
       await AsyncStorage.removeItem(CACHED_AUTH_KEY);
+      await AsyncStorage.removeItem(ONBOARDING_KEY);
+      await AsyncStorage.removeItem(USER_ACTIVITY_KEY);
       
-      queryClient.removeQueries({ queryKey: ['supabase-profiles'] });
-      queryClient.removeQueries({ queryKey: ['supabase-user-settings'] });
-      queryClient.removeQueries({ queryKey: ['supabase-scan-history'] });
-      queryClient.removeQueries({ queryKey: ['supabase-favorites'] });
-      queryClient.removeQueries({ queryKey: ['supabase-shopping-list'] });
-      queryClient.removeQueries({ queryKey: ['supabase-family-groups'] });
-      console.log('[UserContext] Cleared all query caches on logout');
+      queryClient.clear();
+      console.log('[UserContext] Cleared ALL query caches on logout');
+      
+      setCurrentUser(null);
+      setUsers([]);
+      setHasCompletedOnboarding(false);
+      setConnectionStatus('idle');
+      setRetryCount(0);
       
       await supabase.auth.signOut();
-      setCurrentUser(null);
-      console.log('Sign out complete');
+      console.log('[UserContext] Sign out complete - all state cleared');
     } catch (error) {
       console.error('Error signing out:', error);
+      setCurrentUser(null);
+      setHasCompletedOnboarding(false);
     } finally {
       setIsLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, currentUser]);
 
   const completeOnboarding = useCallback(async () => {
     console.log('Setting onboarding as complete...');

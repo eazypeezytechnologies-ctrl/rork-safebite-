@@ -760,19 +760,21 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         
         {/* Header */}
         <View style={styles.cameraHeader}>
-          <View style={styles.headerLeft} />
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              console.log('Back button pressed - closing camera');
+              setCameraActive(false);
+            }}
+            testID="camera-back-button"
+            activeOpacity={0.7}
+          >
+            <X size={22} color="#FFFFFF" />
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
           
           <View style={styles.headerRight}>
             {scanned && <View style={styles.processingDot} />}
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => {
-                console.log('Closing camera');
-                setCameraActive(false);
-              }}
-            >
-              <X size={24} color="#FFFFFF" />
-            </TouchableOpacity>
           </View>
         </View>
         
@@ -1411,6 +1413,20 @@ const styles = StyleSheet.create({
   headerLeft: {
     width: 44,
     height: 44,
+  },
+  backButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  backButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
   headerRight: {
     flexDirection: 'row',

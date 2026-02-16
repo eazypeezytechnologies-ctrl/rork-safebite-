@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,11 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb } from 'lucide-react-native';
+import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle } from 'lucide-react-native';
 import ProductCaptureWizard from '@/components/ProductCaptureWizard';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
@@ -29,6 +31,7 @@ import { addToShoppingList } from '@/storage/shoppingList';
 import { ViewModeToggle } from '@/components/ViewModeToggle';
 import { SkeletonProductCard } from '@/components/Skeleton';
 import { generateSafeSwaps, generateNoDataSwaps } from '@/services/safeSwapService';
+import { generateText } from '@rork-ai/toolkit-sdk';
 
 export default function ProductDetailsScreen() {
   const params = useLocalSearchParams<{ code: string | string[] }>();
@@ -93,6 +96,10 @@ export default function ProductDetailsScreen() {
   const [isLoadingNoDataAlternatives, setIsLoadingNoDataAlternatives] = useState(false);
   const [showNoDataAlternatives, setShowNoDataAlternatives] = useState(false);
   const [showCaptureWizard, setShowCaptureWizard] = useState(false);
+  const [aiReplyInput, setAiReplyInput] = useState('');
+  const [aiConversation, setAiConversation] = useState<{role: 'ai' | 'user'; text: string}[]>([]);
+  const [isAiReplying, setIsAiReplying] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     console.log('=== useEffect triggered ===');
@@ -506,6 +513,52 @@ export default function ProductDetailsScreen() {
     }
   };
 
+  const handleAiReply = async () => {
+    const userMessage = aiReplyInput.trim();
+    if (!userMessage || isAiReplying) return;
+    
+    setAiConversation(prev => [...prev, { role: 'user', text: userMessage }]);
+    setAiReplyInput('');
+    setIsAiReplying(true);
+    
+    try {
+      const context = alternativeRecommendations || noDataAlternatives;
+      const allergenList = activeProfile?.allergens.join(', ') || 'unknown';
+      
+      const conversationHistory = aiConversation.map(msg => 
+        `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.text}`
+      ).join('\n');
+      
+      const prompt = `You are a helpful allergen-safety assistant for the SafeBite app.
+
+Product: ${product?.product_name || 'Unknown'}
+Brand: ${product?.brands || 'Unknown'}
+User's Allergies: ${allergenList}
+
+Previous recommendations:
+${context}
+
+${conversationHistory ? `Previous conversation:\n${conversationHistory}\n\n` : ''}User's follow-up question: ${userMessage}
+
+Provide a helpful, specific answer. Keep it concise but thorough. If recommending products, include brand names and where to find them. Always remind to verify labels.`;
+
+      const reply = await generateText({
+        messages: [{ role: 'user', content: prompt }],
+      });
+      
+      setAiConversation(prev => [...prev, { role: 'ai', text: reply }]);
+      
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 200);
+    } catch (error) {
+      console.error('[ProductDetail] AI reply error:', error);
+      setAiConversation(prev => [...prev, { role: 'ai', text: 'Sorry, I couldn\'t process your question right now. Please try again.' }]);
+    } finally {
+      setIsAiReplying(false);
+    }
+  };
+
   const handleShare = async () => {
     if (!product) return;
     
@@ -577,7 +630,7 @@ export default function ProductDetailsScreen() {
           ),
         }} 
       />
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.scrollContent}>
         {activeFamilyGroup && activeFamilyGroup.memberIds.length > 1 && (
           <View style={styles.viewModeSection}>
             <ViewModeToggle />
@@ -744,6 +797,72 @@ export default function ProductDetailsScreen() {
                 </View>
               </View>
             )}
+          </View>
+        )}
+
+        {showAlternatives && !isLoadingAlternatives && (alternativeRecommendations || noDataAlternatives) && (
+          <View style={styles.aiReplySection}>
+            <View style={styles.aiReplyHeader}>
+              <MessageCircle size={20} color="#0891B2" />
+              <Text style={styles.aiReplyHeaderText}>Ask a follow-up question</Text>
+            </View>
+            
+            {aiConversation.length > 0 && (
+              <View style={styles.aiConversationThread}>
+                {aiConversation.map((msg, idx) => (
+                  <View key={idx} style={[
+                    styles.aiConversationBubble,
+                    msg.role === 'user' ? styles.aiConversationUser : styles.aiConversationAi,
+                  ]}>
+                    <Text style={[
+                      styles.aiConversationRole,
+                      msg.role === 'user' ? styles.aiConversationRoleUser : styles.aiConversationRoleAi,
+                    ]}>
+                      {msg.role === 'user' ? 'You' : 'SafeBite AI'}
+                    </Text>
+                    <Text style={[
+                      styles.aiConversationText,
+                      msg.role === 'user' ? styles.aiConversationTextUser : styles.aiConversationTextAi,
+                    ]}>
+                      {msg.text}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            
+            {isAiReplying && (
+              <View style={styles.aiReplyLoading}>
+                <ActivityIndicator size="small" color="#0891B2" />
+                <Text style={styles.aiReplyLoadingText}>Thinking...</Text>
+              </View>
+            )}
+            
+            <View style={styles.aiReplyInputRow}>
+              <TextInput
+                style={styles.aiReplyInput}
+                placeholder="e.g. Are any of these nut-free too?"
+                placeholderTextColor="#9CA3AF"
+                value={aiReplyInput}
+                onChangeText={setAiReplyInput}
+                multiline
+                editable={!isAiReplying}
+                returnKeyType="send"
+                onSubmitEditing={() => {
+                  if (aiReplyInput.trim() && !isAiReplying) handleAiReply();
+                }}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.aiReplySendButton,
+                  (!aiReplyInput.trim() || isAiReplying) && styles.aiReplySendButtonDisabled,
+                ]}
+                onPress={handleAiReply}
+                disabled={!aiReplyInput.trim() || isAiReplying}
+              >
+                <Send size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -1741,6 +1860,112 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600' as const,
     color: '#FFFFFF',
+  },
+  aiReplySection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  aiReplyHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    marginBottom: 12,
+  },
+  aiReplyHeaderText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#0891B2',
+  },
+  aiConversationThread: {
+    marginBottom: 12,
+    gap: 8,
+  },
+  aiConversationBubble: {
+    borderRadius: 12,
+    padding: 12,
+    maxWidth: '90%' as any,
+  },
+  aiConversationUser: {
+    backgroundColor: '#0891B2',
+    alignSelf: 'flex-end' as const,
+  },
+  aiConversationAi: {
+    backgroundColor: '#F0FDFA',
+    alignSelf: 'flex-start' as const,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  aiConversationRole: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    marginBottom: 4,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
+  aiConversationRoleUser: {
+    color: '#B2F5EA',
+  },
+  aiConversationRoleAi: {
+    color: '#0891B2',
+  },
+  aiConversationText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  aiConversationTextUser: {
+    color: '#FFFFFF',
+  },
+  aiConversationTextAi: {
+    color: '#111827',
+  },
+  aiReplyLoading: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    marginBottom: 12,
+    padding: 8,
+  },
+  aiReplyLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontStyle: 'italic' as const,
+  },
+  aiReplyInputRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    gap: 8,
+  },
+  aiReplyInput: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#111827',
+    maxHeight: 80,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  aiReplySendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#0891B2',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  aiReplySendButtonDisabled: {
+    backgroundColor: '#D1D5DB',
   },
   captureWizardHeader: {
     alignItems: 'center',

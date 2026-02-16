@@ -1,6 +1,6 @@
-export const BUILD_ID = '2026-02-13-v11-security-hardening';
-export const BUILD_TIMESTAMP = '2026-02-13T22:00:00Z';
-export const APP_VERSION = '1.3.0';
+export const BUILD_ID = '2026-02-16-v12-master-fix';
+export const BUILD_TIMESTAMP = '2026-02-16T12:00:00Z';
+export const APP_VERSION = '1.4.0';
 export const APP_FEATURES = {
   familyInvites: true,
   eczemaTriggers: true,

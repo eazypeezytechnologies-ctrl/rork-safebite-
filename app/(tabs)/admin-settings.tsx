@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter, Href } from 'expo-router';
 import { useUser } from '@/contexts/UserContext';
+import { BUILD_ID, APP_VERSION } from '@/constants/appVersion';
 import {
   LogOut,
   Info,
@@ -189,6 +190,11 @@ export default function AdminSettingsScreen() {
               <Text style={styles.accountId}>ID: {currentUser?.id?.slice(0, 8)}...</Text>
             </View>
           </View>
+
+          <View style={styles.signedInBanner}>
+            <Text style={styles.signedInLabel}>Signed in as:</Text>
+            <Text style={styles.signedInEmail}>{currentUser?.email}</Text>
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -345,7 +351,12 @@ export default function AdminSettingsScreen() {
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Version</Text>
-              <Text style={styles.infoValue}>1.0.0</Text>
+              <Text style={styles.infoValue}>{APP_VERSION}</Text>
+            </View>
+            <View style={styles.infoDivider} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Build</Text>
+              <Text style={styles.infoValue}>{BUILD_ID}</Text>
             </View>
             <View style={styles.infoDivider} />
             <View style={styles.infoRow}>
@@ -354,7 +365,7 @@ export default function AdminSettingsScreen() {
             </View>
             <View style={styles.infoDivider} />
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Build</Text>
+              <Text style={styles.infoLabel}>Mode</Text>
               <Text style={styles.infoValue}>{__DEV__ ? 'Development' : 'Production'}</Text>
             </View>
             <View style={styles.infoDivider} />
@@ -388,7 +399,7 @@ export default function AdminSettingsScreen() {
         <View style={styles.footer}>
           <Info size={16} color="#6B7280" />
           <Text style={styles.footerText}>
-            Allergy Guardian Admin Panel v1.0.0
+            Allergy Guardian Admin Panel {APP_VERSION} ({BUILD_ID})
           </Text>
         </View>
 
@@ -489,6 +500,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  signedInBanner: {
+    backgroundColor: '#10B98115',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#10B98140',
+  },
+  signedInLabel: {
+    fontSize: 11,
+    color: '#10B981',
+    fontWeight: '600' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  signedInEmail: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
   settingCard: {
     backgroundColor: '#1F2937',
