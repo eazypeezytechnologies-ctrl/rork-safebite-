@@ -18,13 +18,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, Href } from 'expo-router';
 
-import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload } from 'lucide-react-native';
+import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { searchProductByBarcode, searchProductsByName, searchProductByUrl } from '@/api/products';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { getSearchHistory, addToSearchHistory } from '@/storage/searchHistory';
 import { calculateVerdict, getVerdictColor, getVerdictIcon } from '@/utils/verdict';
+import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { Product } from '@/types';
 import { getRelationshipIcon } from '@/constants/profileColors';
 import { BUILD_ID } from '@/constants/appVersion';
@@ -1160,6 +1161,25 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           </TouchableOpacity>
         </View>
 
+        <TouchableOpacity
+          style={styles.addManualButton}
+          onPress={() => {
+            if (Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+            router.push('/manual-ingredient-entry' as Href);
+          }}
+          activeOpacity={0.8}
+        >
+          <View style={styles.addManualIcon}>
+            <Plus size={20} color="#0891B2" />
+          </View>
+          <View style={styles.addManualContent}>
+            <Text style={styles.addManualTitle}>Add Product Manually</Text>
+            <Text style={styles.addManualSubtitle}>Type or upload ingredients • No barcode needed</Text>
+          </View>
+        </TouchableOpacity>
+
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>OR</Text>
@@ -1289,14 +1309,28 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
               >
                 <View style={styles.resultContent}>
                   <View style={styles.resultInfo}>
-                    <Text style={styles.resultName} numberOfLines={2}>
-                      {product.product_name || 'Unknown Product'}
-                    </Text>
-                    {product.brands && (
-                      <Text style={styles.resultBrand} numberOfLines={1}>
-                        {product.brands}
+                    <View style={styles.resultNameRow}>
+                      <Text style={styles.resultName} numberOfLines={2}>
+                        {product.product_name || 'Unknown Product'}
                       </Text>
-                    )}
+                    </View>
+                    <View style={styles.resultMetaRow}>
+                      {(() => {
+                        const pType = product.product_type || guessProductType(product.ingredients_text, product.product_name, product.categories);
+                        const typeColor = getProductTypeColor(pType);
+                        return (
+                          <View style={[styles.productTypeBadge, { backgroundColor: typeColor + '15', borderColor: typeColor }]}>
+                            <Text style={styles.productTypeEmoji}>{getProductTypeEmoji(pType)}</Text>
+                            <Text style={[styles.productTypeText, { color: typeColor }]}>{getProductTypeLabel(pType)}</Text>
+                          </View>
+                        );
+                      })()}
+                      {product.brands && (
+                        <Text style={styles.resultBrand} numberOfLines={1}>
+                          {product.brands}
+                        </Text>
+                      )}
+                    </View>
                   </View>
                   {renderVerdictBadge(product)}
                 </View>
@@ -1484,14 +1518,41 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  resultNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
   resultName: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#111827',
-    marginBottom: 4,
+    flex: 1,
+  },
+  resultMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  productTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  productTypeEmoji: {
+    fontSize: 11,
+  },
+  productTypeText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
   },
   resultBrand: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
   },
   verdictBadge: {
@@ -1762,10 +1823,43 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#10B981',
   },
+  addManualButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#0891B2',
+    borderStyle: 'dashed' as const,
+  },
+  addManualIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#F0FDFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  addManualContent: {
+    flex: 1,
+  },
+  addManualTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: '#0891B2',
+    marginBottom: 2,
+  },
+  addManualSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
   photoOptionsContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   imageRecognitionButton: {
     flex: 1,

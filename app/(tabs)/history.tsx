@@ -14,6 +14,7 @@ import { useRouter, useFocusEffect, Href } from 'expo-router';
 import { History, Heart, Trash2, Clock, AlertCircle, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
+import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { getFavorites, removeFromFavorites, addToFavorites, FavoriteItem } from '@/storage/favorites';
 import { getVerdictColor } from '@/utils/verdict';
 import { SwipeableListItem } from '@/components/SwipeableListItem';
@@ -308,9 +309,21 @@ export default function HistoryScreen() {
                           <Text style={styles.itemName} numberOfLines={2}>
                             {item.product_name || 'Unknown Product'}
                           </Text>
-                          <View style={styles.itemMeta}>
-                            <Clock size={12} color="#9CA3AF" />
-                            <Text style={styles.itemDate}>{formatDate(item.scanned_at)}</Text>
+                          <View style={styles.itemMetaRow}>
+                            {(() => {
+                              const pType = guessProductType(undefined, item.product_name, undefined);
+                              const typeColor = getProductTypeColor(pType);
+                              return (
+                                <View style={[styles.typeBadge, { backgroundColor: typeColor + '15', borderColor: typeColor }]}>
+                                  <Text style={styles.typeBadgeEmoji}>{getProductTypeEmoji(pType)}</Text>
+                                  <Text style={[styles.typeBadgeText, { color: typeColor }]}>{getProductTypeLabel(pType)}</Text>
+                                </View>
+                              );
+                            })()}
+                            <View style={styles.itemMeta}>
+                              <Clock size={12} color="#9CA3AF" />
+                              <Text style={styles.itemDate}>{formatDate(item.scanned_at)}</Text>
+                            </View>
                           </View>
                         </View>
                       </View>
@@ -555,6 +568,28 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontStyle: 'italic' as const,
     marginBottom: 4,
+  },
+  itemMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  typeBadgeEmoji: {
+    fontSize: 10,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
   },
   itemMeta: {
     flexDirection: 'row',

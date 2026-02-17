@@ -366,6 +366,12 @@ export default function ProductDetailsScreen() {
             queryClient.removeQueries({ queryKey: ['supabase-product', code] });
           }}
           onCancel={() => router.back()}
+          onNavigateToScan={() => {
+            router.replace('/(tabs)/(scan)' as Href);
+          }}
+          onNavigateToSearch={(query) => {
+            router.replace('/(tabs)/(scan)' as Href);
+          }}
         />
       </>
     );
@@ -729,7 +735,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
         {verdict && verdict.level !== 'safe' && (
           <TouchableOpacity
             style={styles.exposureGuidanceButton}
-            onPress={() => router.push('/exposure-guidance')}
+            onPress={() => router.push('/exposure-guidance' as Href)}
           >
             <AlertCircle size={24} color="#FFFFFF" />
             <View style={styles.exposureGuidanceContent}>

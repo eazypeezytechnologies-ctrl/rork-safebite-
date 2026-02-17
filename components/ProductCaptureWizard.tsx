@@ -27,12 +27,13 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { generateText } from '@rork-ai/toolkit-sdk';
-import { Product } from '@/types';
+import { Product, ProductType } from '@/types';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { calculateVerdict } from '@/utils/verdict';
+import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { addToScanHistory } from '@/storage/scanHistory';
 import { cacheProduct } from '@/storage/productCache';
 import { resetBarcodeDebounce } from '@/api/products';
@@ -41,6 +42,8 @@ interface ProductCaptureWizardProps {
   barcode: string;
   onProductSaved: (product: Product) => void;
   onCancel: () => void;
+  onNavigateToScan?: () => void;
+  onNavigateToSearch?: (query?: string) => void;
 }
 
 type WizardStep = 1 | 2 | 3;
@@ -52,7 +55,7 @@ interface ExtractedData {
   allergens: string;
 }
 
-export default function ProductCaptureWizard({ barcode, onProductSaved, onCancel }: ProductCaptureWizardProps) {
+export default function ProductCaptureWizard({ barcode, onProductSaved, onCancel, onNavigateToScan, onNavigateToSearch }: ProductCaptureWizardProps) {
   const { activeProfile } = useProfiles();
   const { currentUser } = useUser();
   const queryClient = useQueryClient();
@@ -80,6 +83,8 @@ export default function ProductCaptureWizard({ barcode, onProductSaved, onCancel
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [productType, setProductType] = useState<ProductType>('food');
+  const [savedProductName, setSavedProductName] = useState('');
 
   const progressAnim = useRef(new Animated.Value(1)).current;
 
@@ -282,6 +287,13 @@ Format response exactly as above, one per line.`;
         allergensFromText.push(...parts);
       }
 
+      const guessedType = guessProductType(
+        extractedData.ingredients,
+        extractedData.name,
+        ''
+      );
+      const finalType = productType || guessedType;
+
       const product: Product = {
         code: productCode,
         product_name: extractedData.name.trim(),
@@ -290,6 +302,7 @@ Format response exactly as above, one per line.`;
         allergens: extractedData.allergens.trim() || undefined,
         allergens_tags: allergensFromText.map(a => `en:${a.toLowerCase()}`),
         traces_tags: [],
+        product_type: finalType,
         source: 'manual_entry' as const,
       };
 
@@ -357,11 +370,8 @@ Format response exactly as above, one per line.`;
       queryClient.removeQueries({ queryKey: ['supabase-product', productCode] });
 
       setSaveSuccess(true);
+      setSavedProductName(extractedData.name.trim());
       console.log('[CaptureWizard] ✅ Product saved, verified, and caches invalidated');
-
-      setTimeout(() => {
-        onProductSaved(product);
-      }, 300);
     } catch (error) {
       console.error('[CaptureWizard] Save error:', error);
       const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -488,8 +498,40 @@ Format response exactly as above, one per line.`;
         </View>
         <Text style={styles.successTitle}>Product Saved!</Text>
         <Text style={styles.successSubtitle}>
-          {extractedData.name} is now searchable and in your history.
+          {savedProductName || extractedData.name} is now searchable and in your history.
         </Text>
+
+        <View style={styles.successActions}>
+          <TouchableOpacity
+            style={styles.successPrimaryBtn}
+            onPress={() => {
+              if (onNavigateToScan) {
+                onNavigateToScan();
+              } else {
+                onProductSaved({ code: barcode, product_name: savedProductName, source: 'manual_entry' } as Product);
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Camera size={20} color="#FFFFFF" />
+            <Text style={styles.successPrimaryBtnText}>Back to Scan</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.successSecondaryBtn}
+            onPress={() => {
+              if (onNavigateToSearch) {
+                onNavigateToSearch(savedProductName);
+              } else {
+                onProductSaved({ code: barcode, product_name: savedProductName, source: 'manual_entry' } as Product);
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.successSecondaryBtnText}>Search to Confirm</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.comingSoonCard}>
           <Text style={styles.comingSoonIcon}>🛒</Text>
           <Text style={styles.comingSoonTitle}>Add to Shopping List</Text>
@@ -684,6 +726,35 @@ Format response exactly as above, one per line.`;
           <Text style={styles.stepDesc}>
             Review and edit the information below, then save.
           </Text>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Product Category</Text>
+            <View style={styles.categoryRow}>
+              {(['food', 'skin', 'hair', 'other'] as ProductType[]).map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.categoryChip,
+                    productType === type && { backgroundColor: getProductTypeColor(type) + '18', borderColor: getProductTypeColor(type) },
+                  ]}
+                  onPress={() => {
+                    setProductType(type);
+                    if (Platform.OS !== 'web') {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                  }}
+                >
+                  <Text style={styles.categoryEmoji}>{getProductTypeEmoji(type)}</Text>
+                  <Text style={[
+                    styles.categoryLabel,
+                    productType === type && { color: getProductTypeColor(type), fontWeight: '700' as const },
+                  ]}>
+                    {getProductTypeLabel(type)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Product Name *</Text>
@@ -1226,6 +1297,68 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 22,
+    marginBottom: 4,
+  },
+  successActions: {
+    width: '100%',
+    maxWidth: 320,
+    gap: 10,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  successPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#0891B2',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  successPrimaryBtnText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+  },
+  successSecondaryBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  successSecondaryBtnText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#374151',
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  categoryEmoji: {
+    fontSize: 15,
+  },
+  categoryLabel: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: '#6B7280',
   },
   comingSoonCard: {
     marginTop: 28,

@@ -178,7 +178,7 @@ export default function ResetPasswordScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.backToLoginButton}
-            onPress={() => router.replace('/welcome')}
+            onPress={() => router.replace('/welcome' as Href)}
           >
             <Text style={styles.backToLoginText}>Back to Login</Text>
           </TouchableOpacity>
