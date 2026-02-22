@@ -193,16 +193,17 @@ export default function FamilyManagementScreen() {
     }
 
     try {
-      const newGroup: FamilyGroup = {
-        id: `family_${Date.now()}_${Math.random()}`,
+      const tempGroup: FamilyGroup = {
+        id: `temp_${Date.now()}`,
         name: newGroupName.trim(),
         memberIds: selectedMembers,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      await createFamilyGroup(newGroup);
-      await setActiveFamilyGroup(newGroup.id);
+      const savedGroup = await createFamilyGroup(tempGroup);
+      console.log('[FamilyMgmt] Group created with DB id:', savedGroup.id);
+      await setActiveFamilyGroup(savedGroup.id);
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -212,10 +213,11 @@ export default function FamilyManagementScreen() {
       setNewGroupName('');
       setSelectedMembers([]);
 
-      Alert.alert('Success', `Family group "${newGroup.name}" created!`);
+      Alert.alert('Success', `Family group "${savedGroup.name}" created!`);
     } catch (error) {
       console.error('Error creating family group:', error);
-      Alert.alert('Error', 'Failed to create family group');
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      Alert.alert('Error', `Failed to create family group: ${msg}`);
     }
   };
 

@@ -83,6 +83,7 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
       if (product.image_url) updates.image_url = product.image_url;
       if (product.image_front_url) updates.image_front_url = product.image_front_url;
       if (product.categories) updates.categories = product.categories;
+      if (product.product_type) updates.product_type = product.product_type;
 
       const { error } = await supabase
         .from('products')
@@ -98,7 +99,7 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
       return { success: true, verified: true };
     }
 
-    const insertPayload = {
+    const insertPayload: Record<string, any> = {
       code,
       product_name: name,
       brands: brand,
@@ -112,6 +113,7 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
       image_url: product.image_url || null,
       image_front_url: product.image_front_url || null,
       source: product.source || 'manual_entry',
+      product_type: product.product_type || null,
       scan_count: 1,
       cached_at: new Date().toISOString(),
       last_fetched_at: new Date().toISOString(),
@@ -436,6 +438,7 @@ function mapSupabaseToProduct(data: any): Product {
     traces_tags: data.traces_tags || [],
     categories: data.categories || undefined,
     categories_tags: data.categories_tags || [],
+    product_type: data.product_type || undefined,
     source: (data.source || 'openfoodfacts') as Product['source'],
   };
 }

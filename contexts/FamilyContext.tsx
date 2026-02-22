@@ -18,7 +18,7 @@ interface FamilyContextValue {
   isLoading: boolean;
   setViewMode: (mode: ViewMode) => Promise<void>;
   setActiveFamilyGroup: (groupId: string | null) => Promise<void>;
-  createFamilyGroup: (group: FamilyGroup) => Promise<void>;
+  createFamilyGroup: (group: FamilyGroup) => Promise<FamilyGroup>;
   updateFamilyGroup: (group: FamilyGroup) => Promise<void>;
   deleteFamilyGroup: (groupId: string) => Promise<void>;
   addMemberToFamily: (groupId: string, memberId: string) => Promise<void>;
@@ -88,16 +88,17 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
     }
   }, [userId, familyGroups, upsertSettingsMutation]);
 
-  const createFamilyGroup = useCallback(async (group: FamilyGroup) => {
+  const createFamilyGroup = useCallback(async (group: FamilyGroup): Promise<FamilyGroup> => {
     try {
       if (!userId) throw new Error('No user logged in');
       console.log('[FamilyContext] Creating family group:', group.name);
-      await createFamilyGroupMutation.mutateAsync({
+      const result = await createFamilyGroupMutation.mutateAsync({
         name: group.name,
         member_ids: group.memberIds,
       });
       await refetchFamilyGroups();
-      console.log('[FamilyContext] Family group created successfully:', group.name);
+      console.log('[FamilyContext] Family group created successfully:', group.name, 'DB id:', result.id);
+      return convertSupabaseFamilyGroupToFamilyGroup(result);
     } catch (error) {
       console.error('[FamilyContext] Error creating family group:', error);
       throw error;
