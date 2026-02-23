@@ -13,7 +13,6 @@ import { restoreStorageFromServer, syncStorageToServer } from "@/utils/storageSy
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { BUILD_ID } from "@/constants/appVersion";
-import "@/utils/globalErrorHandler";
 
 SplashScreen.preventAutoHideAsync();
 
