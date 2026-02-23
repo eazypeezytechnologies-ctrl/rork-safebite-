@@ -125,15 +125,28 @@ export const trpcClient = trpc.createClient({
               });
             }
             
-            if (error?.message?.includes('Network') || error?.message?.includes('fetch')) {
+            if (
+              error?.message?.includes('Network') ||
+              error?.message?.includes('fetch') ||
+              error?.message?.includes('Load failed') ||
+              error?.message?.includes('Failed to fetch') ||
+              error?.message?.includes('NetworkError') ||
+              error?.message?.includes('CORS') ||
+              error?.name === 'TypeError'
+            ) {
               requestThrottler.recordError(false);
+              console.warn('[tRPC] Network error caught:', error?.message);
               return new Response(JSON.stringify({ result: { data: null } }), {
                 status: 200,
                 headers: { 'content-type': 'application/json' },
               });
             }
             
-            throw error;
+            console.warn('[tRPC] Unhandled fetch error, returning empty:', error?.message);
+            return new Response(JSON.stringify({ result: { data: null } }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
           }
         })();
 

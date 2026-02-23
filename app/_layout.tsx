@@ -20,6 +20,25 @@ console.log('===========================================');
 console.log('[APP START] BUILD_ID:', BUILD_ID);
 console.log('===========================================');
 
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    const msg = event?.reason?.message || String(event?.reason || '');
+    if (
+      msg.includes('Load failed') ||
+      msg.includes('Failed to fetch') ||
+      msg.includes('NetworkError') ||
+      msg.includes('CORS') ||
+      msg.includes('AbortError') ||
+      msg.includes('timeout')
+    ) {
+      console.warn('[GlobalErrorHandler] Suppressed network rejection:', msg);
+      event.preventDefault();
+      return;
+    }
+    console.warn('[GlobalErrorHandler] Unhandled rejection:', msg);
+  });
+}
+
 const MAX_LOADING_TIME = 1200; // 1.2s max loading time
 const SHOW_SKIP_AFTER = 600; // Show skip button after 0.6s
 

@@ -378,11 +378,11 @@ export const [UserProvider, useUser] = createContextHook(() => {
           const isAdminByEmail = ADMIN_EMAILS.includes(email.toLowerCase());
           console.log('Signup - email:', email, 'isAdmin:', isAdminByEmail);
           
-          supabase.from('users').insert({
+          Promise.resolve(supabase.from('users').insert({
             id: data.user.id,
             email: email,
             is_admin: isAdminByEmail,
-          }).then(() => console.log('User record created'));
+          })).then(() => console.log('User record created')).catch(() => {});
 
           const user: User = {
             id: data.user.id,
@@ -449,16 +449,16 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
           if (isAdminByEmail && userData && !userData.is_admin) {
             console.log('Updating database to grant admin rights');
-            supabase.from('users').update({ is_admin: true }).eq('id', data.user.id).then(() => {});
+            Promise.resolve(supabase.from('users').update({ is_admin: true }).eq('id', data.user.id)).then(() => {}).catch(() => {});
           }
           
           if (!userData) {
             console.log('Creating user record in database');
-            supabase.from('users').insert({
+            Promise.resolve(supabase.from('users').insert({
               id: user.id,
               email: user.email,
               is_admin: finalIsAdmin,
-            }).then(() => {});
+            })).then(() => {}).catch(() => {});
           }
 
           setCurrentUser(user);
