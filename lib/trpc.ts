@@ -68,7 +68,7 @@ export const trpcClient = trpc.createClient({
         
         const fetchPromise = (async () => {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
           
           try {
             const response = await fetch(url, {
@@ -117,32 +117,28 @@ export const trpcClient = trpc.createClient({
           } catch (error: any) {
             clearTimeout(timeoutId);
             
-            if (error?.name === 'AbortError') {
-              console.warn('[tRPC] Request timed out');
-              return new Response(JSON.stringify({ result: { data: null } }), {
-                status: 200,
-                headers: { 'content-type': 'application/json' },
-              });
-            }
-            
-            if (
-              error?.message?.includes('Network') ||
-              error?.message?.includes('fetch') ||
-              error?.message?.includes('Load failed') ||
-              error?.message?.includes('Failed to fetch') ||
-              error?.message?.includes('NetworkError') ||
-              error?.message?.includes('CORS') ||
-              error?.name === 'TypeError'
-            ) {
+            const msg = error?.message || '';
+            const isNetworkError = (
+              error?.name === 'AbortError' ||
+              error?.name === 'TypeError' ||
+              msg.includes('Load failed') ||
+              msg.includes('Failed to fetch') ||
+              msg.includes('fetch failed') ||
+              msg.includes('Network request failed') ||
+              msg.includes('NetworkError') ||
+              msg.includes('Network') ||
+              msg.includes('CORS') ||
+              msg.includes('timeout') ||
+              msg.includes('aborted')
+            );
+
+            if (isNetworkError) {
               requestThrottler.recordError(false);
-              console.warn('[tRPC] Network error caught:', error?.message);
-              return new Response(JSON.stringify({ result: { data: null } }), {
-                status: 200,
-                headers: { 'content-type': 'application/json' },
-              });
+              console.warn('[tRPC] Network/fetch error caught:', msg || error?.name);
+            } else {
+              console.warn('[tRPC] Unexpected fetch error, suppressing:', msg);
             }
-            
-            console.warn('[tRPC] Unhandled fetch error, returning empty:', error?.message);
+
             return new Response(JSON.stringify({ result: { data: null } }), {
               status: 200,
               headers: { 'content-type': 'application/json' },

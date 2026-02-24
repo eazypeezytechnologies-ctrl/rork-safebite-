@@ -22,16 +22,24 @@ console.log('===========================================');
 
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
-    const msg = event?.reason?.message || String(event?.reason || '');
-    if (
+    const reason = event?.reason;
+    const msg = reason?.message || String(reason || '');
+    const name = reason?.name || '';
+    const isNetworkError = (
       msg.includes('Load failed') ||
       msg.includes('Failed to fetch') ||
+      msg.includes('fetch failed') ||
+      msg.includes('Network request failed') ||
       msg.includes('NetworkError') ||
       msg.includes('CORS') ||
       msg.includes('AbortError') ||
-      msg.includes('timeout')
-    ) {
-      console.warn('[GlobalErrorHandler] Suppressed network rejection:', msg);
+      msg.includes('timeout') ||
+      msg.includes('aborted') ||
+      name === 'AbortError' ||
+      name === 'TypeError'
+    );
+    if (isNetworkError) {
+      if (__DEV__) console.warn('[GlobalErrorHandler] Suppressed network rejection:', msg);
       event.preventDefault();
       return;
     }

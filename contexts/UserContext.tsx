@@ -210,9 +210,9 @@ export const [UserProvider, useUser] = createContextHook(() => {
             
             if (!serverOnboardingComplete && isReturningUser) {
               console.log('[UserContext] Syncing onboarding_complete flag to server for returning user');
-              supabase.from('users').update({ 
+              Promise.resolve(supabase.from('users').update({ 
                 settings: { ...userData.settings, onboarding_complete: true }
-              }).eq('id', session.user.id).then(() => {});
+              }).eq('id', session.user.id)).catch((e) => console.warn('[UserContext] Non-critical: sync onboarding flag failed', e));
             }
           }
 
@@ -225,15 +225,15 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
           if (!userData) {
             if (__DEV__) console.log('[UserContext] User not in DB, creating user record...');
-            supabase.from('users').insert({
+            Promise.resolve(supabase.from('users').insert({
               id: user.id,
               email: user.email,
               is_admin: user.isAdmin,
-            }).then(() => { if (__DEV__) console.log('[UserContext] User record created'); });
+            })).then(() => { if (__DEV__) console.log('[UserContext] User record created'); }).catch((e) => console.warn('[UserContext] Non-critical: user insert failed', e));
           } else if (isAdmin && !userData.is_admin) {
             if (__DEV__) console.log('[UserContext] Upgrading user to admin...');
-            supabase.from('users').update({ is_admin: true }).eq('id', user.id)
-              .then(() => { if (__DEV__) console.log('[UserContext] Admin upgraded'); });
+            Promise.resolve(supabase.from('users').update({ is_admin: true }).eq('id', user.id))
+              .then(() => { if (__DEV__) console.log('[UserContext] Admin upgraded'); }).catch((e) => console.warn('[UserContext] Non-critical: admin upgrade failed', e));
             user.isAdmin = true;
           }
 
@@ -246,7 +246,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
           }, 2000);
           
           if (user.isAdmin) {
-            supabase.from('users').select('*').then(({ data: allUsers }) => {
+            Promise.resolve(supabase.from('users').select('*')).then(({ data: allUsers }) => {
               if (allUsers) {
                 const mappedUsers: User[] = allUsers.map(u => ({
                   id: u.id,
@@ -256,7 +256,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
                 }));
                 setUsers(mappedUsers);
               }
-            });
+            }).catch((e) => console.warn('[UserContext] Non-critical: admin users fetch failed', e));
           }
         } else {
           if (__DEV__) console.log('[UserContext] No active session found');
