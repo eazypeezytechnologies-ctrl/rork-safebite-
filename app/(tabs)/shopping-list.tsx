@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect, Href } from 'expo-router';
-import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X, DollarSign, MapPin, Share2, Bell } from 'lucide-react-native';
+import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X, DollarSign, MapPin, Share2, Bell, Camera, Upload } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { ViewModeToggle } from '@/components/ViewModeToggle';
@@ -401,9 +401,24 @@ export default function ShoppingListScreen() {
               <Share2 size={24} color="#8B5CF6" />
             </View>
             <View style={styles.comingSoonContent}>
-              <Text style={styles.comingSoonTitle}>Share with Friends</Text>
+              <Text style={styles.comingSoonTitle}>Share with Family</Text>
               <Text style={styles.comingSoonDesc}>
-                Share your shopping list with friends and family outside your family group.
+                Share your shopping list with family members and friends for coordinated shopping.
+              </Text>
+            </View>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonBadgeText}>Soon</Text>
+            </View>
+          </View>
+
+          <View style={styles.comingSoonCard}>
+            <View style={styles.comingSoonIconWrap}>
+              <Upload size={24} color="#0891B2" />
+            </View>
+            <View style={styles.comingSoonContent}>
+              <Text style={styles.comingSoonTitle}>Auto-Add from Screenshots</Text>
+              <Text style={styles.comingSoonDesc}>
+                Upload screenshots or product photos to automatically add items to your shopping list.
               </Text>
             </View>
             <View style={styles.comingSoonBadge}>

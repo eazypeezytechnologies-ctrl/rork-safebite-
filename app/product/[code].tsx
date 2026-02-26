@@ -31,6 +31,7 @@ import { analyzeIngredient, parseIngredients, getOverallSafetyScore, IngredientI
 import { addToShoppingList } from '@/storage/shoppingList';
 import { ViewModeToggle } from '@/components/ViewModeToggle';
 import { SkeletonProductCard } from '@/components/Skeleton';
+import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { generateSafeSwaps, generateNoDataSwaps } from '@/services/safeSwapService';
 import { generateText } from '@rork-ai/toolkit-sdk';
 
@@ -921,6 +922,16 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Product Information</Text>
+          {(() => {
+            const pType = product.product_type || guessProductType(product.ingredients_text, product.product_name, product.categories);
+            const typeColor = getProductTypeColor(pType);
+            return (
+              <View style={[styles.productTypeBadge, { backgroundColor: typeColor + '15', borderColor: typeColor }]}>
+                <Text style={styles.productTypeEmoji}>{getProductTypeEmoji(pType)}</Text>
+                <Text style={[styles.productTypeLabel, { color: typeColor }]}>{getProductTypeLabel(pType)}</Text>
+              </View>
+            );
+          })()}
           <View style={styles.infoCard}>
             <InfoRow label="Name" value={product.product_name || 'Unknown'} />
             {product.brands && <InfoRow label="Brand" value={product.brands} />}
@@ -1373,4 +1384,7 @@ const styles = StyleSheet.create({
   captureTipsTitle: { fontSize: 14, fontWeight: '700' as const, color: '#0369A1', marginBottom: 10 },
   captureTipItem: { fontSize: 13, color: '#0C4A6E', marginBottom: 6, lineHeight: 19 },
   captureActions: { marginBottom: 32 },
+  productTypeBadge: { flexDirection: 'row' as const, alignItems: 'center' as const, alignSelf: 'flex-start' as const, gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1.5, marginBottom: 12 },
+  productTypeEmoji: { fontSize: 16 },
+  productTypeLabel: { fontSize: 14, fontWeight: '700' as const },
 });

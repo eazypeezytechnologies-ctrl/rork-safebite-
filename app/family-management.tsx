@@ -125,11 +125,24 @@ export default function FamilyManagementScreen() {
       }
     } catch (error) {
       console.error('Error sharing family invite:', error);
-      Alert.alert('Error', 'Failed to share family invite');
+      const errMsg = error instanceof Error ? error.message : 'unknown';
+      let friendlyMsg = 'Failed to share family invite. Please try again.';
+      if (errMsg.includes('42501') || errMsg.includes('permission')) {
+        friendlyMsg = 'Permission denied. Your Supabase RLS policies may need updating. Please contact admin.';
+      } else if (errMsg.includes('foreign key') || errMsg.includes('23503') || errMsg.includes('fkey')) {
+        friendlyMsg = 'Family group reference error. Please try deleting and recreating the group.';
+      } else if (errMsg.includes('max') || errMsg.includes('limit')) {
+        friendlyMsg = `This family group has reached the maximum of ${MAX_FAMILY_MEMBERS} members (including pending invites).`;
+      } else if (errMsg.includes('expired')) {
+        friendlyMsg = 'This invitation has expired. Please create a new one.';
+      } else if (errMsg.includes('Load failed') || errMsg.includes('fetch') || errMsg.includes('network')) {
+        friendlyMsg = 'Network error. Please check your connection and try again.';
+      }
+      Alert.alert('Invite Error', friendlyMsg);
       logAuditEvent({
         eventType: 'error.invite_failed',
         userId: currentUser.id,
-        metadata: { error: error instanceof Error ? error.message : 'unknown' },
+        metadata: { error: errMsg },
       });
     } finally {
       setIsSendingInvite(false);
