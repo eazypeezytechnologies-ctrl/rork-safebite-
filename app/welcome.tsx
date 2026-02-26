@@ -133,7 +133,16 @@ export default function WelcomeScreen() {
       setAuthPhase('error');
       
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed. Please try again.';
-      const errorType = categorizeAuthError(error);
+      const errLower = errorMessage.toLowerCase();
+      const isNetworkIssue = 
+        errLower.includes('unable to reach') ||
+        errLower.includes('connection') ||
+        errLower.includes('network') ||
+        errLower.includes('load failed') ||
+        errLower.includes('fetch') ||
+        errLower.includes('timeout') ||
+        errLower.includes('timed out');
+      const errorType = isNetworkIssue ? 'connection' : categorizeAuthError(error);
       
       // Reset phase after showing alert
       const resetPhase = () => setAuthPhase('idle');

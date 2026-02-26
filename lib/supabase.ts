@@ -33,6 +33,22 @@ const createSupabaseClient = (): SupabaseClient => {
       persistSession: true,
       detectSessionInUrl: Platform.OS === 'web',
     },
+    global: {
+      fetch: (url, options = {}) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        return fetch(url, {
+          ...options,
+          signal: options.signal || controller.signal,
+        }).then((res) => {
+          clearTimeout(timeoutId);
+          return res;
+        }).catch((err) => {
+          clearTimeout(timeoutId);
+          throw err;
+        });
+      },
+    },
   });
 };
 

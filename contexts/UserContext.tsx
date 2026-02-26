@@ -13,8 +13,8 @@ import { actionRateLimiter } from '@/utils/actionRateLimiter';
 const ONBOARDING_KEY = '@allergy_guardian_onboarding_complete';
 const CACHED_AUTH_KEY = '@allergy_guardian_cached_auth';
 const USER_ACTIVITY_KEY = '@allergy_guardian_user_activity';
-const AUTH_TIMEOUT = 10000;
-const SESSION_TIMEOUT = 6000;
+const AUTH_TIMEOUT = 25000;
+const SESSION_TIMEOUT = 10000;
 const ADMIN_EMAILS = [
   'eazypeezytechnologies@gmail.com',
 ];
@@ -356,7 +356,8 @@ export const [UserProvider, useUser] = createContextHook(() => {
           () => supabase.auth.signUp({ email, password }),
           {
             timeout: AUTH_TIMEOUT,
-            maxRetries: 2,
+            maxRetries: 1,
+            retryDelay: 2000,
             onRetry: (attempt) => {
               setRetryCount(attempt);
               setConnectionStatus('slow');
@@ -402,7 +403,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
           {
             timeout: AUTH_TIMEOUT,
             maxRetries: 1,
-            retryDelay: 1500,
+            retryDelay: 2000,
             onRetry: (attempt) => {
               setRetryCount(attempt);
               setConnectionStatus('slow');
@@ -487,9 +488,17 @@ export const [UserProvider, useUser] = createContextHook(() => {
       setConnectionStatus('error');
       
       const friendlyMessage = getAuthErrorMessage(error);
+      const errMsg = error instanceof Error ? error.message.toLowerCase() : '';
       
-      if (friendlyMessage.includes('timed out') || friendlyMessage.includes('timeout')) {
-        throw new Error('Connection is slow. Please check your internet connection and try again. If the problem persists, try again later.');
+      if (
+        friendlyMessage.includes('timed out') || 
+        friendlyMessage.includes('timeout') ||
+        errMsg.includes('load failed') ||
+        errMsg.includes('failed to fetch') ||
+        errMsg.includes('network request failed') ||
+        errMsg.includes('fetch failed')
+      ) {
+        throw new Error('Unable to reach the server. Please check your internet connection and try again.');
       }
       
       throw new Error(friendlyMessage);

@@ -1,8 +1,8 @@
-const DEFAULT_TIMEOUT = 15000; // 15 seconds - very forgiving for slow connections
-const MAX_RETRIES = 2; // Two retries for reliability
-const RETRY_DELAY = 1500; // 1.5 seconds between retries
-const CONNECTIVITY_CHECK_TIMEOUT = 5000; // 5 seconds for connectivity check
-const SESSION_CHECK_TIMEOUT = 12000; // 12 seconds for session check
+const DEFAULT_TIMEOUT = 25000; // 25 seconds - very forgiving for slow connections
+const MAX_RETRIES = 1; // One retry for reliability
+const RETRY_DELAY = 2000; // 2 seconds between retries
+const CONNECTIVITY_CHECK_TIMEOUT = 8000; // 8 seconds for connectivity check
+const SESSION_CHECK_TIMEOUT = 15000; // 15 seconds for session check
 
 export class AuthTimeoutError extends Error {
   constructor(message: string = 'Connection timed out. Please check your internet and try again.') {
