@@ -524,20 +524,34 @@ export function useSupabaseFamilyGroups(userId?: string) {
     queryFn: async () => {
       if (!userId) return [];
 
-      const { data, error } = await supabase
-        .from('family_groups')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from('family_groups')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('[useSupabaseFamilyGroups] Error:', error);
-        throw error;
+        if (error) {
+          if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
+            console.warn('[useSupabaseFamilyGroups] RLS policy recursion detected, returning empty. This is a Supabase RLS config issue.');
+            return [] as SupabaseFamilyGroup[];
+          }
+          if (error.code === '42501') {
+            console.warn('[useSupabaseFamilyGroups] Permission denied, returning empty.');
+            return [] as SupabaseFamilyGroup[];
+          }
+          console.error('[useSupabaseFamilyGroups] Error:', error);
+          return [] as SupabaseFamilyGroup[];
+        }
+
+        return (data ?? []) as SupabaseFamilyGroup[];
+      } catch (e) {
+        console.warn('[useSupabaseFamilyGroups] Unexpected error, returning empty:', e);
+        return [] as SupabaseFamilyGroup[];
       }
-
-      return data as SupabaseFamilyGroup[];
     },
     enabled: !!userId,
+    retry: false,
   });
 }
 
@@ -620,20 +634,35 @@ export function useSupabaseUserSettings(userId?: string) {
     queryFn: async () => {
       if (!userId) return null;
 
-      const { data, error } = await supabase
-        .from('user_settings')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('user_settings')
+          .select('*')
+          .eq('user_id', userId)
+          .single();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('[useSupabaseUserSettings] Error:', error);
-        throw error;
+        if (error) {
+          if (error.code === 'PGRST116') return null;
+          if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
+            console.warn('[useSupabaseUserSettings] RLS policy recursion detected, returning null.');
+            return null;
+          }
+          if (error.code === '42501') {
+            console.warn('[useSupabaseUserSettings] Permission denied, returning null.');
+            return null;
+          }
+          console.error('[useSupabaseUserSettings] Error:', error);
+          return null;
+        }
+
+        return data as SupabaseUserSettings | null;
+      } catch (e) {
+        console.warn('[useSupabaseUserSettings] Unexpected error:', e);
+        return null;
       }
-
-      return data as SupabaseUserSettings | null;
     },
     enabled: !!userId,
+    retry: false,
   });
 }
 
