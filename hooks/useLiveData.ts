@@ -99,66 +99,23 @@ export function useLiveProfiles() {
     }
   );
 
-  const createMutation = trpc.profiles.create.useMutation({
-    onMutate: async (newProfile) => {
-      await queryClient.cancelQueries({ queryKey: ['profiles', 'list'] });
-      const previousProfiles = queryClient.getQueryData(['profiles', 'list']);
-      
-      queryClient.setQueryData(['profiles', 'list'], (old: any) => {
-        return old ? [...old, { ...newProfile, id: 'temp-' + Date.now() }] : [newProfile];
-      });
+  const profilesQueryKey = listQuery.data !== undefined
+    ? [['profiles', 'list'], { input: { userId: currentUser?.id || '' }, type: 'query' }]
+    : undefined;
 
-      return { previousProfiles };
-    },
-    onError: (err, newProfile, context) => {
-      if (context?.previousProfiles) {
-        queryClient.setQueryData(['profiles', 'list'], context.previousProfiles);
-      }
-    },
+  const createMutation = trpc.profiles.create.useMutation({
     onSuccess: () => {
       listQuery.refetch();
     },
   });
 
   const updateMutation = trpc.profiles.update.useMutation({
-    onMutate: async (updatedProfile) => {
-      await queryClient.cancelQueries({ queryKey: ['profiles', 'list'] });
-      const previousProfiles = queryClient.getQueryData(['profiles', 'list']);
-
-      queryClient.setQueryData(['profiles', 'list'], (old: any) => {
-        if (!old) return old;
-        return old.map((p: any) => p.id === updatedProfile.id ? { ...p, ...updatedProfile } : p);
-      });
-
-      return { previousProfiles };
-    },
-    onError: (err, updatedProfile, context) => {
-      if (context?.previousProfiles) {
-        queryClient.setQueryData(['profiles', 'list'], context.previousProfiles);
-      }
-    },
     onSuccess: () => {
       listQuery.refetch();
     },
   });
 
   const deleteMutation = trpc.profiles.delete.useMutation({
-    onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey: ['profiles', 'list'] });
-      const previousProfiles = queryClient.getQueryData(['profiles', 'list']);
-
-      queryClient.setQueryData(['profiles', 'list'], (old: any) => {
-        if (!old) return old;
-        return old.filter((p: any) => p.id !== variables.id);
-      });
-
-      return { previousProfiles };
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousProfiles) {
-        queryClient.setQueryData(['profiles', 'list'], context.previousProfiles);
-      }
-    },
     onSuccess: () => {
       listQuery.refetch();
     },

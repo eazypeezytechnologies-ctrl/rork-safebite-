@@ -3,7 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { createClient, User } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://gwkyjhmqomaunupnmqxj.supabase.co';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export const createContext = async (opts: FetchCreateContextFnOptions) => {
@@ -24,14 +24,18 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
     if (!error && data?.user) {
       user = data.user;
       
-      // Check if user is admin from profiles table
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('user_id', user.id)
-        .single();
-      
-      isAdmin = profile?.is_admin ?? false;
+      try {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
+        
+        isAdmin = userData?.is_admin ?? false;
+      } catch (e) {
+        console.warn('[createContext] Admin check failed:', e);
+        isAdmin = false;
+      }
     }
   }
 

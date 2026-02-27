@@ -36,15 +36,29 @@ const createSupabaseClient = (): SupabaseClient => {
     global: {
       fetch: (url, options = {}) => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const signal = options.signal || controller.signal;
         return fetch(url, {
           ...options,
-          signal: options.signal || controller.signal,
+          signal,
         }).then((res) => {
           clearTimeout(timeoutId);
           return res;
         }).catch((err) => {
           clearTimeout(timeoutId);
+          const msg = err?.message || '';
+          const isNetworkError = (
+            err?.name === 'AbortError' ||
+            err?.name === 'TypeError' ||
+            msg.includes('Load failed') ||
+            msg.includes('Failed to fetch') ||
+            msg.includes('fetch failed') ||
+            msg.includes('Network request failed') ||
+            msg.includes('NetworkError')
+          );
+          if (isNetworkError) {
+            console.warn('[Supabase] Network error (non-fatal):', msg || err?.name);
+          }
           throw err;
         });
       },

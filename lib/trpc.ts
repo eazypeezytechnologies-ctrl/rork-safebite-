@@ -3,6 +3,7 @@ import { httpLink } from "@trpc/client";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
 import { requestThrottler } from "@/utils/requestThrottler";
+import { supabase } from "@/lib/supabase";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -34,6 +35,31 @@ export const trpcClient = trpc.createClient({
         const baseUrl = getBaseUrl();
         
         if (!baseUrl) {
+          return new Response(JSON.stringify({ result: { data: null } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+
+        let authHeaders: Record<string, string> = {};
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            authHeaders['Authorization'] = `Bearer ${session.access_token}`;
+          }
+        } catch (e) {
+          console.warn('[tRPC] Failed to get auth session for header:', e);
+        }
+
+        const mergedOptions = {
+          ...options,
+          headers: {
+            ...options?.headers,
+            ...authHeaders,
+          },
+        };
+
+        if (false) {
           return new Response(JSON.stringify({ result: { data: null } }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
@@ -72,7 +98,7 @@ export const trpcClient = trpc.createClient({
           
           try {
             const response = await fetch(url, {
-              ...options,
+              ...mergedOptions,
               signal: controller.signal,
             });
             
