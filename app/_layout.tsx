@@ -47,11 +47,12 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   });
 }
 
-const MAX_LOADING_TIME = 1200; // 1.2s max loading time
-const SHOW_SKIP_AFTER = 600; // Show skip button after 0.6s
+const MAX_LOADING_TIME = 800; // 0.8s max loading time
+const SHOW_SKIP_AFTER = 400; // Show skip button after 0.4s
 
 function RootLayoutNav() {
-  const { isLoading: profilesLoading, profiles, clearAllData: clearProfileData, profilesFetchComplete, hasFetchError } = useProfiles();
+  const { isLoading: profilesLoadingRaw, profiles, clearAllData: clearProfileData, profilesFetchComplete, hasFetchError } = useProfiles();
+  const profilesLoading = profilesLoadingRaw && !hasFetchError;
   const { isLoading: userLoading, currentUser, hasCompletedOnboarding, clearAllData: clearUserData } = useUser();
   const router = useRouter();
   const segments = useSegments();
@@ -300,7 +301,7 @@ function RootLayoutNav() {
     SplashScreen.hideAsync().catch(() => {});
   };
 
-  if ((profilesLoading || userLoading || !isInitialized || !authChecked) && !loadingTimeout) {
+  if ((profilesLoading || userLoading || !isInitialized || !authChecked) && !loadingTimeout && !hasFetchError) {
     const getLoadingMessage = () => {
       switch (loadingPhase) {
         case 'session': return 'Connecting to server...';

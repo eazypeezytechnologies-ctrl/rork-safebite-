@@ -43,8 +43,17 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useUser();
   const userId = currentUser?.id;
 
-  const { data: supabaseFamilyGroups = [], isLoading, refetch: refetchFamilyGroups } = useSupabaseFamilyGroups(userId);
-  const { data: userSettings, refetch: refetchSettings } = useSupabaseUserSettings(userId);
+  const { data: supabaseFamilyGroups = [], isLoading: familyQueryLoading, isError: familyQueryError, refetch: refetchFamilyGroups } = useSupabaseFamilyGroups(userId);
+  const { data: userSettings, isError: settingsQueryError, refetch: refetchSettings } = useSupabaseUserSettings(userId);
+
+  const isLoading = familyQueryLoading && !familyQueryError;
+
+  if (familyQueryError) {
+    console.warn('[FamilyContext] Family groups query failed, operating in limited mode');
+  }
+  if (settingsQueryError) {
+    console.warn('[FamilyContext] User settings query failed, operating in limited mode');
+  }
   const createFamilyGroupMutation = useCreateFamilyGroup(userId || '');
   const updateFamilyGroupMutation = useUpdateFamilyGroup(userId || '');
   const deleteFamilyGroupMutation = useDeleteFamilyGroup(userId || '');

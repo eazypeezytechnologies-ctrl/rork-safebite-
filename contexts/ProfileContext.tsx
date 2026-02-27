@@ -222,17 +222,21 @@ export const [ProfileProvider, useProfiles] = createContextHook(() => {
     if (userLoading) return true;
     if (!userId) return false;
     if (isAdmin) return false;
+    if (profilesFetchError || settingsFetchError) {
+      console.log('[ProfileContext] Query error detected, unblocking loading state');
+      return false;
+    }
     if (!profilesFetched) return true;
     if (!settingsFetched) return true;
     return false;
-  }, [userLoading, userId, isAdmin, profilesFetched, settingsFetched]);
+  }, [userLoading, userId, isAdmin, profilesFetched, settingsFetched, profilesFetchError, settingsFetchError]);
 
   const profilesFetchComplete = useMemo(() => {
     if (!userId) return true;
     if (isAdmin) return true;
     if (profilesFetchError) {
-      console.log('[ProfileContext] Fetch error occurred, not marking as complete');
-      return false;
+      console.log('[ProfileContext] Fetch error occurred, marking as complete anyway to unblock app');
+      return true;
     }
     return profilesFetched && profilesFetchSuccess;
   }, [userId, isAdmin, profilesFetched, profilesFetchError, profilesFetchSuccess]);

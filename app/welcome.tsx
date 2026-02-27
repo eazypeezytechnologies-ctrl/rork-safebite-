@@ -13,12 +13,13 @@ import {
   Keyboard,
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
-import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react-native';
+import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Wifi } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BUILD_ID } from '@/constants/appVersion';
+import { supabase, getSupabaseUrl } from '@/lib/supabase';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -31,6 +32,8 @@ export default function WelcomeScreen() {
   const [statusMessage, setStatusMessage] = useState('');
   const [authPhase, setAuthPhase] = useState<'idle' | 'validating' | 'checking' | 'authenticating' | 'success' | 'error'>('idle');
   const [showPassword, setShowPassword] = useState(false);
+  const [connTestResult, setConnTestResult] = useState<string | null>(null);
+  const [connTesting, setConnTesting] = useState(false);
 
   useEffect(() => {
     if (authPhase === 'validating') {
@@ -234,6 +237,45 @@ export default function WelcomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.testConnectionButton}
+          onPress={async () => {
+            setConnTesting(true);
+            setConnTestResult(null);
+            try {
+              const url = getSupabaseUrl();
+              if (!url) {
+                setConnTestResult('❌ No Supabase URL configured');
+                setConnTesting(false);
+                return;
+              }
+              const masked = url.replace(/https?:\/\//, '').substring(0, 20) + '...';
+              const start = Date.now();
+              const res = await fetch(`${url}/auth/v1/health`, { method: 'GET' });
+              const elapsed = Date.now() - start;
+              if (res.ok) {
+                setConnTestResult(`✅ Connected (${elapsed}ms) — ${masked}`);
+              } else {
+                setConnTestResult(`⚠️ HTTP ${res.status} (${elapsed}ms) — ${masked}`);
+              }
+            } catch (err: any) {
+              const msg = err?.message || String(err);
+              setConnTestResult(`❌ ${msg}`);
+            } finally {
+              setConnTesting(false);
+            }
+          }}
+        >
+          <Wifi size={14} color="#6B7280" />
+          <Text style={styles.testConnectionText}>
+            {connTesting ? 'Testing...' : 'Test Connection'}
+          </Text>
+        </TouchableOpacity>
+
+        {connTestResult ? (
+          <Text style={styles.connResultText}>{connTestResult}</Text>
+        ) : null}
 
         <Text style={styles.footer}>
           Your privacy matters. All data is stored securely on your device.
@@ -472,6 +514,27 @@ const styles = StyleSheet.create({
     color: '#D1D5DB',
     textAlign: 'center' as const,
     paddingBottom: 8,
+  },
+  testConnectionButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  testConnectionText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500' as const,
+  },
+  connResultText: {
+    fontSize: 11,
+    color: '#6B7280',
+    textAlign: 'center' as const,
+    paddingHorizontal: 24,
+    marginTop: 4,
   },
   backButton: {
     alignSelf: 'flex-start',

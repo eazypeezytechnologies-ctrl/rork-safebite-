@@ -36,7 +36,7 @@ const createSupabaseClient = (): SupabaseClient => {
     global: {
       fetch: (url, options = {}) => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         return fetch(url, {
           ...options,
           signal: options.signal || controller.signal,
