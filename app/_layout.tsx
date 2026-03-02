@@ -11,6 +11,7 @@ import { View, ActivityIndicator, Platform, Text, StyleSheet, TouchableOpacity }
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { restoreStorageFromServer, syncStorageToServer } from "@/utils/storageSync";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { FamilyErrorBoundary } from "@/components/FamilyErrorBoundary";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { BUILD_ID } from "@/constants/appVersion";
 
@@ -453,13 +454,15 @@ export default function RootLayout() {
           <trpc.Provider client={trpcClient} queryClient={queryClient}>
             <UserProvider>
               <ProfileProvider>
-                <FamilyProvider>
-                  <SubscriptionProvider>
-                    <LiveDataContext>
-                      <RootLayoutNav />
-                    </LiveDataContext>
-                  </SubscriptionProvider>
-                </FamilyProvider>
+                <FamilyErrorBoundary>
+                  <FamilyProvider>
+                    <SubscriptionProvider>
+                      <LiveDataContext>
+                        <RootLayoutNav />
+                      </LiveDataContext>
+                    </SubscriptionProvider>
+                  </FamilyProvider>
+                </FamilyErrorBoundary>
               </ProfileProvider>
             </UserProvider>
           </trpc.Provider>

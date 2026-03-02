@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useMemo, useCallback, useState, ReactNode } from 'react';
 import { FamilyGroup, Profile, ViewMode } from '@/types';
 import { useUser } from '@/contexts/UserContext';
 import {
@@ -11,11 +11,16 @@ import {
   SupabaseFamilyGroup,
 } from '@/hooks/useSupabase';
 
+type FamilyErrorType = 'rls' | 'network' | 'fk' | 'unknown' | null;
+
 interface FamilyContextValue {
   familyGroups: FamilyGroup[];
   activeFamilyGroup: FamilyGroup | null;
   viewMode: ViewMode;
   isLoading: boolean;
+  isLimitedMode: boolean;
+  lastError: FamilyErrorType;
+  lastErrorMessage: string | null;
   setViewMode: (mode: ViewMode) => Promise<void>;
   setActiveFamilyGroup: (groupId: string | null) => Promise<void>;
   createFamilyGroup: (group: FamilyGroup) => Promise<FamilyGroup>;
@@ -27,6 +32,7 @@ interface FamilyContextValue {
   getCombinedAllergens: (profiles: Profile[]) => string[];
   getCombinedCustomKeywords: (profiles: Profile[]) => string[];
   refreshFamilyGroups: () => Promise<void>;
+  dismissLimitedMode: () => void;
 }
 
 const convertSupabaseFamilyGroupToFamilyGroup = (sfg: SupabaseFamilyGroup): FamilyGroup => ({
@@ -37,23 +43,67 @@ const convertSupabaseFamilyGroupToFamilyGroup = (sfg: SupabaseFamilyGroup): Fami
   updatedAt: sfg.updated_at,
 });
 
+function classifyError(error: unknown): { type: FamilyErrorType; message: string } {
+  const msg = error instanceof Error ? error.message : String(error || '');
+  const code = (error as any)?.code || '';
+
+  if (code === '42P17' || msg.includes('infinite recursion')) {
+    return { type: 'rls', message: 'Family features temporarily unavailable due to a database policy issue.' };
+  }
+  if (code === '42501' || msg.includes('permission denied')) {
+    return { type: 'rls', message: 'Permission denied. Family features are temporarily unavailable.' };
+  }
+  if (code === '23503' || msg.includes('foreign key') || msg.includes('fkey')) {
+    return { type: 'fk', message: 'Family group reference error. Please try again or recreate the group.' };
+  }
+  if (
+    msg.includes('Load failed') ||
+    msg.includes('Failed to fetch') ||
+    msg.includes('fetch failed') ||
+    msg.includes('Network request failed') ||
+    msg.includes('timeout')
+  ) {
+    return { type: 'network', message: 'Network error. Please check your connection and try again.' };
+  }
+  return { type: 'unknown', message: msg || 'An unexpected error occurred.' };
+}
+
 const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
 
 export function FamilyProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useUser();
   const userId = currentUser?.id;
 
+  const [lastError, setLastError] = useState<FamilyErrorType>(null);
+  const [lastErrorMessage, setLastErrorMessage] = useState<string | null>(null);
+  const [limitedModeDismissed, setLimitedModeDismissed] = useState(false);
+
   const { data: supabaseFamilyGroups = [], isLoading: familyQueryLoading, isError: familyQueryError, refetch: refetchFamilyGroups } = useSupabaseFamilyGroups(userId);
   const { data: userSettings, isError: settingsQueryError, refetch: refetchSettings } = useSupabaseUserSettings(userId);
 
   const isLoading = familyQueryLoading && !familyQueryError;
+  const isLimitedMode = (familyQueryError || settingsQueryError) && !limitedModeDismissed;
 
-  if (familyQueryError) {
+  if (familyQueryError && lastError !== 'rls') {
     console.warn('[FamilyContext] Family groups query failed, operating in limited mode');
   }
-  if (settingsQueryError) {
+  if (settingsQueryError && lastError !== 'rls') {
     console.warn('[FamilyContext] User settings query failed, operating in limited mode');
   }
+
+  const dismissLimitedMode = useCallback(() => {
+    setLimitedModeDismissed(true);
+  }, []);
+
+  const handleMutationError = useCallback((error: unknown, context: string): never => {
+    const classified = classifyError(error);
+    console.error(`[FamilyContext] ${context}:`, classified.type, classified.message);
+    setLastError(classified.type);
+    setLastErrorMessage(classified.message);
+    setLimitedModeDismissed(false);
+    throw new Error(classified.message);
+  }, []);
+
   const createFamilyGroupMutation = useCreateFamilyGroup(userId || '');
   const updateFamilyGroupMutation = useUpdateFamilyGroup(userId || '');
   const deleteFamilyGroupMutation = useDeleteFamilyGroup(userId || '');
@@ -75,46 +125,55 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   }, [userSettings]);
 
   const setViewMode = useCallback(async (mode: ViewMode) => {
+    if (!userId) return;
     try {
-      if (!userId) return;
       await upsertSettingsMutation.mutateAsync({ view_mode: mode });
       console.log('[FamilyContext] View mode set to:', mode);
+      setLastError(null);
+      setLastErrorMessage(null);
     } catch (error) {
-      console.error('[FamilyContext] Error setting view mode:', error);
-      throw error;
+      handleMutationError(error, 'Error setting view mode');
     }
-  }, [userId, upsertSettingsMutation]);
+  }, [userId, upsertSettingsMutation, handleMutationError]);
 
   const setActiveFamilyGroup = useCallback(async (groupId: string | null) => {
+    if (!userId) return;
     try {
-      if (!userId) return;
       await upsertSettingsMutation.mutateAsync({ active_family_group_id: groupId || undefined });
       const group = groupId ? familyGroups.find(g => g.id === groupId) : null;
       console.log('[FamilyContext] Active family group set to:', group?.name || 'none');
+      setLastError(null);
+      setLastErrorMessage(null);
     } catch (error) {
-      console.error('[FamilyContext] Error setting active family group:', error);
-      throw error;
+      handleMutationError(error, 'Error setting active family group');
     }
-  }, [userId, familyGroups, upsertSettingsMutation]);
+  }, [userId, familyGroups, upsertSettingsMutation, handleMutationError]);
 
   const createFamilyGroup = useCallback(async (group: FamilyGroup): Promise<FamilyGroup> => {
+    if (!userId) throw new Error('No user logged in');
     try {
-      if (!userId) throw new Error('No user logged in');
       console.log('[FamilyContext] Creating family group:', group.name);
       const result = await createFamilyGroupMutation.mutateAsync({
         name: group.name,
         member_ids: group.memberIds,
       });
+      if (!result?.id || result.id.startsWith('temp_')) {
+        throw new Error('Server did not return a valid group ID. Please try again.');
+      }
       await refetchFamilyGroups();
       console.log('[FamilyContext] Family group created successfully:', group.name, 'DB id:', result.id);
+      setLastError(null);
+      setLastErrorMessage(null);
       return convertSupabaseFamilyGroupToFamilyGroup(result);
     } catch (error) {
-      console.error('[FamilyContext] Error creating family group:', error);
-      throw error;
+      return handleMutationError(error, 'Error creating family group');
     }
-  }, [userId, createFamilyGroupMutation, refetchFamilyGroups]);
+  }, [userId, createFamilyGroupMutation, refetchFamilyGroups, handleMutationError]);
 
   const updateFamilyGroup = useCallback(async (updatedGroup: FamilyGroup) => {
+    if (!updatedGroup.id || updatedGroup.id.startsWith('temp_')) {
+      throw new Error('Cannot update a group without a valid database ID.');
+    }
     try {
       await updateFamilyGroupMutation.mutateAsync({
         id: updatedGroup.id,
@@ -125,27 +184,36 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
       });
       await refetchFamilyGroups();
       console.log('[FamilyContext] Family group updated:', updatedGroup.name);
+      setLastError(null);
+      setLastErrorMessage(null);
     } catch (error) {
-      console.error('[FamilyContext] Error updating family group:', error);
-      throw error;
+      handleMutationError(error, 'Error updating family group');
     }
-  }, [updateFamilyGroupMutation, refetchFamilyGroups]);
+  }, [updateFamilyGroupMutation, refetchFamilyGroups, handleMutationError]);
 
   const deleteFamilyGroup = useCallback(async (groupId: string) => {
+    if (!groupId || groupId.startsWith('temp_')) {
+      throw new Error('Cannot delete a group without a valid database ID.');
+    }
     try {
       await deleteFamilyGroupMutation.mutateAsync(groupId);
-      
+
       if (activeFamilyGroup?.id === groupId) {
-        await upsertSettingsMutation.mutateAsync({ active_family_group_id: undefined });
+        try {
+          await upsertSettingsMutation.mutateAsync({ active_family_group_id: undefined });
+        } catch (settingsErr) {
+          console.warn('[FamilyContext] Non-critical: failed to clear active group after delete:', settingsErr);
+        }
       }
-      
+
       await refetchFamilyGroups();
       console.log('[FamilyContext] Family group deleted:', groupId);
+      setLastError(null);
+      setLastErrorMessage(null);
     } catch (error) {
-      console.error('[FamilyContext] Error deleting family group:', error);
-      throw error;
+      handleMutationError(error, 'Error deleting family group');
     }
-  }, [deleteFamilyGroupMutation, activeFamilyGroup, upsertSettingsMutation, refetchFamilyGroups]);
+  }, [deleteFamilyGroupMutation, activeFamilyGroup, upsertSettingsMutation, refetchFamilyGroups, handleMutationError]);
 
   const addMemberToFamily = useCallback(async (groupId: string, memberId: string) => {
     try {
@@ -226,8 +294,15 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   }, [activeFamilyGroup, viewMode]);
 
   const refreshFamilyGroups = useCallback(async () => {
-    await refetchFamilyGroups();
-    await refetchSettings();
+    try {
+      await refetchFamilyGroups();
+      await refetchSettings();
+      setLastError(null);
+      setLastErrorMessage(null);
+      setLimitedModeDismissed(false);
+    } catch (error) {
+      console.warn('[FamilyContext] Error refreshing family groups:', error);
+    }
   }, [refetchFamilyGroups, refetchSettings]);
 
   const value = useMemo(
@@ -236,6 +311,9 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
       activeFamilyGroup,
       viewMode,
       isLoading,
+      isLimitedMode,
+      lastError,
+      lastErrorMessage,
       setViewMode,
       setActiveFamilyGroup,
       createFamilyGroup,
@@ -247,12 +325,16 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
       getCombinedAllergens,
       getCombinedCustomKeywords,
       refreshFamilyGroups,
+      dismissLimitedMode,
     }),
     [
       familyGroups,
       activeFamilyGroup,
       viewMode,
       isLoading,
+      isLimitedMode,
+      lastError,
+      lastErrorMessage,
       setViewMode,
       setActiveFamilyGroup,
       createFamilyGroup,
@@ -264,6 +346,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
       getCombinedAllergens,
       getCombinedCustomKeywords,
       refreshFamilyGroups,
+      dismissLimitedMode,
     ]
   );
 

@@ -16,6 +16,7 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { useUser } from '@/contexts/UserContext';
 import { FamilyGroup, Profile } from '@/types';
+import { LimitedModeBanner } from '@/components/LimitedModeBanner';
 import * as Haptics from 'expo-haptics';
 import { 
   getFamilyInvitations,
@@ -46,6 +47,9 @@ export default function FamilyManagementScreen() {
     deleteFamilyGroup,
     setActiveFamilyGroup,
     refreshFamilyGroups,
+    isLimitedMode,
+    lastErrorMessage,
+    dismissLimitedMode,
   } = useFamily();
 
   const [isCreating, setIsCreating] = useState(false);
@@ -360,6 +364,13 @@ export default function FamilyManagementScreen() {
               </TouchableOpacity>
             ) : null,
         }}
+      />
+
+      <LimitedModeBanner
+        visible={isLimitedMode}
+        message={lastErrorMessage}
+        onRetry={refreshFamilyGroups}
+        onDismiss={dismissLimitedMode}
       />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
