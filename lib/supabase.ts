@@ -73,3 +73,4 @@ export const isSupabaseConfigured = (): boolean => {
 };
 
 export const getSupabaseUrl = (): string | undefined => supabaseUrl;
+export const getSupabaseAnonKey = (): string | undefined => supabaseAnonKey;

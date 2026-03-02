@@ -364,6 +364,7 @@ function RootLayoutNav() {
       <Stack.Screen name="reset-password" options={{ headerShown: false }} />
       <Stack.Screen name="subscription" options={{ title: "Subscription" }} />
       <Stack.Screen name="accept-invite" options={{ title: "Family Invitation" }} />
+      <Stack.Screen name="security-checklist" options={{ title: "Security Checklist" }} />
     </Stack>
   );
 }

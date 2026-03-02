@@ -91,8 +91,22 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
         .eq('id', existing.id);
 
       if (error) {
-        console.error('[SupabaseProducts] Update error:', error.message);
-        return { success: false, error: error.message, verified: false };
+        const isProductTypeIssue = error.message?.includes('product_type') || error.message?.includes('schema cache');
+        if (isProductTypeIssue && updates.product_type) {
+          console.log('[SupabaseProducts] Update product_type issue, retrying without it');
+          delete updates.product_type;
+          const { error: retryErr } = await supabase
+            .from('products')
+            .update(updates)
+            .eq('id', existing.id);
+          if (retryErr) {
+            console.error('[SupabaseProducts] Update retry error:', retryErr.message);
+            return { success: false, error: retryErr.message, verified: false };
+          }
+        } else {
+          console.error('[SupabaseProducts] Update error:', error.message);
+          return { success: false, error: error.message, verified: false };
+        }
       }
 
       console.log('[SupabaseProducts] Updated existing product, scan_count:', updates.scan_count);
@@ -124,14 +138,41 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
       .upsert(insertPayload, { onConflict: 'code' });
 
     if (upsertError) {
-      console.log('[SupabaseProducts] Upsert failed, trying direct insert:', upsertError.message);
-      const { error: insertError } = await supabase
-        .from('products')
-        .insert(insertPayload);
+      const isProductTypeIssue = upsertError.message?.includes('product_type') || upsertError.message?.includes('schema cache');
+      if (isProductTypeIssue) {
+        console.log('[SupabaseProducts] product_type column issue detected, retrying WITHOUT product_type');
+        const { product_type: _removed, ...payloadWithoutType } = insertPayload;
+        const { error: retryError } = await supabase
+          .from('products')
+          .upsert(payloadWithoutType, { onConflict: 'code' });
+        if (retryError) {
+          console.error('[SupabaseProducts] Retry without product_type also failed:', retryError.message);
+          return { success: false, error: retryError.message, verified: false };
+        }
+        console.log('[SupabaseProducts] Saved WITHOUT product_type (fallback path)');
+      } else {
+        console.log('[SupabaseProducts] Upsert failed, trying direct insert:', upsertError.message);
+        const { error: insertError } = await supabase
+          .from('products')
+          .insert(insertPayload);
 
-      if (insertError) {
-        console.error('[SupabaseProducts] Insert also failed:', insertError.message);
-        return { success: false, error: insertError.message, verified: false };
+        if (insertError) {
+          const isTypeIssue2 = insertError.message?.includes('product_type') || insertError.message?.includes('schema cache');
+          if (isTypeIssue2) {
+            console.log('[SupabaseProducts] Insert product_type issue, retrying without it');
+            const { product_type: _removed2, ...payloadWithoutType2 } = insertPayload;
+            const { error: retryError2 } = await supabase
+              .from('products')
+              .insert(payloadWithoutType2);
+            if (retryError2) {
+              console.error('[SupabaseProducts] Final fallback insert failed:', retryError2.message);
+              return { success: false, error: retryError2.message, verified: false };
+            }
+          } else {
+            console.error('[SupabaseProducts] Insert also failed:', insertError.message);
+            return { success: false, error: insertError.message, verified: false };
+          }
+        }
       }
     }
 

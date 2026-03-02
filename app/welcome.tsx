@@ -16,10 +16,9 @@ import { useRouter, Href } from 'expo-router';
 import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Wifi } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isSupabaseConfigured, getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BUILD_ID } from '@/constants/appVersion';
-import { supabase, getSupabaseUrl } from '@/lib/supabase';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -137,20 +136,57 @@ export default function WelcomeScreen() {
       
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed. Please try again.';
       const errLower = errorMessage.toLowerCase();
-      const isNetworkIssue = 
-        errLower.includes('unable to reach') ||
-        errLower.includes('connection') ||
-        errLower.includes('network') ||
+
+      let errorType: string;
+      if (errLower.includes('key missing') || errLower.includes('key invalid') || errLower.includes('api key')) {
+        errorType = 'config';
+      } else if (errLower.includes('timeout') || errLower.includes('timed out')) {
+        errorType = 'timeout';
+      } else if (
         errLower.includes('load failed') ||
-        errLower.includes('fetch') ||
-        errLower.includes('timeout') ||
-        errLower.includes('timed out');
-      const errorType = isNetworkIssue ? 'connection' : categorizeAuthError(error);
+        errLower.includes('failed to fetch') ||
+        errLower.includes('fetch failed') ||
+        errLower.includes('network request failed') ||
+        errLower.includes('networkerror')
+      ) {
+        errorType = 'network';
+      } else if (
+        errLower.includes('unable to reach') ||
+        errLower.includes('connection')
+      ) {
+        errorType = 'connection';
+      } else {
+        errorType = categorizeAuthError(error);
+      }
       
       // Reset phase after showing alert
       const resetPhase = () => setAuthPhase('idle');
       
-      if (errorType === 'connection') {
+      if (errorType === 'config') {
+        Alert.alert(
+          'Configuration Error',
+          'Supabase API key is missing or invalid. Please check your environment configuration.',
+          [{ text: 'OK', onPress: resetPhase }]
+        );
+      } else if (errorType === 'timeout') {
+        Alert.alert(
+          'Network Timeout',
+          'The request timed out. Please check your internet connection and try again.',
+          [
+            { text: 'Retry', onPress: () => { resetPhase(); setTimeout(() => handleSignIn(), 100); }},
+            { text: 'Cancel', style: 'cancel', onPress: resetPhase }
+          ]
+        );
+      } else if (errorType === 'network') {
+        Alert.alert(
+          'Network Unreachable',
+          'Cannot reach the server. Please check your internet connection (Wi-Fi/cellular) and try again.',
+          [
+            { text: 'Retry', onPress: () => { resetPhase(); setTimeout(() => handleSignIn(), 100); }},
+            { text: 'Cancel', style: 'cancel', onPress: resetPhase }
+          ]
+        );
+      } else if (errorType === 'connection') {
         Alert.alert(
           'Connection Issue',
           'Unable to connect. This could be due to:\n\n• Slow or unstable internet\n• Server temporarily busy\n\nPlease try again.',
@@ -238,44 +274,73 @@ export default function WelcomeScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.testConnectionButton}
-          onPress={async () => {
-            setConnTesting(true);
-            setConnTestResult(null);
-            try {
-              const url = getSupabaseUrl();
-              if (!url) {
-                setConnTestResult('❌ No Supabase URL configured');
-                setConnTesting(false);
-                return;
-              }
-              const masked = url.replace(/https?:\/\//, '').substring(0, 20) + '...';
-              const start = Date.now();
-              const res = await fetch(`${url}/auth/v1/health`, { method: 'GET' });
-              const elapsed = Date.now() - start;
-              if (res.ok) {
-                setConnTestResult(`✅ Connected (${elapsed}ms) — ${masked}`);
-              } else {
-                setConnTestResult(`⚠️ HTTP ${res.status} (${elapsed}ms) — ${masked}`);
-              }
-            } catch (err: any) {
-              const msg = err?.message || String(err);
-              setConnTestResult(`❌ ${msg}`);
-            } finally {
-              setConnTesting(false);
-            }
-          }}
-        >
-          <Wifi size={14} color="#6B7280" />
-          <Text style={styles.testConnectionText}>
-            {connTesting ? 'Testing...' : 'Test Connection'}
+        <View style={styles.diagnosticsPanel}>
+          <Text style={styles.diagnosticsLabel}>Supabase Diagnostics</Text>
+          <Text style={styles.diagnosticsDetail}>
+            Host: {getSupabaseUrl() ? getSupabaseUrl()!.replace(/https?:\/\//, '').substring(0, 24) + '...' : '❌ Not configured'}
           </Text>
-        </TouchableOpacity>
+          <Text style={styles.diagnosticsDetail}>
+            Anon Key: {getSupabaseAnonKey() ? `✅ loaded (${getSupabaseAnonKey()!.length} chars)` : '❌ missing'}
+          </Text>
 
-        {connTestResult ? (
-          <Text style={styles.connResultText}>{connTestResult}</Text>
-        ) : null}
+          <TouchableOpacity
+            style={styles.testConnectionButton}
+            onPress={async () => {
+              setConnTesting(true);
+              setConnTestResult(null);
+              try {
+                const url = getSupabaseUrl();
+                const anonKey = getSupabaseAnonKey();
+                if (!url) {
+                  setConnTestResult('❌ No Supabase URL configured');
+                  setConnTesting(false);
+                  return;
+                }
+                if (!anonKey) {
+                  setConnTestResult('❌ No Supabase Anon Key configured');
+                  setConnTesting(false);
+                  return;
+                }
+                const masked = url.replace(/https?:\/\//, '').substring(0, 20) + '...';
+                const start = Date.now();
+                const res = await fetch(`${url}/auth/v1/health`, {
+                  method: 'GET',
+                  headers: {
+                    'apikey': anonKey,
+                    'Authorization': `Bearer ${anonKey}`,
+                  },
+                });
+                const elapsed = Date.now() - start;
+                if (res.ok) {
+                  setConnTestResult(`✅ Connected (${elapsed}ms) — ${masked}`);
+                } else {
+                  const body = await res.text().catch(() => '');
+                  setConnTestResult(`⚠️ HTTP ${res.status} (${elapsed}ms) — ${body.substring(0, 60)}`);
+                }
+              } catch (err: any) {
+                const msg = err?.message || String(err);
+                if (msg.includes('Load failed') || msg.includes('Failed to fetch')) {
+                  setConnTestResult('❌ Network unreachable — check Wi-Fi/cellular');
+                } else if (msg.includes('timeout') || msg.includes('aborted')) {
+                  setConnTestResult('❌ Request timed out');
+                } else {
+                  setConnTestResult(`❌ ${msg}`);
+                }
+              } finally {
+                setConnTesting(false);
+              }
+            }}
+          >
+            <Wifi size={14} color="#6B7280" />
+            <Text style={styles.testConnectionText}>
+              {connTesting ? 'Testing...' : 'Test Connection'}
+            </Text>
+          </TouchableOpacity>
+
+          {connTestResult ? (
+            <Text style={styles.connResultText}>{connTestResult}</Text>
+          ) : null}
+        </View>
 
         <Text style={styles.footer}>
           Your privacy matters. All data is stored securely on your device.
@@ -533,8 +598,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6B7280',
     textAlign: 'center' as const,
-    paddingHorizontal: 24,
+    paddingHorizontal: 4,
+    marginTop: 6,
+  },
+  diagnosticsPanel: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 24,
     marginTop: 4,
+    alignItems: 'center' as const,
+  },
+  diagnosticsLabel: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: '#9CA3AF',
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  diagnosticsDetail: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginBottom: 2,
   },
   backButton: {
     alignSelf: 'flex-start',

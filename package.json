@@ -15,6 +15,7 @@
     "@nkzw/create-context-hook": "^1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
+    "@rork-ai/toolkit-sdk": "0.2.51",
     "@stardazed/streams-text-encoding": "^1.0.2",
     "@supabase/supabase-js": "^2.81.1",
     "@tanstack/eslint-plugin-query": "^5.91.2",
@@ -29,6 +30,7 @@
     "expo": "^54.0.20",
     "expo-blur": "~15.0.7",
     "expo-camera": "~17.0.8",
+    "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.10",
     "expo-crypto": "~15.0.7",
     "expo-document-picker": "~14.0.7",
@@ -65,8 +67,7 @@
     "superjson": "^2.2.2",
     "uuid": "^13.0.0",
     "zod": "^4.1.12",
-    "zustand": "^5.0.2",
-    "@rork-ai/toolkit-sdk": "0.2.51"
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

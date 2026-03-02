@@ -129,6 +129,13 @@ export async function searchProductByBarcode(barcode: string, useCache: boolean 
     }
   }
   
+  const isNumericBarcode = /^\d{8,14}$/.test(normalizedBarcode);
+
+  if (!isNumericBarcode) {
+    console.log('[Products] Non-numeric barcode (photo_/manual_), skipping external API lookups:', normalizedBarcode.substring(0, 30));
+    return null;
+  }
+
   const sources = [
     { api: OFF_API, source: 'openfoodfacts' as const, type: 'openx' },
     { api: OBF_API, source: 'openbeautyfacts' as const, type: 'openx' },
