@@ -1,4 +1,4 @@
-import { Database, DBRecallCache } from '@/backend/db/schema';
+import { Database, DBRecallCache } from '@/storage/database';
 import { randomUUID } from 'crypto';
 
 const FDA_API = 'https://api.fda.gov/food/enforcement.json';

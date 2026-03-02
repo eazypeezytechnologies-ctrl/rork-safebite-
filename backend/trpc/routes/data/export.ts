@@ -1,5 +1,5 @@
 import { publicProcedure } from '@/backend/trpc/create-context';
-import { Database } from '@/backend/db/schema';
+import { Database } from '@/storage/database';
 
 export const exportDataRoute = publicProcedure
   .query(async () => {

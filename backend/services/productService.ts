@@ -1,4 +1,4 @@
-import { Database, DBProduct } from '@/backend/db/schema';
+import { Database, DBProduct } from '@/storage/database';
 import { SupabaseService, supabaseAdmin } from '@/backend/services/supabaseService';
 
 const OFF_API = 'https://world.openfoodfacts.org/api/v2';

@@ -1,4 +1,4 @@
-import { Database, DBAnalytics } from '@/backend/db/schema';
+import { Database, DBAnalytics } from '@/storage/database';
 import { randomUUID } from 'crypto';
 
 export type AnalyticsEventType = 'scan' | 'search' | 'recall_check' | 'profile_create' | 'profile_update' | 'login' | 'signup' | 'favorite_add' | 'favorite_remove' | 'shopping_list_add' | 'shopping_list_remove';
