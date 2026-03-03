@@ -13,6 +13,7 @@ import {
   Animated,
   Easing,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -38,6 +39,7 @@ import { ArcaneDivider } from '@/components/ArcaneDivider';
 
 export default function ScanScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
   const { activeProfile, profiles, isLoading: profilesLoading, isSwitchingProfile, setActiveProfile } = useProfiles();
 
@@ -875,27 +877,31 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           onTouchEnd={handleCameraPress}
         />
         
-        {/* Header - Back/Exit pill */}
-        <View style={styles.cameraHeader}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              console.log('Back button pressed - closing camera');
-              setCameraActive(false);
-              setDetectedBannerData({ code: '', show: false });
-              detectedBannerAnim.setValue(0);
-            }}
-            testID="camera-back-button"
-            activeOpacity={0.7}
-          >
-            <X size={18} color="#FFFFFF" />
-            <Text style={styles.backButtonText}>Exit</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.headerRight}>
-            {scanned && <View style={styles.processingDot} />}
+        {/* Header - Back/Exit pill — safe-area aware, always on top */}
+        <TouchableOpacity
+          style={[
+            styles.backButtonAbsolute,
+            { top: insets.top + 10, left: Math.max(insets.left, 12) },
+          ]}
+          onPress={() => {
+            console.log('Back button pressed - closing camera');
+            setCameraActive(false);
+            setDetectedBannerData({ code: '', show: false });
+            detectedBannerAnim.setValue(0);
+          }}
+          testID="camera-back-button"
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <X size={18} color="#FFFFFF" />
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
+
+        {scanned && (
+          <View style={[styles.processingDotAbsolute, { top: insets.top + 16, right: Math.max(insets.right, 20) }]}>
+            <View style={styles.processingDot} />
           </View>
-        </View>
+        )}
 
         {/* Detected Banner */}
         {detectedBannerData.show && (
@@ -903,6 +909,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             style={[
               styles.detectedBanner,
               {
+                top: insets.top + 60,
                 opacity: detectedBannerAnim,
                 transform: [{ translateY: bannerTranslateY }],
               },
@@ -1437,17 +1444,15 @@ const styles = StyleSheet.create({
   resultBrand: { fontSize: 13, color: '#6B7280' },
   verdictBadge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   cameraContainer: { flex: 1, backgroundColor: '#000' },
-  cameraHeader: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 },
-  headerLeft: { width: 44, height: 44 },
-  backButton: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: 'rgba(11, 15, 20, 0.75)', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(11, 110, 122, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  backButtonAbsolute: { position: 'absolute' as const, zIndex: 9999, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: 'rgba(11, 15, 20, 0.8)', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minWidth: 44, minHeight: 44, borderWidth: 1, borderColor: 'rgba(11, 110, 122, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 20 },
   backButtonText: { fontSize: 16, fontWeight: '700' as const, color: '#FFF' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  processingDotAbsolute: { position: 'absolute' as const, zIndex: 9998, elevation: 19 },
   processingDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FBBF24' },
   closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   scanAreaContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scanFrameContainer: { width: 280, height: 280, position: 'relative', justifyContent: 'center', alignItems: 'center' },
   photoFrameContainer: { width: 280, height: 280, position: 'relative', justifyContent: 'center', alignItems: 'center' },
-  detectedBanner: { position: 'absolute', top: Platform.OS === 'ios' ? 115 : 95, left: 20, right: 20, zIndex: 20 },
+  detectedBanner: { position: 'absolute' as const, left: 20, right: 20, zIndex: 20 },
   detectedBannerGlow: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 14, backgroundColor: 'rgba(16, 185, 129, 0.08)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
   detectedBannerContent: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, gap: 12 },
   detectedBannerIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(16, 185, 129, 0.2)', alignItems: 'center', justifyContent: 'center' },
