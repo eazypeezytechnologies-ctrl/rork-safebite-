@@ -21,6 +21,7 @@ import { ProductType } from '@/types';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { generateText } from '@rork-ai/toolkit-sdk';
+import { TranslationCard } from '@/components/TranslationCard';
 
 export default function ManualIngredientEntryScreen() {
   const router = useRouter();
@@ -386,6 +387,14 @@ If you cannot read the ingredients, respond with: CANNOT_READ`,
             textAlignVertical="top"
             placeholderTextColor="#9CA3AF"
           />
+          {ingredients.trim().length > 0 && (
+            <TranslationCard
+              label="Ingredients"
+              text={ingredients}
+              autoTranslate
+              testID="manual-entry-translation"
+            />
+          )}
         </View>
 
         {activeProfile && (

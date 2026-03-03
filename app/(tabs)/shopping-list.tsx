@@ -11,7 +11,10 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect, Href } from 'expo-router';
-import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X, DollarSign, MapPin, Share2, Bell, Camera, Upload } from 'lucide-react-native';
+import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X, DollarSign, MapPin, Share2, Bell, Camera, Upload, Lock, Sparkles } from 'lucide-react-native';
+import { arcaneColors, arcaneRadius, arcaneShadows } from '@/constants/theme';
+import { RuneCard } from '@/components/RuneCard';
+import { SigilBadge } from '@/components/SigilBadge';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { ViewModeToggle } from '@/components/ViewModeToggle';
@@ -364,66 +367,84 @@ export default function ShoppingListScreen() {
           </>
         )}
         <View style={styles.comingSoonSection}>
-          <Text style={styles.comingSoonSectionTitle}>Coming Soon</Text>
-
-          <View style={styles.comingSoonCard}>
-            <View style={styles.comingSoonIconWrap}>
-              <DollarSign size={24} color="#F59E0B" />
-            </View>
-            <View style={styles.comingSoonContent}>
-              <Text style={styles.comingSoonTitle}>Price Compare</Text>
-              <Text style={styles.comingSoonDesc}>
-                Compare prices across stores for items on your list. Find the best deals for allergy-safe products.
-              </Text>
-            </View>
-            <View style={styles.comingSoonBadge}>
-              <Text style={styles.comingSoonBadgeText}>Soon</Text>
-            </View>
+          <View style={styles.comingSoonHeader}>
+            <Sparkles size={18} color={arcaneColors.gold} />
+            <Text style={styles.comingSoonSectionTitle}>Coming Soon</Text>
           </View>
 
-          <View style={styles.comingSoonCard}>
-            <View style={styles.comingSoonIconWrap}>
-              <MapPin size={24} color="#3B82F6" />
+          <RuneCard variant="gold">
+            <View style={styles.comingSoonSmartHeader}>
+              <ShoppingCart size={20} color={arcaneColors.goldDark} />
+              <Text style={styles.comingSoonSmartTitle}>Shopping List: Smart Mode</Text>
             </View>
-            <View style={styles.comingSoonContent}>
-              <Text style={styles.comingSoonTitle}>Store Distance & Pickup</Text>
-              <Text style={styles.comingSoonDesc}>
-                See which nearby stores carry your items and get directions or schedule pickup.
+            <Text style={styles.comingSoonSmartDesc}>
+              Add scanned items, screenshots, or manual entries. Compare prices, find nearby stores, and share with family.
+            </Text>
+            <SigilBadge label="Planned" status="legendary" size="sm" />
+          </RuneCard>
+
+          <View style={styles.comingSoonLockedCard}>
+            <View style={styles.comingSoonLockedIcon}>
+              <Lock size={14} color={arcaneColors.textMuted} />
+            </View>
+            <View style={[styles.comingSoonLockedIconBg, { backgroundColor: 'rgba(245, 158, 11, 0.10)' }]}>
+              <DollarSign size={20} color={arcaneColors.gold} />
+            </View>
+            <View style={styles.comingSoonLockedContent}>
+              <Text style={styles.comingSoonLockedTitle}>Price Compare</Text>
+              <Text style={styles.comingSoonLockedDesc}>
+                Compare prices across stores. Find the best deals for allergy-safe products.
               </Text>
             </View>
-            <View style={styles.comingSoonBadge}>
-              <Text style={styles.comingSoonBadgeText}>Soon</Text>
-            </View>
+            <SigilBadge label="Planned" status="legendary" size="sm" />
           </View>
 
-          <View style={styles.comingSoonCard}>
-            <View style={styles.comingSoonIconWrap}>
-              <Share2 size={24} color="#8B5CF6" />
+          <View style={styles.comingSoonLockedCard}>
+            <View style={styles.comingSoonLockedIcon}>
+              <Lock size={14} color={arcaneColors.textMuted} />
             </View>
-            <View style={styles.comingSoonContent}>
-              <Text style={styles.comingSoonTitle}>Share with Family</Text>
-              <Text style={styles.comingSoonDesc}>
-                Share your shopping list with family members and friends for coordinated shopping.
+            <View style={[styles.comingSoonLockedIconBg, { backgroundColor: 'rgba(59, 130, 246, 0.10)' }]}>
+              <MapPin size={20} color="#3B82F6" />
+            </View>
+            <View style={styles.comingSoonLockedContent}>
+              <Text style={styles.comingSoonLockedTitle}>Distance / Store Finder</Text>
+              <Text style={styles.comingSoonLockedDesc}>
+                See which nearby stores carry your items and get directions.
               </Text>
             </View>
-            <View style={styles.comingSoonBadge}>
-              <Text style={styles.comingSoonBadgeText}>Soon</Text>
-            </View>
+            <SigilBadge label="Planned" status="legendary" size="sm" />
           </View>
 
-          <View style={styles.comingSoonCard}>
-            <View style={styles.comingSoonIconWrap}>
-              <Upload size={24} color="#0891B2" />
+          <View style={styles.comingSoonLockedCard}>
+            <View style={styles.comingSoonLockedIcon}>
+              <Lock size={14} color={arcaneColors.textMuted} />
             </View>
-            <View style={styles.comingSoonContent}>
-              <Text style={styles.comingSoonTitle}>Auto-Add from Screenshots</Text>
-              <Text style={styles.comingSoonDesc}>
-                Upload screenshots or product photos to automatically add items to your shopping list.
+            <View style={[styles.comingSoonLockedIconBg, { backgroundColor: arcaneColors.accentMuted }]}>
+              <Share2 size={20} color={arcaneColors.accent} />
+            </View>
+            <View style={styles.comingSoonLockedContent}>
+              <Text style={styles.comingSoonLockedTitle}>Share List</Text>
+              <Text style={styles.comingSoonLockedDesc}>
+                Share your shopping list with family and friends for coordinated shopping.
               </Text>
             </View>
-            <View style={styles.comingSoonBadge}>
-              <Text style={styles.comingSoonBadgeText}>Soon</Text>
+            <SigilBadge label="Planned" status="legendary" size="sm" />
+          </View>
+
+          <View style={styles.comingSoonLockedCard}>
+            <View style={styles.comingSoonLockedIcon}>
+              <Lock size={14} color={arcaneColors.textMuted} />
             </View>
+            <View style={[styles.comingSoonLockedIconBg, { backgroundColor: arcaneColors.primaryMuted }]}>
+              <Upload size={20} color={arcaneColors.primary} />
+            </View>
+            <View style={styles.comingSoonLockedContent}>
+              <Text style={styles.comingSoonLockedTitle}>Auto-Add from Screenshots</Text>
+              <Text style={styles.comingSoonLockedDesc}>
+                Upload screenshots or product photos to auto-add items.
+              </Text>
+            </View>
+            <SigilBadge label="Planned" status="legendary" size="sm" />
           </View>
         </View>
       </ScrollView>
@@ -650,59 +671,77 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   comingSoonSection: {
-    marginTop: 24,
+    marginTop: 28,
     marginBottom: 32,
+  },
+  comingSoonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
   },
   comingSoonSectionTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: '#111827',
-    marginBottom: 12,
+    color: arcaneColors.text,
   },
-  comingSoonCard: {
+  comingSoonSmartHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
+    gap: 8,
+    marginBottom: 8,
+  },
+  comingSoonSmartTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: arcaneColors.goldDark,
+  },
+  comingSoonSmartDesc: {
+    fontSize: 13,
+    color: arcaneColors.textSecondary,
+    lineHeight: 19,
+    marginBottom: 10,
+  },
+  comingSoonLockedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
+    padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
     borderStyle: 'dashed' as const,
+    opacity: 0.75,
+    ...arcaneShadows.card,
   },
-  comingSoonIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+  comingSoonLockedIcon: {
+    position: 'absolute' as const,
+    top: 8,
+    right: 8,
+    zIndex: 1,
+  },
+  comingSoonLockedIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
-  comingSoonContent: {
+  comingSoonLockedContent: {
     flex: 1,
-    marginRight: 10,
+    marginRight: 8,
   },
-  comingSoonTitle: {
-    fontSize: 15,
+  comingSoonLockedTitle: {
+    fontSize: 14,
     fontWeight: '600' as const,
-    color: '#111827',
-    marginBottom: 3,
+    color: arcaneColors.text,
+    marginBottom: 2,
   },
-  comingSoonDesc: {
+  comingSoonLockedDesc: {
     fontSize: 12,
-    color: '#6B7280',
-    lineHeight: 17,
-  },
-  comingSoonBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  comingSoonBadgeText: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-    color: '#D97706',
+    color: arcaneColors.textMuted,
+    lineHeight: 16,
   },
 });

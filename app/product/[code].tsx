@@ -28,6 +28,7 @@ import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { addToFavorites, removeFromFavorites, isFavorite } from '@/storage/favorites';
 import * as Haptics from 'expo-haptics';
 import { analyzeIngredient, parseIngredients, getOverallSafetyScore, IngredientInfo } from '@/utils/ingredientAnalysis';
+import { TranslationCard } from '@/components/TranslationCard';
 import { addToShoppingList } from '@/storage/shoppingList';
 import { ViewModeToggle } from '@/components/ViewModeToggle';
 import { SkeletonProductCard } from '@/components/Skeleton';
@@ -938,6 +939,15 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             <InfoRow label="Barcode" value={code} />
             {product.categories && <InfoRow label="Categories" value={product.categories} />}
           </View>
+          {product.product_name && (
+            <TranslationCard
+              label="Product Name"
+              text={product.product_name}
+              compact
+              autoTranslate
+              testID="translation-product-name"
+            />
+          )}
         </View>
 
         {analyzedIngredients.length > 0 && (
@@ -1053,6 +1063,12 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             <View style={styles.ingredientsCard}>
               <Text style={styles.ingredientsText}>{product.ingredients_text}</Text>
             </View>
+            <TranslationCard
+              label="Ingredients"
+              text={product.ingredients_text}
+              autoTranslate
+              testID="translation-ingredients"
+            />
           </View>
         )}
 

@@ -47,6 +47,7 @@ import { ArcaneSpinner } from '@/components/ArcaneSpinner';
 import { RuneCard } from '@/components/RuneCard';
 import { SigilBadge } from '@/components/SigilBadge';
 import { useReduceMotion } from '@/contexts/ReduceMotionContext';
+import { TranslationCard } from '@/components/TranslationCard';
 
 
 interface ProductCaptureWizardProps {
@@ -925,6 +926,24 @@ Format response exactly as above, one per line.`;
                 <Text style={styles.readonlyText}>{barcode}</Text>
               </View>
             </View>
+          )}
+
+          {extractedData.name && (
+            <TranslationCard
+              label="Product Name"
+              text={extractedData.name}
+              compact
+              autoTranslate
+              testID="wizard-translation-name"
+            />
+          )}
+          {extractedData.ingredients && (
+            <TranslationCard
+              label="Ingredients"
+              text={extractedData.ingredients}
+              autoTranslate
+              testID="wizard-translation-ingredients"
+            />
           )}
 
           <View style={styles.previewImages}>
