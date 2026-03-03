@@ -7,7 +7,8 @@ import { UserProvider, useUser } from "@/contexts/UserContext";
 import { LiveDataContext } from "@/contexts/LiveDataContext";
 import { FamilyProvider } from "@/contexts/FamilyContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
-import { View, ActivityIndicator, Platform, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Platform, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { ArcaneSpinner } from "@/components/ArcaneSpinner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { restoreStorageFromServer, syncStorageToServer } from "@/utils/storageSync";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -325,9 +326,8 @@ function RootLayoutNav() {
 
     return (
       <View style={layoutStyles.loadingContainer}>
-        <Text style={layoutStyles.loadingSigil}>◎</Text>
         <View style={layoutStyles.loadingIconContainer}>
-          <ActivityIndicator size="large" color={arcaneColors.primary} />
+          <ArcaneSpinner size={52} />
         </View>
         <Text style={layoutStyles.loadingText}>{getLoadingMessage()}</Text>
         {loadingHint ? (
