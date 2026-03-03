@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   TextInput,
   ScrollView,
   ActivityIndicator,
@@ -22,6 +23,7 @@ import { useRouter, Href } from 'expo-router';
 import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield } from 'lucide-react-native';
 import { LockOnReticle } from '@/components/LockOnReticle';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
+import { useMysticToast } from '@/components/MysticToast';
 
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
@@ -42,6 +44,7 @@ export default function ScanScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
   const { activeProfile, profiles, isLoading: profilesLoading, isSwitchingProfile, setActiveProfile } = useProfiles();
+  const { showToast } = useMysticToast();
 
   
   const [permission, requestPermission] = useCameraPermissions();
@@ -58,6 +61,7 @@ export default function ScanScreen() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<'back' | 'front'>('back');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [noResults, setNoResults] = useState(false);
   const [detectedBannerData, setDetectedBannerData] = useState<{ code: string; show: boolean }>({ code: '', show: false });
@@ -110,6 +114,7 @@ export default function ScanScreen() {
       setImageRecognitionMode(false);
       setCapturedImage(null);
       setTorchEnabled(false);
+      setCameraFacing('back');
     }
   }, [cameraActive]);
 
@@ -860,8 +865,8 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         <CameraView
           ref={cameraRef}
           style={StyleSheet.absoluteFillObject}
-          facing="back"
-          enableTorch={torchEnabled}
+          facing={cameraFacing}
+          enableTorch={cameraFacing === 'back' ? torchEnabled : false}
           onBarcodeScanned={imageRecognitionMode ? undefined : handleBarCodeScanned}
           barcodeScannerSettings={imageRecognitionMode ? undefined : {
             barcodeTypes: [
@@ -975,27 +980,45 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         </View>
         
         {/* Flash Toggle - Bottom Left */}
-        <TouchableOpacity
-          style={styles.flashButtonBottomLeft}
+        <Pressable
+          style={({ pressed }) => [
+            styles.flashButtonBottomLeft,
+            cameraFacing === 'front' && styles.flashButtonDisabled,
+            pressed && cameraFacing === 'back' && styles.flashButtonPressed,
+          ]}
           onPress={async () => {
+            if (cameraFacing === 'front') {
+              console.log('Torch not available on front camera');
+              showToast('Torch not available on front camera', 'caution');
+              return;
+            }
             console.log('Flash button pressed, current state:', torchEnabled);
             if (Platform.OS !== 'web') {
-              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }
-            setTorchEnabled(!torchEnabled);
+            const next = !torchEnabled;
+            setTorchEnabled(next);
+            showToast(next ? 'Torch ON' : 'Torch OFF', 'info');
           }}
           testID="flash-button"
-          activeOpacity={0.7}
+          hitSlop={10}
+          disabled={false}
         >
-          {torchEnabled ? (
+          {cameraFacing === 'front' ? (
+            <FlashlightOff size={22} color="#6B7280" />
+          ) : torchEnabled ? (
             <Flashlight size={22} color="#FBBF24" />
           ) : (
             <FlashlightOff size={22} color="#FFFFFF" />
           )}
-          <Text style={[styles.flashButtonText, torchEnabled && styles.flashButtonTextActive]}>
-            {torchEnabled ? 'ON' : 'OFF'}
+          <Text style={[
+            styles.flashButtonText,
+            torchEnabled && cameraFacing === 'back' && styles.flashButtonTextActive,
+            cameraFacing === 'front' && styles.flashButtonTextDisabled,
+          ]}>
+            {cameraFacing === 'front' ? 'N/A' : torchEnabled ? 'ON' : 'OFF'}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Upload Barcode Photo - Bottom Right */}
         {!imageRecognitionMode && (
@@ -1508,9 +1531,12 @@ const styles = StyleSheet.create({
   searchHistoryBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#F3F4F6' },
   searchHistoryBadgeText: { fontSize: 12 },
   buildId: { fontSize: 11, color: '#9CA3AF', textAlign: 'center' as const, marginTop: 8, marginBottom: 16 },
-  flashButtonBottomLeft: { position: 'absolute', bottom: Platform.OS === 'ios' ? 140 : 120, left: 20, backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8, zIndex: 10 },
+  flashButtonBottomLeft: { position: 'absolute', bottom: Platform.OS === 'ios' ? 140 : 120, left: 20, backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, zIndex: 10, minWidth: 44, minHeight: 44 },
+  flashButtonDisabled: { backgroundColor: 'rgba(30,30,30,0.5)', borderWidth: 1, borderColor: 'rgba(107,114,128,0.3)' },
+  flashButtonPressed: { backgroundColor: 'rgba(50,50,50,0.95)', transform: [{ scale: 0.96 }] },
   flashButtonText: { color: '#FFF', fontSize: 14, fontWeight: '600' as const },
   flashButtonTextActive: { color: '#FBBF24' },
+  flashButtonTextDisabled: { color: '#6B7280' },
   uploadBarcodeButton: { position: 'absolute', bottom: Platform.OS === 'ios' ? 140 : 120, right: 20, backgroundColor: 'rgba(8,145,178,0.9)', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
   uploadBarcodeText: { color: '#FFF', fontSize: 15, fontWeight: '700' as const },
   errorContainer: { backgroundColor: '#FEF2F2', borderRadius: 12, padding: 20, marginBottom: 24, alignItems: 'center', borderWidth: 1, borderColor: '#FEE2E2' },
