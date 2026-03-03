@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  ScrollView,
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
 import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Wifi } from 'lucide-react-native';
@@ -18,7 +19,12 @@ import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
 import { isSupabaseConfigured, getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BUILD_ID } from '@/constants/appVersion';
+import { BUILD_ID, APP_VERSION } from '@/constants/appVersion';
+import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
+import { RuneCard } from '@/components/RuneCard';
+import { SigilBadge } from '@/components/SigilBadge';
+import { ArcaneDivider } from '@/components/ArcaneDivider';
+import { AnimatedButton } from '@/components/AnimatedButton';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -56,8 +62,6 @@ export default function WelcomeScreen() {
 
   const handleSignIn = async () => {
     console.log('Welcome: handleSignIn called, isLoading:', isLoading);
-    
-    // Dismiss keyboard to prevent touch issues
     Keyboard.dismiss();
     
     if (isLoading) {
@@ -65,7 +69,6 @@ export default function WelcomeScreen() {
       return;
     }
     
-    // Check if Supabase is configured
     if (!isSupabaseConfigured()) {
       console.error('Welcome: Supabase not configured');
       Alert.alert(
@@ -76,7 +79,6 @@ export default function WelcomeScreen() {
       return;
     }
     
-    // Phase 1: Immediate validation
     setAuthPhase('validating');
     setIsLoading(true);
     console.log('Welcome: Starting sign-in process');
@@ -110,8 +112,6 @@ export default function WelcomeScreen() {
       return;
     }
 
-    // Skip connectivity pre-checks - go directly to authentication
-    // The auth call itself will fail fast if there's no connection
     setAuthPhase('authenticating');
     try {
       console.log(`Welcome: ${mode === 'signup' ? 'Creating account' : 'Signing in'}`);
@@ -123,10 +123,8 @@ export default function WelcomeScreen() {
       
       console.log('Welcome: Onboarding complete, navigation will be handled by _layout.tsx');
       
-      // Brief delay to show success state, then let _layout.tsx handle navigation
       setTimeout(() => {
         setIsLoading(false);
-        // Keep authPhase as 'success' - _layout.tsx will navigate us away
       }, 500);
       return;
     } catch (error) {
@@ -159,7 +157,6 @@ export default function WelcomeScreen() {
         errorType = categorizeAuthError(error);
       }
       
-      // Reset phase after showing alert
       const resetPhase = () => setAuthPhase('idle');
       
       if (errorType === 'config') {
@@ -240,112 +237,151 @@ export default function WelcomeScreen() {
     }
   };
 
+  const testConnection = async () => {
+    setConnTesting(true);
+    setConnTestResult(null);
+    try {
+      const url = getSupabaseUrl();
+      const anonKey = getSupabaseAnonKey();
+      if (!url) {
+        setConnTestResult('No Supabase URL configured');
+        setConnTesting(false);
+        return;
+      }
+      if (!anonKey) {
+        setConnTestResult('No Supabase Anon Key configured');
+        setConnTesting(false);
+        return;
+      }
+      const start = Date.now();
+      const res = await fetch(`${url}/auth/v1/health`, {
+        method: 'GET',
+        headers: {
+          'apikey': anonKey,
+          'Authorization': `Bearer ${anonKey}`,
+        },
+      });
+      const elapsed = Date.now() - start;
+      if (res.ok) {
+        setConnTestResult(`Connected (${elapsed}ms)`);
+      } else {
+        const body = await res.text().catch(() => '');
+        setConnTestResult(`HTTP ${res.status} (${elapsed}ms) — ${body.substring(0, 60)}`);
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      if (msg.includes('Load failed') || msg.includes('Failed to fetch')) {
+        setConnTestResult('Network unreachable — check Wi-Fi/cellular');
+      } else if (msg.includes('timeout') || msg.includes('aborted')) {
+        setConnTestResult('Request timed out');
+      } else {
+        setConnTestResult(msg);
+      }
+    } finally {
+      setConnTesting(false);
+    }
+  };
 
+  const maskedHost = getSupabaseUrl()
+    ? getSupabaseUrl()!.replace(/https?:\/\//, '').substring(0, 20) + '···'
+    : null;
+
+  const hasAnonKey = !!getSupabaseAnonKey();
 
   if (mode === 'welcome') {
     return (
       <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <Shield size={80} color="#0891B2" strokeWidth={2} />
+        <ScrollView
+          contentContainerStyle={styles.welcomeScroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.heroSection}>
+            <RuneCard variant="default" style={styles.heroCard}>
+              <View style={styles.heroInner}>
+                <View style={styles.shieldContainer}>
+                  <Shield size={64} color={arcaneColors.primary} strokeWidth={1.8} />
+                </View>
+                <Text style={styles.title}>Allergy Guardian</Text>
+                <Text style={styles.subtitle}>
+                  Scan products and check for allergens to keep you and your loved ones safe
+                </Text>
+              </View>
+            </RuneCard>
           </View>
-          
-          <Text style={styles.title}>Allergy Guardian</Text>
-          <Text style={styles.subtitle}>
-            Scan products and check for allergens to keep you and your loved ones safe
-          </Text>
 
           <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={styles.primaryButton}
+            <AnimatedButton
+              label="Create Account"
+              variant="primary"
+              icon={<UserPlus size={20} color="#FFFFFF" />}
               onPress={() => setMode('signup')}
-            >
-              <UserPlus size={20} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>Create Account</Text>
-            </TouchableOpacity>
+              testID="create-account-button"
+              style={styles.ctaButton}
+              textStyle={styles.ctaButtonText}
+            />
 
-            <TouchableOpacity
-              style={styles.secondaryButton}
+            <Pressable
+              style={({ pressed }) => [
+                styles.outlinedButton,
+                pressed && styles.outlinedButtonPressed,
+              ]}
               onPress={() => setMode('signin')}
+              testID="sign-in-button"
             >
-              <LogIn size={20} color="#0891B2" />
-              <Text style={styles.secondaryButtonText}>Sign In</Text>
-            </TouchableOpacity>
+              <LogIn size={20} color={arcaneColors.primary} />
+              <Text style={styles.outlinedButtonText}>Sign In</Text>
+            </Pressable>
           </View>
-        </View>
 
-        <View style={styles.diagnosticsPanel}>
-          <Text style={styles.diagnosticsLabel}>Supabase Diagnostics</Text>
-          <Text style={styles.diagnosticsDetail}>
-            Host: {getSupabaseUrl() ? getSupabaseUrl()!.replace(/https?:\/\//, '').substring(0, 24) + '...' : '❌ Not configured'}
+          <ArcaneDivider label="System" variant="default" style={styles.diagDivider} />
+
+          <View style={styles.diagSection}>
+            <RuneCard variant="accent" style={styles.diagCard}>
+              <Text style={styles.diagTitle}>Supabase Diagnostics</Text>
+
+              <View style={styles.diagRow}>
+                <Text style={styles.diagLabel}>Host</Text>
+                <Text style={styles.diagValue} numberOfLines={1}>
+                  {maskedHost ?? 'Not configured'}
+                </Text>
+              </View>
+
+              <ArcaneDivider variant="accent" style={styles.diagInnerDivider} />
+
+              <View style={styles.diagRow}>
+                <Text style={styles.diagLabel}>Anon Key</Text>
+                <SigilBadge
+                  label={hasAnonKey ? 'Loaded' : 'Missing'}
+                  status={hasAnonKey ? 'safe' : 'danger'}
+                  size="sm"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.testConnectionButton}
+                onPress={testConnection}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Wifi size={13} color={arcaneColors.accent} />
+                <Text style={styles.testConnectionText}>
+                  {connTesting ? 'Testing...' : 'Test Connection'}
+                </Text>
+              </TouchableOpacity>
+
+              {connTestResult ? (
+                <Text style={styles.connResultText}>{connTestResult}</Text>
+              ) : null}
+            </RuneCard>
+          </View>
+        </ScrollView>
+
+        <View style={styles.footerContainer}>
+          <Text style={styles.footer}>
+            Your privacy matters. All data is stored securely.
           </Text>
-          <Text style={styles.diagnosticsDetail}>
-            Anon Key: {getSupabaseAnonKey() ? `✅ loaded (${getSupabaseAnonKey()!.length} chars)` : '❌ missing'}
-          </Text>
-
-          <TouchableOpacity
-            style={styles.testConnectionButton}
-            onPress={async () => {
-              setConnTesting(true);
-              setConnTestResult(null);
-              try {
-                const url = getSupabaseUrl();
-                const anonKey = getSupabaseAnonKey();
-                if (!url) {
-                  setConnTestResult('❌ No Supabase URL configured');
-                  setConnTesting(false);
-                  return;
-                }
-                if (!anonKey) {
-                  setConnTestResult('❌ No Supabase Anon Key configured');
-                  setConnTesting(false);
-                  return;
-                }
-                const masked = url.replace(/https?:\/\//, '').substring(0, 20) + '...';
-                const start = Date.now();
-                const res = await fetch(`${url}/auth/v1/health`, {
-                  method: 'GET',
-                  headers: {
-                    'apikey': anonKey,
-                    'Authorization': `Bearer ${anonKey}`,
-                  },
-                });
-                const elapsed = Date.now() - start;
-                if (res.ok) {
-                  setConnTestResult(`✅ Connected (${elapsed}ms) — ${masked}`);
-                } else {
-                  const body = await res.text().catch(() => '');
-                  setConnTestResult(`⚠️ HTTP ${res.status} (${elapsed}ms) — ${body.substring(0, 60)}`);
-                }
-              } catch (err: any) {
-                const msg = err?.message || String(err);
-                if (msg.includes('Load failed') || msg.includes('Failed to fetch')) {
-                  setConnTestResult('❌ Network unreachable — check Wi-Fi/cellular');
-                } else if (msg.includes('timeout') || msg.includes('aborted')) {
-                  setConnTestResult('❌ Request timed out');
-                } else {
-                  setConnTestResult(`❌ ${msg}`);
-                }
-              } finally {
-                setConnTesting(false);
-              }
-            }}
-          >
-            <Wifi size={14} color="#6B7280" />
-            <Text style={styles.testConnectionText}>
-              {connTesting ? 'Testing...' : 'Test Connection'}
-            </Text>
-          </TouchableOpacity>
-
-          {connTestResult ? (
-            <Text style={styles.connResultText}>{connTestResult}</Text>
-          ) : null}
+          <Text style={styles.buildId}>v{APP_VERSION} · {BUILD_ID}</Text>
         </View>
-
-        <Text style={styles.footer}>
-          Your privacy matters. All data is stored securely on your device.
-        </Text>
-        <Text style={styles.buildId}>Build: {BUILD_ID}</Text>
       </View>
     );
   }
@@ -355,43 +391,54 @@ export default function WelcomeScreen() {
       style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.authScroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => setMode('welcome')}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
 
-        <View style={styles.iconContainer}>
-          <Shield size={60} color="#0891B2" strokeWidth={2} />
+        <View style={styles.authHero}>
+          <View style={styles.shieldContainerSmall}>
+            <Shield size={48} color={arcaneColors.primary} strokeWidth={1.8} />
+          </View>
+
+          <Text style={styles.authTitle}>
+            {mode === 'signup' ? 'Create Account' : 'Welcome Back'}
+          </Text>
+          <Text style={styles.authSubtitle}>
+            {mode === 'signup'
+              ? 'Your account will be created automatically'
+              : 'Enter your credentials to continue'}
+          </Text>
         </View>
 
-        <Text style={styles.title}>
-          {mode === 'signup' ? 'Create Account' : 'Welcome Back'}
-        </Text>
-        <Text style={styles.subtitle}>
-          {mode === 'signup'
-            ? 'Your account will be created automatically'
-            : 'Enter your credentials to continue'}
-        </Text>
-
         <View style={styles.formContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email address"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isLoading}
-          />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email address"
+              placeholderTextColor={arcaneColors.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+            />
+          </View>
 
           <View style={styles.passwordContainer}>
             <TextInput
               style={styles.passwordInput}
               placeholder="Password"
+              placeholderTextColor={arcaneColors.textMuted}
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
@@ -405,9 +452,9 @@ export default function WelcomeScreen() {
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               {showPassword ? (
-                <EyeOff size={20} color="#6B7280" />
+                <EyeOff size={20} color={arcaneColors.textMuted} />
               ) : (
-                <Eye size={20} color="#6B7280" />
+                <Eye size={20} color={arcaneColors.textMuted} />
               )}
             </TouchableOpacity>
           </View>
@@ -456,36 +503,36 @@ export default function WelcomeScreen() {
           </Pressable>
 
           {isLoading && authPhase === 'checking' && (
-            <View style={styles.connectionStatusInfo}>
-              <RefreshCw size={16} color="#3B82F6" />
-              <Text style={styles.connectionStatusInfoText}>
+            <View style={styles.statusBanner}>
+              <RefreshCw size={16} color={arcaneColors.primary} />
+              <Text style={[styles.statusBannerText, { color: arcaneColors.primaryDark }]}>
                 Verifying connection...
               </Text>
             </View>
           )}
 
           {isLoading && connectionStatus === 'slow' && authPhase === 'authenticating' && (
-            <View style={styles.connectionStatus}>
-              <RefreshCw size={16} color="#F59E0B" />
-              <Text style={styles.connectionStatusText}>
+            <View style={[styles.statusBanner, { backgroundColor: arcaneColors.cautionMuted }]}>
+              <RefreshCw size={16} color={arcaneColors.caution} />
+              <Text style={[styles.statusBannerText, { color: arcaneColors.caution }]}>
                 Taking longer than expected...
               </Text>
             </View>
           )}
 
           {(authPhase === 'error' || connectionStatus === 'error') && (
-            <View style={styles.connectionStatusError}>
-              <WifiOff size={16} color="#EF4444" />
-              <Text style={styles.connectionStatusErrorText}>
+            <View style={[styles.statusBanner, { backgroundColor: arcaneColors.dangerMuted }]}>
+              <WifiOff size={16} color={arcaneColors.danger} />
+              <Text style={[styles.statusBannerText, { color: arcaneColors.danger }]}>
                 Connection issue detected
               </Text>
             </View>
           )}
 
           {authPhase === 'success' && (
-            <View style={styles.connectionStatusSuccess}>
-              <CheckCircle size={16} color="#10B981" />
-              <Text style={styles.connectionStatusSuccessText}>
+            <View style={[styles.statusBanner, { backgroundColor: arcaneColors.safeMuted }]}>
+              <CheckCircle size={16} color={arcaneColors.safe} />
+              <Text style={[styles.statusBannerText, { color: arcaneColors.safe }]}>
                 Signed in successfully!
               </Text>
             </View>
@@ -497,7 +544,7 @@ export default function WelcomeScreen() {
               : "Returning user? Sign in with your email and password."}
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -505,194 +552,276 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
   },
-  content: {
-    flex: 1,
+  welcomeScroll: {
+    flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
-  iconContainer: {
-    marginBottom: 24,
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  heroCard: {
+    width: '100%',
+    maxWidth: 400,
+    marginBottom: 0,
+  },
+  heroInner: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  shieldContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: arcaneColors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700' as const,
-    color: '#111827',
-    marginBottom: 12,
+    fontSize: 30,
+    fontWeight: '800' as const,
+    color: arcaneColors.text,
+    marginBottom: 10,
     textAlign: 'center',
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: 15,
+    color: arcaneColors.textSecondary,
     textAlign: 'center',
-    marginBottom: 48,
-    paddingHorizontal: 20,
-    lineHeight: 24,
+    lineHeight: 22,
+    paddingHorizontal: 8,
   },
   buttonContainer: {
     width: '100%',
     maxWidth: 400,
-    gap: 16,
+    alignSelf: 'center',
+    gap: 14,
+    marginBottom: 8,
   },
-  primaryButton: {
-    flexDirection: 'row',
-    backgroundColor: '#0891B2',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+  ctaButton: {
+    paddingVertical: 16,
+    borderRadius: arcaneRadius.lg,
   },
-  primaryButtonText: {
-    fontSize: 18,
+  ctaButtonText: {
+    fontSize: 17,
     fontWeight: '700' as const,
-    color: '#FFFFFF',
   },
-  secondaryButton: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    borderWidth: 2,
-    borderColor: '#0891B2',
+  outlinedButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 15,
+    borderRadius: arcaneRadius.lg,
+    borderWidth: 1.5,
+    borderColor: arcaneColors.primary,
+    backgroundColor: arcaneColors.bgCard,
+    gap: 10,
   },
-  secondaryButtonText: {
-    fontSize: 18,
+  outlinedButtonPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.98 }],
+  },
+  outlinedButtonText: {
+    fontSize: 17,
     fontWeight: '700' as const,
-    color: '#0891B2',
+    color: arcaneColors.primary,
   },
-
-  footer: {
-    fontSize: 12,
-    color: '#9CA3AF',
+  diagDivider: {
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  diagSection: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  diagCard: {
+    marginBottom: 0,
+  },
+  diagTitle: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: arcaneColors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1,
+    marginBottom: 12,
     textAlign: 'center',
-    padding: 24,
-    marginTop: 'auto' as const,
   },
-  buildId: {
-    fontSize: 10,
-    color: '#D1D5DB',
-    textAlign: 'center' as const,
-    paddingBottom: 8,
+  diagRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  diagLabel: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: arcaneColors.textSecondary,
+  },
+  diagValue: {
+    fontSize: 12,
+    color: arcaneColors.textMuted,
+    flex: 1,
+    textAlign: 'right' as const,
+    marginLeft: 12,
+  },
+  diagInnerDivider: {
+    marginVertical: 10,
   },
   testConnectionButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 4,
+    paddingVertical: 10,
+    marginTop: 8,
   },
   testConnectionText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '500' as const,
+    fontSize: 13,
+    color: arcaneColors.accent,
+    fontWeight: '600' as const,
   },
   connResultText: {
     fontSize: 11,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
     textAlign: 'center' as const,
-    paddingHorizontal: 4,
-    marginTop: 6,
-  },
-  diagnosticsPanel: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 14,
-    marginHorizontal: 24,
     marginTop: 4,
-    alignItems: 'center' as const,
   },
-  diagnosticsLabel: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-    color: '#9CA3AF',
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-    marginBottom: 6,
+  footerContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+    alignItems: 'center',
   },
-  diagnosticsDetail: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginBottom: 2,
+  footer: {
+    fontSize: 12,
+    color: arcaneColors.textMuted,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  buildId: {
+    fontSize: 10,
+    color: arcaneColors.textMuted,
+    textAlign: 'center' as const,
+    opacity: 0.6,
+  },
+
+  authScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
   },
   backButton: {
     alignSelf: 'flex-start',
-    marginBottom: 24,
+    marginBottom: 20,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
   },
   backButtonText: {
     fontSize: 16,
-    color: '#0891B2',
+    color: arcaneColors.primary,
     fontWeight: '600' as const,
+  },
+  authHero: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  shieldContainerSmall: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: arcaneColors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  authTitle: {
+    fontSize: 26,
+    fontWeight: '800' as const,
+    color: arcaneColors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  authSubtitle: {
+    fontSize: 15,
+    color: arcaneColors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   formContainer: {
     width: '100%',
     maxWidth: 400,
+    alignSelf: 'center',
+  },
+  inputWrapper: {
+    marginBottom: 14,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.md,
     padding: 16,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
+    borderColor: arcaneColors.border,
+    color: arcaneColors.text,
   },
   passwordContainer: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
+    borderColor: arcaneColors.border,
+    marginBottom: 14,
   },
   passwordInput: {
     flex: 1,
     padding: 16,
     fontSize: 16,
+    color: arcaneColors.text,
   },
   passwordToggle: {
     padding: 16,
   },
   forgotPasswordButton: {
     alignSelf: 'flex-end',
-    marginBottom: 24,
-    marginTop: -8,
+    marginBottom: 20,
+    marginTop: -6,
   },
   forgotPasswordText: {
     fontSize: 14,
-    color: '#0891B2',
+    color: arcaneColors.accent,
     fontWeight: '600' as const,
   },
   submitButton: {
-    backgroundColor: '#0891B2',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.primary,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    ...arcaneShadows.card,
   },
   submitButtonDisabled: {
     opacity: 0.5,
   },
   submitButtonPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
     transform: [{ scale: 0.98 }],
   },
   submitButtonText: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700' as const,
     color: '#FFFFFF',
   },
   infoText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: arcaneColors.textMuted,
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 18,
@@ -708,64 +837,18 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '500' as const,
   },
-  connectionStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
-  },
-  connectionStatusText: {
-    fontSize: 13,
-    color: '#92400E',
-    fontWeight: '500' as const,
-  },
-  connectionStatusError: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
-  },
-  connectionStatusErrorText: {
-    fontSize: 13,
-    color: '#991B1B',
-    fontWeight: '500' as const,
-  },
-  connectionStatusInfo: {
+  statusBanner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 8,
     marginTop: 12,
     padding: 12,
-    backgroundColor: '#DBEAFE',
-    borderRadius: 8,
+    backgroundColor: arcaneColors.primaryMuted,
+    borderRadius: arcaneRadius.md,
   },
-  connectionStatusInfoText: {
+  statusBannerText: {
     fontSize: 13,
-    color: '#1E40AF',
-    fontWeight: '500' as const,
-  },
-  connectionStatusSuccess: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 8,
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#D1FAE5',
-    borderRadius: 8,
-  },
-  connectionStatusSuccessText: {
-    fontSize: 13,
-    color: '#065F46',
     fontWeight: '500' as const,
   },
 });
