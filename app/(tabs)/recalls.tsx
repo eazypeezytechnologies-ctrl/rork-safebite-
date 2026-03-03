@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
   },
   searchSection: {
     marginBottom: 24,
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#111827',
+    color: arcaneColors.text,
   },
   searchButton: {
     backgroundColor: arcaneColors.primary,
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
   },
   emptyState: {
     alignItems: 'center',
@@ -253,13 +253,13 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 20,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 16,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
     textAlign: 'center',
   },
   resultsSection: {
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   resultsCount: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
     marginBottom: 16,
   },
   recallCard: {
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   recallProduct: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginBottom: 12,
     lineHeight: 22,
   },
@@ -304,13 +304,13 @@ const styles = StyleSheet.create({
   recallLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
     marginBottom: 2,
     textTransform: 'uppercase' as const,
   },
   recallValue: {
     fontSize: 14,
-    color: '#111827',
+    color: arcaneColors.text,
     lineHeight: 20,
   },
   classificationBadge: {
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   classificationText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: '#111827',
+    color: arcaneColors.text,
   },
   infoBox: {
     flexDirection: 'row',

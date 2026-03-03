@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect, Href } from 'expo-router';
-import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X, DollarSign, MapPin, Share2, Bell, Camera, Upload, Lock, Sparkles } from 'lucide-react-native';
+import { ShoppingCart, Plus, Trash2, Check, AlertCircle, CheckCircle, AlertTriangle, X, DollarSign, MapPin, Share2, Upload, Lock, Sparkles } from 'lucide-react-native';
 import { arcaneColors, arcaneRadius, arcaneShadows } from '@/constants/theme';
 import { RuneCard } from '@/components/RuneCard';
 import { SigilBadge } from '@/components/SigilBadge';
@@ -455,7 +455,7 @@ export default function ShoppingListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
   },
   header: {
     flexDirection: 'row',
@@ -464,14 +464,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: arcaneColors.bgCard,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: arcaneColors.border,
   },
   title: {
     fontSize: 32,
     fontWeight: '700' as const,
-    color: '#111827',
+    color: arcaneColors.text,
+    letterSpacing: 0.5,
   },
   clearButton: {
     flexDirection: 'row',
@@ -479,33 +480,34 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#FEE2E2',
+    borderRadius: arcaneRadius.md,
+    backgroundColor: arcaneColors.dangerMuted,
   },
   clearButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: '#DC2626',
+    color: arcaneColors.danger,
   },
   addSection: {
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: arcaneColors.bgCard,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: arcaneColors.border,
   },
   input: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgMist,
+    borderRadius: arcaneRadius.md,
     padding: 12,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
     marginBottom: 12,
+    color: arcaneColors.text,
   },
   addButton: {
     flexDirection: 'row',
-    backgroundColor: '#0891B2',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.primary,
+    borderRadius: arcaneRadius.lg,
     padding: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -517,21 +519,21 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#FFFFFF',
+    color: arcaneColors.textOnPrimary,
   },
   warningBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     padding: 16,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: arcaneColors.cautionMuted,
     borderBottomWidth: 1,
-    borderBottomColor: '#FDE68A',
+    borderBottomColor: arcaneColors.caution,
   },
   warningText: {
     flex: 1,
     fontSize: 14,
-    color: '#92400E',
+    color: arcaneColors.textGold,
     fontWeight: '500' as const,
   },
   scrollView: {
@@ -548,13 +550,13 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 20,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 16,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
     textAlign: 'center',
   },
   section: {
@@ -563,18 +565,19 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginBottom: 12,
   },
   itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.borderRune,
+    ...arcaneShadows.card,
   },
   itemCardChecked: {
     opacity: 0.6,
@@ -588,13 +591,13 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
+    borderColor: arcaneColors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#0891B2',
-    borderColor: '#0891B2',
+    backgroundColor: arcaneColors.primary,
+    borderColor: arcaneColors.primary,
   },
   itemContent: {
     flex: 1,
@@ -607,42 +610,42 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginBottom: 4,
   },
   itemNameChecked: {
     textDecorationLine: 'line-through' as const,
-    color: '#6B7280',
+    color: arcaneColors.textMuted,
   },
   itemBarcode: {
     fontSize: 12,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
     marginBottom: 2,
   },
   itemNotes: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: arcaneColors.textMuted,
     fontStyle: 'italic' as const,
   },
   viewModeSection: {
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: arcaneColors.bgCard,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: arcaneColors.border,
   },
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     padding: 16,
-    backgroundColor: '#DBEAFE',
+    backgroundColor: arcaneColors.primaryMuted,
     borderBottomWidth: 1,
-    borderBottomColor: '#BFDBFE',
+    borderBottomColor: arcaneColors.borderRune,
   },
   infoText: {
     flex: 1,
     fontSize: 14,
-    color: '#1E40AF',
+    color: arcaneColors.primary,
     fontWeight: '500' as const,
   },
   verdictContainer: {

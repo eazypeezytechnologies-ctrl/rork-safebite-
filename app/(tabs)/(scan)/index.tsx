@@ -20,7 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, Href } from 'expo-router';
 
-import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield, Sparkles, Zap, RotateCcw } from 'lucide-react-native';
+import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield, Sparkles, Zap, RotateCcw, Lock, Languages, Wand2 } from 'lucide-react-native';
 import { LockOnReticle } from '@/components/LockOnReticle';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
 import { useMysticToast } from '@/components/MysticToast';
@@ -40,6 +40,8 @@ import { BUILD_ID } from '@/constants/appVersion';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
 import { ArcaneDivider } from '@/components/ArcaneDivider';
+import { RuneCard } from '@/components/RuneCard';
+import { SigilBadge } from '@/components/SigilBadge';
 
 interface SmartScanResult {
   productName: string | null;
@@ -1873,8 +1875,53 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
 
 
 
+        <ArcaneDivider label="Coming Soon" variant="gold" />
+
+        <View style={styles.comingSoonSection}>
+          <RuneCard variant="accent">
+            <View style={styles.comingSoonCardHeader}>
+              <View style={[styles.comingSoonIconBg, { backgroundColor: arcaneColors.accentMuted }]}>
+                <Wand2 size={20} color={arcaneColors.accent} />
+              </View>
+              <View style={styles.comingSoonCardContent}>
+                <Text style={styles.comingSoonCardTitle}>Smart Scan Auto-Capture</Text>
+                <Text style={styles.comingSoonCardDesc}>
+                  Hands-free scanning with automatic steady-detection and continuous product recognition.
+                </Text>
+              </View>
+            </View>
+            <SigilBadge label="Beta — Improving" status="legendary" size="sm" />
+          </RuneCard>
+
+          <RuneCard variant="gold">
+            <View style={styles.comingSoonCardHeader}>
+              <View style={[styles.comingSoonIconBg, { backgroundColor: arcaneColors.goldMuted }]}>
+                <Languages size={20} color={arcaneColors.goldDark} />
+              </View>
+              <View style={styles.comingSoonCardContent}>
+                <Text style={styles.comingSoonCardTitle}>OCR Translation Improvements</Text>
+                <Text style={styles.comingSoonCardDesc}>
+                  Enhanced multi-language support, better ingredient detection, and offline translation cache.
+                </Text>
+              </View>
+            </View>
+            <SigilBadge label="Planned" status="legendary" size="sm" />
+          </RuneCard>
+
+          <View style={styles.comingSoonLockedRow}>
+            <View style={styles.comingSoonLockedItem}>
+              <Lock size={14} color={arcaneColors.textMuted} />
+              <Text style={styles.comingSoonLockedText}>Batch Scan</Text>
+            </View>
+            <View style={styles.comingSoonLockedItem}>
+              <Lock size={14} color={arcaneColors.textMuted} />
+              <Text style={styles.comingSoonLockedText}>Scan History Export</Text>
+            </View>
+          </View>
+        </View>
+
         <View style={styles.disclaimer}>
-          <AlertCircle size={16} color="#9CA3AF" />
+          <AlertCircle size={16} color={arcaneColors.textMuted} />
           <Text style={styles.disclaimerText}>
             This app is informational only. Databases may be incomplete. Always read labels and follow medical guidance.
           </Text>
@@ -1893,8 +1940,8 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, paddingTop: 16, paddingBottom: 40, minHeight: '100%' },
   profileCard: { backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.xl, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: arcaneColors.borderRune, ...arcaneShadows.card },
   profileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  profileLabel: { fontSize: 14, color: '#6B7280', marginBottom: 4 },
-  profileName: { fontSize: 24, fontWeight: '700' as const, color: '#111827' },
+  profileLabel: { fontSize: 14, color: arcaneColors.textSecondary, marginBottom: 4 },
+  profileName: { fontSize: 24, fontWeight: '700' as const, color: arcaneColors.text },
   changeLink: { fontSize: 16, color: arcaneColors.primary, fontWeight: '600' as const },
   allergensList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   allergenTag: { backgroundColor: arcaneColors.goldMuted, paddingHorizontal: 12, paddingVertical: 6, borderRadius: arcaneRadius.pill },
@@ -1903,9 +1950,9 @@ const styles = StyleSheet.create({
   scanButtonText: { fontSize: 20, fontWeight: '700' as const, color: '#FFF' },
 
   searchSection: { marginBottom: 24 },
-  sectionTitle: { fontSize: 18, fontWeight: '700' as const, color: '#111827', marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: '700' as const, color: arcaneColors.text, marginBottom: 12 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, padding: 12, gap: 12, marginBottom: 12, borderWidth: 1, borderColor: arcaneColors.border },
-  searchInput: { flex: 1, fontSize: 16, color: '#111827' },
+  searchInput: { flex: 1, fontSize: 16, color: arcaneColors.text },
   searchButton: { backgroundColor: arcaneColors.primary, borderRadius: arcaneRadius.lg, padding: 16, alignItems: 'center' },
   searchButtonDisabled: { opacity: 0.6 },
   searchButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#FFF' },
@@ -1914,12 +1961,12 @@ const styles = StyleSheet.create({
   resultContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   resultInfo: { flex: 1, marginRight: 12 },
   resultNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  resultName: { fontSize: 16, fontWeight: '600' as const, color: '#111827', flex: 1 },
+  resultName: { fontSize: 16, fontWeight: '600' as const, color: arcaneColors.text, flex: 1 },
   resultMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   productTypeBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
   productTypeEmoji: { fontSize: 11 },
   productTypeText: { fontSize: 11, fontWeight: '600' as const },
-  resultBrand: { fontSize: 13, color: '#6B7280' },
+  resultBrand: { fontSize: 13, color: arcaneColors.textSecondary },
   verdictBadge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   backButtonAbsolute: { position: 'absolute' as const, zIndex: 9999, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: 'rgba(11, 15, 20, 0.8)', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minWidth: 44, minHeight: 44, borderWidth: 1, borderColor: 'rgba(11, 110, 122, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 20 },
@@ -1946,28 +1993,28 @@ const styles = StyleSheet.create({
   captureButtonModern: { position: 'absolute', bottom: -80, alignSelf: 'center' },
   captureButtonInner: { width: 70, height: 70, borderRadius: 35, backgroundColor: arcaneColors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#FFF' },
   disclaimer: { flexDirection: 'row', gap: 8, padding: 16, backgroundColor: arcaneColors.bgMist, borderRadius: arcaneRadius.lg, marginBottom: 24 },
-  disclaimerText: { flex: 1, fontSize: 12, color: '#6B7280', lineHeight: 18 },
-  emptyText: { fontSize: 20, fontWeight: '600' as const, color: '#111827', marginTop: 16, marginBottom: 8 },
-  emptySubtext: { fontSize: 16, color: '#6B7280', marginBottom: 24 },
+  disclaimerText: { flex: 1, fontSize: 12, color: arcaneColors.textSecondary, lineHeight: 18 },
+  emptyText: { fontSize: 20, fontWeight: '600' as const, color: arcaneColors.text, marginTop: 16, marginBottom: 8 },
+  emptySubtext: { fontSize: 16, color: arcaneColors.textSecondary, marginBottom: 24 },
   primaryButton: { backgroundColor: arcaneColors.primary, borderRadius: arcaneRadius.lg, paddingHorizontal: 24, paddingVertical: 12 },
   primaryButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#FFF' },
   profileSwitcher: { marginBottom: 20 },
   switcherHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  switcherLabel: { fontSize: 14, fontWeight: '600' as const, color: '#6B7280' },
+  switcherLabel: { fontSize: 14, fontWeight: '600' as const, color: arcaneColors.textSecondary },
   profilesScroll: { flexGrow: 0 },
   profileChip: { alignItems: 'center', marginRight: 16, paddingVertical: 8, paddingHorizontal: 12, borderRadius: arcaneRadius.xl, backgroundColor: arcaneColors.bgCard, borderWidth: 2, borderColor: arcaneColors.border, minWidth: 80 },
   profileChipActive: { borderColor: arcaneColors.primary, backgroundColor: arcaneColors.primaryMuted },
   profileChipAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   profileChipAvatarActive: { borderWidth: 3, borderColor: '#FFF' },
   profileChipEmoji: { fontSize: 24 },
-  profileChipName: { fontSize: 12, fontWeight: '600' as const, color: '#6B7280', textAlign: 'center' },
-  profileChipNameActive: { color: '#0891B2' },
+  profileChipName: { fontSize: 12, fontWeight: '600' as const, color: arcaneColors.textSecondary, textAlign: 'center' as const },
+  profileChipNameActive: { color: arcaneColors.primary },
   activeIndicator: { position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
   addManualButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, padding: 16, marginBottom: 16, borderWidth: 1.5, borderColor: arcaneColors.primary, borderStyle: 'dashed' as const },
   addManualIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: arcaneColors.primaryMuted, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   addManualContent: { flex: 1 },
   addManualTitle: { fontSize: 15, fontWeight: '700' as const, color: arcaneColors.primary, marginBottom: 2 },
-  addManualSubtitle: { fontSize: 12, color: '#6B7280' },
+  addManualSubtitle: { fontSize: 12, color: arcaneColors.textSecondary },
   photoOptionsContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   imageRecognitionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: arcaneColors.accent, borderRadius: arcaneRadius.xl, padding: 16, ...arcaneShadows.glow },
   uploadPhotoButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: arcaneColors.safe, borderRadius: arcaneRadius.xl, padding: 16, shadowColor: arcaneColors.safe, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
@@ -1976,16 +2023,16 @@ const styles = StyleSheet.create({
   imageButtonSubtitle: { fontSize: 11, color: 'rgba(255,255,255,0.8)' },
   focusIndicator: { position: 'absolute', width: 80, height: 80, borderWidth: 2, borderColor: '#FFD700', borderRadius: 40, zIndex: 100 },
   previewImage: { width: 300, height: 300, borderRadius: 16, marginTop: 24, marginBottom: 16 },
-  loadingText: { marginTop: 16, fontSize: 18, fontWeight: '600' as const, color: '#111827' },
-  loadingSubtext: { marginTop: 8, fontSize: 14, color: '#6B7280' },
-  searchHistoryContainer: { backgroundColor: '#FFF', borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' },
-  searchHistoryHeader: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  searchHistoryTitle: { fontSize: 14, fontWeight: '600' as const, color: '#6B7280' },
-  searchHistoryItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  searchHistoryText: { flex: 1, fontSize: 15, color: '#111827' },
-  searchHistoryBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  loadingText: { marginTop: 16, fontSize: 18, fontWeight: '600' as const, color: arcaneColors.text },
+  loadingSubtext: { marginTop: 8, fontSize: 14, color: arcaneColors.textSecondary },
+  searchHistoryContainer: { backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, marginBottom: 12, borderWidth: 1, borderColor: arcaneColors.border, overflow: 'hidden' },
+  searchHistoryHeader: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: arcaneColors.border },
+  searchHistoryTitle: { fontSize: 14, fontWeight: '600' as const, color: arcaneColors.textSecondary },
+  searchHistoryItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: arcaneColors.borderLight },
+  searchHistoryText: { flex: 1, fontSize: 15, color: arcaneColors.text },
+  searchHistoryBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: arcaneColors.bgMist },
   searchHistoryBadgeText: { fontSize: 12 },
-  buildId: { fontSize: 11, color: '#9CA3AF', textAlign: 'center' as const, marginTop: 8, marginBottom: 16 },
+  buildId: { fontSize: 11, color: arcaneColors.textMuted, textAlign: 'center' as const, marginTop: 8, marginBottom: 16 },
   flashButtonBottomLeft: { position: 'absolute', bottom: Platform.OS === 'ios' ? 140 : 120, left: 20, backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, zIndex: 10, minWidth: 44, minHeight: 44 },
   flashButtonDisabled: { backgroundColor: 'rgba(30,30,30,0.5)', borderWidth: 1, borderColor: 'rgba(107,114,128,0.3)' },
   flashButtonPressed: { backgroundColor: 'rgba(50,50,50,0.95)', transform: [{ scale: 0.96 }] },
@@ -1998,14 +2045,14 @@ const styles = StyleSheet.create({
   errorText: { color: '#DC2626', fontSize: 14, textAlign: 'center' as const, marginTop: 8, marginBottom: 12 },
   retryButton: { backgroundColor: '#DC2626', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   retryButtonText: { color: '#FFF', fontSize: 14, fontWeight: '600' as const },
-  noResultsContainer: { backgroundColor: '#F9FAFB', borderRadius: 16, padding: 24, marginBottom: 24, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  noResultsTitle: { fontSize: 18, fontWeight: '700' as const, color: '#111827', marginTop: 16, marginBottom: 8 },
-  noResultsText: { fontSize: 14, color: '#6B7280', textAlign: 'center' as const, marginBottom: 20 },
+  noResultsContainer: { backgroundColor: arcaneColors.bgMist, borderRadius: arcaneRadius.xl, padding: 24, marginBottom: 24, alignItems: 'center', borderWidth: 1, borderColor: arcaneColors.border },
+  noResultsTitle: { fontSize: 18, fontWeight: '700' as const, color: arcaneColors.text, marginTop: 16, marginBottom: 8 },
+  noResultsText: { fontSize: 14, color: arcaneColors.textSecondary, textAlign: 'center' as const, marginBottom: 20 },
   noResultsActions: { width: '100%', gap: 12 },
   noResultsButton: { backgroundColor: arcaneColors.accent, borderRadius: arcaneRadius.lg, paddingVertical: 14, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   noResultsButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' as const },
-  noResultsButtonSecondary: { backgroundColor: '#FFF', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center', borderWidth: 2, borderColor: '#E5E7EB' },
-  noResultsButtonSecondaryText: { color: '#6B7280', fontSize: 16, fontWeight: '600' as const },
+  noResultsButtonSecondary: { backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center', borderWidth: 2, borderColor: arcaneColors.border },
+  noResultsButtonSecondaryText: { color: arcaneColors.textSecondary, fontSize: 16, fontWeight: '600' as const },
 
   modeToggleContainer: { flexDirection: 'row', backgroundColor: arcaneColors.bgElevated, borderRadius: arcaneRadius.lg, padding: 4, marginBottom: 16, gap: 4 },
   modeToggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 12, borderRadius: arcaneRadius.md },
@@ -2050,4 +2097,14 @@ const styles = StyleSheet.create({
   smartActionRow: { flexDirection: 'row', gap: 10 },
   smartActionSecondary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.md, paddingVertical: 12, borderWidth: 1, borderColor: arcaneColors.border },
   smartActionSecondaryText: { fontSize: 14, fontWeight: '600' as const, color: arcaneColors.textSecondary },
+
+  comingSoonSection: { marginBottom: 16 },
+  comingSoonCardHeader: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: 12, marginBottom: 10 },
+  comingSoonIconBg: { width: 40, height: 40, borderRadius: 10, alignItems: 'center' as const, justifyContent: 'center' as const },
+  comingSoonCardContent: { flex: 1 },
+  comingSoonCardTitle: { fontSize: 15, fontWeight: '700' as const, color: arcaneColors.text, marginBottom: 4 },
+  comingSoonCardDesc: { fontSize: 13, color: arcaneColors.textSecondary, lineHeight: 18 },
+  comingSoonLockedRow: { flexDirection: 'row' as const, gap: 10, marginTop: 4 },
+  comingSoonLockedItem: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6, backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.md, paddingVertical: 12, borderWidth: 1, borderColor: arcaneColors.border, borderStyle: 'dashed' as const, opacity: 0.65 },
+  comingSoonLockedText: { fontSize: 12, fontWeight: '600' as const, color: arcaneColors.textMuted },
 });
