@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,9 @@ import {
   Keyboard,
   ScrollView,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter, Href } from 'expo-router';
-import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Wifi } from 'lucide-react-native';
+import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Activity, Copy, RotateCcw, Server, Key } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
 import { isSupabaseConfigured, getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabase';
@@ -25,6 +26,9 @@ import { RuneCard } from '@/components/RuneCard';
 import { SigilBadge } from '@/components/SigilBadge';
 import { ArcaneDivider } from '@/components/ArcaneDivider';
 import { AnimatedButton } from '@/components/AnimatedButton';
+import { runSupabaseOperationalCheck, formatDiagnosticsForCopy } from '@/utils/supabaseHealth';
+
+type OperationalResult = Awaited<ReturnType<typeof runSupabaseOperationalCheck>>;
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -37,8 +41,10 @@ export default function WelcomeScreen() {
   const [statusMessage, setStatusMessage] = useState('');
   const [authPhase, setAuthPhase] = useState<'idle' | 'validating' | 'checking' | 'authenticating' | 'success' | 'error'>('idle');
   const [showPassword, setShowPassword] = useState(false);
-  const [connTestResult, setConnTestResult] = useState<string | null>(null);
-  const [connTesting, setConnTesting] = useState(false);
+
+  const [opResult, setOpResult] = useState<OperationalResult | null>(null);
+  const [opTesting, setOpTesting] = useState(false);
+  const [copiedDiag, setCopiedDiag] = useState(false);
 
   useEffect(() => {
     if (authPhase === 'validating') {
@@ -237,50 +243,46 @@ export default function WelcomeScreen() {
     }
   };
 
-  const testConnection = async () => {
-    setConnTesting(true);
-    setConnTestResult(null);
+  const runOperationalCheck = useCallback(async () => {
+    setOpTesting(true);
+    setOpResult(null);
+    setCopiedDiag(false);
+    console.log('[Welcome] Starting operational check...');
     try {
-      const url = getSupabaseUrl();
-      const anonKey = getSupabaseAnonKey();
-      if (!url) {
-        setConnTestResult('No Supabase URL configured');
-        setConnTesting(false);
-        return;
-      }
-      if (!anonKey) {
-        setConnTestResult('No Supabase Anon Key configured');
-        setConnTesting(false);
-        return;
-      }
-      const start = Date.now();
-      const res = await fetch(`${url}/auth/v1/health`, {
-        method: 'GET',
-        headers: {
-          'apikey': anonKey,
-          'Authorization': `Bearer ${anonKey}`,
-        },
-      });
-      const elapsed = Date.now() - start;
-      if (res.ok) {
-        setConnTestResult(`Connected (${elapsed}ms)`);
-      } else {
-        const body = await res.text().catch(() => '');
-        setConnTestResult(`HTTP ${res.status} (${elapsed}ms) — ${body.substring(0, 60)}`);
-      }
+      const result = await runSupabaseOperationalCheck();
+      setOpResult(result);
+      console.log('[Welcome] Operational check result:', result.summary);
     } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.includes('Load failed') || msg.includes('Failed to fetch')) {
-        setConnTestResult('Network unreachable — check Wi-Fi/cellular');
-      } else if (msg.includes('timeout') || msg.includes('aborted')) {
-        setConnTestResult('Request timed out');
-      } else {
-        setConnTestResult(msg);
-      }
+      console.error('[Welcome] Operational check failed:', err);
+      setOpResult({
+        ok: false,
+        checks: {
+          authHealth: { ok: false, message: err?.message || 'Unknown error' },
+          restHealth: { ok: false, message: 'Not checked' },
+          keyValid: { ok: false, message: 'Not checked' },
+        },
+        summary: err?.message || 'Operational check failed',
+        timestamp: new Date().toISOString(),
+        buildInfo: { url: null, keyPresent: false },
+      });
     } finally {
-      setConnTesting(false);
+      setOpTesting(false);
     }
-  };
+  }, []);
+
+  const copyDiagnostics = useCallback(async () => {
+    if (!opResult) return;
+    try {
+      const text = formatDiagnosticsForCopy(opResult);
+      await Clipboard.setStringAsync(text);
+      setCopiedDiag(true);
+      setTimeout(() => setCopiedDiag(false), 3000);
+      console.log('[Welcome] Diagnostics copied to clipboard');
+    } catch (err) {
+      console.error('[Welcome] Failed to copy diagnostics:', err);
+      Alert.alert('Copy Failed', 'Could not copy diagnostics to clipboard.');
+    }
+  }, [opResult]);
 
   const maskedHost = getSupabaseUrl()
     ? getSupabaseUrl()!.replace(/https?:\/\//, '').substring(0, 20) + '···'
@@ -338,7 +340,16 @@ export default function WelcomeScreen() {
 
           <View style={styles.diagSection}>
             <RuneCard variant="accent" style={styles.diagCard}>
-              <Text style={styles.diagTitle}>Supabase Diagnostics</Text>
+              <Text style={styles.diagTitle}>OPERATIONAL STATUS</Text>
+
+              <View style={styles.diagRow}>
+                <Text style={styles.diagLabel}>Build</Text>
+                <Text style={styles.diagValue} numberOfLines={1}>
+                  v{APP_VERSION} · {BUILD_ID}
+                </Text>
+              </View>
+
+              <ArcaneDivider variant="accent" style={styles.diagInnerDivider} />
 
               <View style={styles.diagRow}>
                 <Text style={styles.diagLabel}>Host</Text>
@@ -358,20 +369,104 @@ export default function WelcomeScreen() {
                 />
               </View>
 
-              <TouchableOpacity
-                style={styles.testConnectionButton}
-                onPress={testConnection}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Wifi size={13} color={arcaneColors.accent} />
-                <Text style={styles.testConnectionText}>
-                  {connTesting ? 'Testing...' : 'Test Connection'}
-                </Text>
-              </TouchableOpacity>
+              <ArcaneDivider variant="accent" style={styles.diagInnerDivider} />
 
-              {connTestResult ? (
-                <Text style={styles.connResultText}>{connTestResult}</Text>
-              ) : null}
+              <View style={styles.diagRow}>
+                <Text style={styles.diagLabel}>Overall</Text>
+                {opResult ? (
+                  <SigilBadge
+                    label={opResult.ok ? 'PASS' : 'FAIL'}
+                    status={opResult.ok ? 'safe' : 'danger'}
+                    size="sm"
+                  />
+                ) : (
+                  <Text style={styles.diagValueMuted}>Not tested</Text>
+                )}
+              </View>
+
+              {opResult && (
+                <>
+                  <ArcaneDivider variant="accent" style={styles.diagInnerDivider} />
+
+                  <View style={styles.checkRow}>
+                    <Server size={12} color={opResult.checks.authHealth.ok ? arcaneColors.safe : arcaneColors.danger} />
+                    <Text style={styles.checkLabel}>Auth Health</Text>
+                    <SigilBadge
+                      label={opResult.checks.authHealth.ok ? 'OK' : `${opResult.checks.authHealth.status ?? 'ERR'}`}
+                      status={opResult.checks.authHealth.ok ? 'safe' : 'danger'}
+                      size="sm"
+                    />
+                    {opResult.checks.authHealth.ms != null && (
+                      <Text style={styles.msText}>{opResult.checks.authHealth.ms}ms</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.checkRow}>
+                    <Activity size={12} color={opResult.checks.restHealth.ok ? arcaneColors.safe : arcaneColors.danger} />
+                    <Text style={styles.checkLabel}>REST Health</Text>
+                    <SigilBadge
+                      label={opResult.checks.restHealth.ok ? 'OK' : `${opResult.checks.restHealth.status ?? 'ERR'}`}
+                      status={opResult.checks.restHealth.ok ? 'safe' : 'danger'}
+                      size="sm"
+                    />
+                    {opResult.checks.restHealth.ms != null && (
+                      <Text style={styles.msText}>{opResult.checks.restHealth.ms}ms</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.checkRow}>
+                    <Key size={12} color={opResult.checks.keyValid.ok ? arcaneColors.safe : arcaneColors.danger} />
+                    <Text style={styles.checkLabel}>Key Valid</Text>
+                    <SigilBadge
+                      label={opResult.checks.keyValid.ok ? 'Valid' : 'Invalid'}
+                      status={opResult.checks.keyValid.ok ? 'safe' : 'danger'}
+                      size="sm"
+                    />
+                  </View>
+
+                  <Text style={styles.summaryText}>{opResult.summary}</Text>
+
+                  {!opResult.ok && (
+                    <View style={styles.hintBox}>
+                      <AlertCircle size={13} color={arcaneColors.caution} />
+                      <Text style={styles.hintText}>
+                        If you see 401: confirm SUPABASE_URL uses https:// and anon key matches this project.
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+
+              <View style={styles.opButtonRow}>
+                <TouchableOpacity
+                  style={styles.opButton}
+                  onPress={runOperationalCheck}
+                  disabled={opTesting}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <RotateCcw size={13} color={opTesting ? arcaneColors.textMuted : arcaneColors.accent} />
+                  <Text style={[styles.opButtonText, opTesting && styles.opButtonTextDisabled]}>
+                    {opTesting ? 'Checking...' : opResult ? 'Retry' : 'Run Check'}
+                  </Text>
+                </TouchableOpacity>
+
+                {opResult && (
+                  <TouchableOpacity
+                    style={styles.opButton}
+                    onPress={copyDiagnostics}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {copiedDiag ? (
+                      <CheckCircle size={13} color={arcaneColors.safe} />
+                    ) : (
+                      <Copy size={13} color={arcaneColors.accent} />
+                    )}
+                    <Text style={styles.opButtonText}>
+                      {copiedDiag ? 'Copied!' : 'Copy Diagnostics'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </RuneCard>
           </View>
         </ScrollView>
@@ -673,24 +768,76 @@ const styles = StyleSheet.create({
   diagInnerDivider: {
     marginVertical: 10,
   },
-  testConnectionButton: {
+  diagValueMuted: {
+    fontSize: 12,
+    color: arcaneColors.textMuted,
+  },
+  checkRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 6,
-    paddingVertical: 10,
-    marginTop: 8,
+    gap: 8,
+    paddingVertical: 5,
   },
-  testConnectionText: {
-    fontSize: 13,
-    color: arcaneColors.accent,
+  checkLabel: {
+    fontSize: 12,
     fontWeight: '600' as const,
+    color: arcaneColors.textSecondary,
+    flex: 1,
   },
-  connResultText: {
+  msText: {
+    fontSize: 10,
+    color: arcaneColors.textMuted,
+    marginLeft: 4,
+    minWidth: 36,
+    textAlign: 'right' as const,
+  },
+  summaryText: {
     fontSize: 11,
     color: arcaneColors.textSecondary,
     textAlign: 'center' as const,
-    marginTop: 4,
+    marginTop: 10,
+    fontWeight: '500' as const,
+    lineHeight: 16,
+  },
+  hintBox: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: 6,
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: arcaneColors.cautionMuted,
+    borderRadius: arcaneRadius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.2)',
+  },
+  hintText: {
+    fontSize: 11,
+    color: arcaneColors.caution,
+    flex: 1,
+    lineHeight: 16,
+  },
+  opButtonRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 16,
+    marginTop: 12,
+    paddingTop: 4,
+  },
+  opButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  opButtonText: {
+    fontSize: 12,
+    color: arcaneColors.accent,
+    fontWeight: '600' as const,
+  },
+  opButtonTextDisabled: {
+    color: arcaneColors.textMuted,
   },
   footerContainer: {
     paddingHorizontal: 24,
