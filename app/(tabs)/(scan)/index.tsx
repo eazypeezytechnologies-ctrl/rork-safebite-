@@ -18,7 +18,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, Href } from 'expo-router';
 
-import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus } from 'lucide-react-native';
+import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield } from 'lucide-react-native';
+import { LockOnReticle } from '@/components/LockOnReticle';
+import { ArcaneSpinner } from '@/components/ArcaneSpinner';
+
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { searchProductByBarcode, searchProductsByName, searchProductByUrl } from '@/api/products';
@@ -37,6 +40,7 @@ export default function ScanScreen() {
   const router = useRouter();
   const { currentUser } = useUser();
   const { activeProfile, profiles, isLoading: profilesLoading, isSwitchingProfile, setActiveProfile } = useProfiles();
+
   
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraActive, setCameraActive] = useState(false);
@@ -54,8 +58,11 @@ export default function ScanScreen() {
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [noResults, setNoResults] = useState(false);
+  const [detectedBannerData, setDetectedBannerData] = useState<{ code: string; show: boolean }>({ code: '', show: false });
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const detectedBannerAnim = useRef(new Animated.Value(0)).current;
+  const lockPulseAnim = useRef(new Animated.Value(0)).current;
 
 
   useEffect(() => {
@@ -179,10 +186,23 @@ export default function ScanScreen() {
         console.log('Haptics error:', error);
       }
     }
-    
-    setCameraActive(false);
+
+    setDetectedBannerData({ code: barcode, show: true });
+    Animated.timing(detectedBannerAnim, {
+      toValue: 1,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    Animated.sequence([
+      Animated.timing(lockPulseAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+      Animated.timing(lockPulseAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
     
     setTimeout(() => {
+      setCameraActive(false);
+      setDetectedBannerData({ code: '', show: false });
+      detectedBannerAnim.setValue(0);
       console.log('=== Initiating Navigation ===');
       console.log('Barcode:', barcode);
       console.log('Barcode type:', typeof barcode);
@@ -827,6 +847,12 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
 
   if (cameraActive) {
     console.log('Rendering camera view, scanned state:', scanned, 'image mode:', imageRecognitionMode);
+
+    const bannerTranslateY = detectedBannerAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-60, 0],
+    });
+
     return (
       <View style={styles.cameraContainer}>
         <CameraView
@@ -849,27 +875,53 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           onTouchEnd={handleCameraPress}
         />
         
-        {/* Header */}
+        {/* Header - Back/Exit pill */}
         <View style={styles.cameraHeader}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
               console.log('Back button pressed - closing camera');
               setCameraActive(false);
+              setDetectedBannerData({ code: '', show: false });
+              detectedBannerAnim.setValue(0);
             }}
             testID="camera-back-button"
             activeOpacity={0.7}
           >
-            <X size={22} color="#FFFFFF" />
-            <Text style={styles.backButtonText}>Back</Text>
+            <X size={18} color="#FFFFFF" />
+            <Text style={styles.backButtonText}>Exit</Text>
           </TouchableOpacity>
           
           <View style={styles.headerRight}>
             {scanned && <View style={styles.processingDot} />}
           </View>
         </View>
+
+        {/* Detected Banner */}
+        {detectedBannerData.show && (
+          <Animated.View
+            style={[
+              styles.detectedBanner,
+              {
+                opacity: detectedBannerAnim,
+                transform: [{ translateY: bannerTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.detectedBannerGlow} />
+            <View style={styles.detectedBannerContent}>
+              <View style={styles.detectedBannerIcon}>
+                <Shield size={16} color="#10B981" />
+              </View>
+              <View style={styles.detectedBannerTextWrap}>
+                <Text style={styles.detectedBannerTitle}>Barcode Detected</Text>
+                <Text style={styles.detectedBannerCode}>{detectedBannerData.code}</Text>
+              </View>
+            </View>
+          </Animated.View>
+        )}
         
-        {/* Corner Brackets */}
+        {/* Lock-On Reticle */}
         <View style={styles.scanAreaContainer}>
           {focusPoint && (
             <View
@@ -885,11 +937,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           
           {imageRecognitionMode ? (
             <View style={styles.photoFrameContainer}>
-              {/* Photo Frame Corners */}
-              <View style={[styles.corner, styles.cornerTopLeft]} />
-              <View style={[styles.corner, styles.cornerTopRight]} />
-              <View style={[styles.corner, styles.cornerBottomLeft]} />
-              <View style={[styles.corner, styles.cornerBottomRight]} />
+              <LockOnReticle size={280} color="rgba(109, 40, 217, 0.6)" />
               
               <TouchableOpacity 
                 style={styles.captureButtonModern} 
@@ -903,15 +951,16 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             </View>
           ) : (
             <View style={styles.scanFrameContainer}>
-              {/* Corner Brackets */}
-              <View style={[styles.corner, styles.cornerTopLeft]} />
-              <View style={[styles.corner, styles.cornerTopRight]} />
-              <View style={[styles.corner, styles.cornerBottomLeft]} />
-              <View style={[styles.corner, styles.cornerBottomRight]} />
+              <LockOnReticle
+                size={280}
+                locked={scanned}
+                color="rgba(11, 110, 122, 0.7)"
+                lockedColor="#10B981"
+              />
               
               {scanned && (
                 <View style={styles.processingOverlay}>
-                  <ActivityIndicator size="large" color="#FFFFFF" />
+                  <ArcaneSpinner size={40} />
                 </View>
               )}
             </View>
@@ -932,9 +981,9 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           activeOpacity={0.7}
         >
           {torchEnabled ? (
-            <Flashlight size={24} color="#FBBF24" />
+            <Flashlight size={22} color="#FBBF24" />
           ) : (
-            <FlashlightOff size={24} color="#FFFFFF" />
+            <FlashlightOff size={22} color="#FFFFFF" />
           )}
           <Text style={[styles.flashButtonText, torchEnabled && styles.flashButtonTextActive]}>
             {torchEnabled ? 'ON' : 'OFF'}
@@ -956,7 +1005,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             testID="upload-barcode-button"
             activeOpacity={0.7}
           >
-            <Upload size={20} color="#FFFFFF" />
+            <Upload size={18} color="#FFFFFF" />
             <Text style={styles.uploadBarcodeText}>Upload</Text>
           </TouchableOpacity>
         )}
@@ -964,18 +1013,18 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         {/* Bottom Status Card */}
         <View style={styles.bottomCard}>
           <View style={styles.bottomCardIcon}>
-            <Camera size={20} color="#FFFFFF" />
+            <Shield size={20} color={scanned ? '#10B981' : '#FFFFFF'} />
           </View>
           <View style={styles.bottomCardContent}>
             <Text style={styles.bottomCardTitle}>
-              {imageRecognitionMode ? 'Photo Mode' : scanned ? 'Processing...' : 'Ready to Scan'}
+              {imageRecognitionMode ? 'Photo Mode' : scanned ? 'Lock-On!' : 'Guardian Active'}
             </Text>
             <Text style={styles.bottomCardSubtitle}>
               {imageRecognitionMode 
                 ? 'Tap button to capture product' 
                 : scanned 
-                  ? 'Analyzing barcode...' 
-                  : 'Position barcode in frame'}
+                  ? 'Barcode acquired — analyzing...' 
+                  : 'Position barcode in the reticle'}
             </Text>
           </View>
         </View>
@@ -986,12 +1035,12 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
   if (isAnalyzing) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={arcaneColors.primary} />
-        <Text style={styles.loadingText}>Analyzing product image...</Text>
+        <ArcaneSpinner size={64} />
+        <Text style={styles.loadingText}>Calling the Archive…</Text>
         {capturedImage && (
           <Image source={{ uri: capturedImage }} style={styles.previewImage} />
         )}
-        <Text style={styles.loadingSubtext}>This may take a few moments</Text>
+        <Text style={styles.loadingSubtext}>Analyzing your product image</Text>
       </View>
     );
   }
@@ -1390,19 +1439,21 @@ const styles = StyleSheet.create({
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   cameraHeader: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 },
   headerLeft: { width: 44, height: 44 },
-  backButton: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, backgroundColor: 'rgba(220,38,38,0.85)', borderRadius: 24, paddingHorizontal: 18, paddingVertical: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  backButton: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: 'rgba(11, 15, 20, 0.75)', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(11, 110, 122, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
   backButtonText: { fontSize: 16, fontWeight: '700' as const, color: '#FFF' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   processingDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FBBF24' },
   closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   scanAreaContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scanFrameContainer: { width: 280, height: 280, position: 'relative' },
+  scanFrameContainer: { width: 280, height: 280, position: 'relative', justifyContent: 'center', alignItems: 'center' },
   photoFrameContainer: { width: 280, height: 280, position: 'relative', justifyContent: 'center', alignItems: 'center' },
-  corner: { position: 'absolute', width: 60, height: 60, borderColor: '#FFF' },
-  cornerTopLeft: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 4 },
-  cornerTopRight: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 4 },
-  cornerBottomLeft: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 4 },
-  cornerBottomRight: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 4 },
+  detectedBanner: { position: 'absolute', top: Platform.OS === 'ios' ? 115 : 95, left: 20, right: 20, zIndex: 20 },
+  detectedBannerGlow: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 14, backgroundColor: 'rgba(16, 185, 129, 0.08)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
+  detectedBannerContent: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, gap: 12 },
+  detectedBannerIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(16, 185, 129, 0.2)', alignItems: 'center', justifyContent: 'center' },
+  detectedBannerTextWrap: { flex: 1 },
+  detectedBannerTitle: { fontSize: 14, fontWeight: '700' as const, color: '#10B981', marginBottom: 1 },
+  detectedBannerCode: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '500' as const },
   processingOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8 },
   bottomCard: { position: 'absolute', bottom: Platform.OS === 'ios' ? 50 : 30, left: 20, right: 20, backgroundColor: 'rgba(30,30,30,0.95)', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', gap: 16 },
   bottomCardIcon: { width: 44, height: 44, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },

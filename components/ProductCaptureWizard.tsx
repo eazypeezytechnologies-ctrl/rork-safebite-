@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  ActivityIndicator,
   Platform,
   Alert,
   Image,
   Animated,
+  Easing,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,6 +25,11 @@ import {
   ChevronRight,
   ChevronLeft,
   RefreshCw,
+  Search,
+  Shield,
+  Sparkles,
+  Eye,
+  FileText,
 } from 'lucide-react-native';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { Product, ProductType } from '@/types';
@@ -33,10 +38,16 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { calculateVerdict } from '@/utils/verdict';
-import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
+import { guessProductType, getProductTypeLabel, getProductTypeColor } from '@/utils/productType';
 import { addToScanHistory } from '@/storage/scanHistory';
 import { cacheProduct } from '@/storage/productCache';
 import { resetBarcodeDebounce } from '@/api/products';
+import { arcaneColors, arcaneRadius, arcaneShadows } from '@/constants/theme';
+import { ArcaneSpinner } from '@/components/ArcaneSpinner';
+import { RuneCard } from '@/components/RuneCard';
+import { SigilBadge } from '@/components/SigilBadge';
+import { useReduceMotion } from '@/contexts/ReduceMotionContext';
+
 
 interface ProductCaptureWizardProps {
   barcode: string;
@@ -59,6 +70,7 @@ export default function ProductCaptureWizard({ barcode, onProductSaved, onCancel
   const { activeProfile } = useProfiles();
   const { currentUser } = useUser();
   const queryClient = useQueryClient();
+  const { reduceMotion } = useReduceMotion();
   const [permission, requestPermission] = useCameraPermissions();
 
   const [step, setStep] = useState<WizardStep>(1);
@@ -85,8 +97,14 @@ export default function ProductCaptureWizard({ barcode, onProductSaved, onCancel
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [productType, setProductType] = useState<ProductType>('food');
   const [savedProductName, setSavedProductName] = useState('');
+  const [autoReturnCountdown, setAutoReturnCountdown] = useState(4);
+  const autoReturnTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoReturnCancelled = useRef(false);
 
   const progressAnim = useRef(new Animated.Value(1)).current;
+  const stepFadeAnim = useRef(new Animated.Value(1)).current;
+  const successScaleAnim = useRef(new Animated.Value(0.9)).current;
+  const successOpacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(progressAnim, {
@@ -94,7 +112,59 @@ export default function ProductCaptureWizard({ barcode, onProductSaved, onCancel
       duration: 300,
       useNativeDriver: false,
     }).start();
-  }, [step, progressAnim]);
+    stepFadeAnim.setValue(0);
+    Animated.timing(stepFadeAnim, {
+      toValue: 1,
+      duration: reduceMotion ? 0 : 250,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [step, progressAnim, stepFadeAnim, reduceMotion]);
+
+  useEffect(() => {
+    if (saveSuccess) {
+      autoReturnCancelled.current = false;
+      setAutoReturnCountdown(4);
+      Animated.parallel([
+        Animated.timing(successScaleAnim, {
+          toValue: 1,
+          duration: reduceMotion ? 0 : 350,
+          easing: Easing.out(Easing.back(1.2)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(successOpacityAnim, {
+          toValue: 1,
+          duration: reduceMotion ? 0 : 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      autoReturnTimerRef.current = setInterval(() => {
+        if (autoReturnCancelled.current) {
+          if (autoReturnTimerRef.current) clearInterval(autoReturnTimerRef.current);
+          return;
+        }
+        setAutoReturnCountdown(prev => {
+          if (prev <= 1) {
+            if (autoReturnTimerRef.current) clearInterval(autoReturnTimerRef.current);
+            if (onNavigateToScan) {
+              onNavigateToScan();
+            } else {
+              onProductSaved({ code: barcode, product_name: savedProductName, source: 'manual_entry' } as Product);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      successScaleAnim.setValue(0.9);
+      successOpacityAnim.setValue(0);
+    }
+    return () => {
+      if (autoReturnTimerRef.current) clearInterval(autoReturnTimerRef.current);
+    };
+  }, [saveSuccess, reduceMotion, successScaleAnim, successOpacityAnim, barcode, savedProductName, onNavigateToScan, onProductSaved]);
 
   useEffect(() => {
     if (isAnalyzing) {
@@ -381,6 +451,39 @@ Format response exactly as above, one per line.`;
     }
   }, [barcode, extractedData, currentUser, activeProfile, onProductSaved]);
 
+  const renderRunicStepper = () => {
+    const STEP_INFO = [
+      { num: 1, label: 'Front', icon: <Eye size={14} color={step >= 1 ? '#FFF' : arcaneColors.textMuted} /> },
+      { num: 2, label: 'Ingredients', icon: <FileText size={14} color={step >= 2 ? '#FFF' : arcaneColors.textMuted} /> },
+      { num: 3, label: 'Seal', icon: <Shield size={14} color={step >= 3 ? '#FFF' : arcaneColors.textMuted} /> },
+    ];
+    return (
+      <View style={styles.runicStepperRow}>
+        {STEP_INFO.map((s, i) => (
+          <View key={s.num} style={styles.runicStepWrap}>
+            {i > 0 && (
+              <View style={[
+                styles.runicStepLine,
+                step > i ? styles.runicStepLineActive : null,
+              ]} />
+            )}
+            <View style={[
+              styles.runicStepCircle,
+              step >= s.num && styles.runicStepCircleActive,
+              step === s.num && styles.runicStepCircleCurrent,
+            ]}>
+              {s.icon}
+            </View>
+            <Text style={[
+              styles.runicStepLabel,
+              step === s.num && styles.runicStepLabelActive,
+            ]}>{s.label}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   if (cameraActive) {
     return (
       <View style={styles.cameraContainer}>
@@ -452,32 +555,32 @@ Format response exactly as above, one per line.`;
   if (isAnalyzing) {
     return (
       <View style={styles.analyzeContainer}>
-        <View style={styles.stepperRow}>
-          {[1, 2, 3].map(s => (
-            <View key={s} style={[styles.stepDot, step >= s && styles.stepDotActive]} />
-          ))}
-        </View>
-        <ActivityIndicator size="large" color="#0891B2" />
+        {renderRunicStepper()}
+        <ArcaneSpinner size={64} />
         <Text style={styles.analyzeTitle}>
-          {analyzeTarget === 'front' ? 'Reading product label...' : 'Extracting ingredients...'}
+          {analyzeTarget === 'front' ? 'Reading the inscription…' : 'Extracting ingredients…'}
         </Text>
         <Text style={styles.analyzeSubtitle}>Step {step} of 3</Text>
         {analysisElapsed >= 10 && analysisElapsed < 20 && (
-          <Text style={styles.slowText}>Still working...</Text>
+          <RuneCard variant="gold" style={{ marginTop: 16, width: '90%' }}>
+            <Text style={styles.slowText}>Calling the Archive… (may take a moment)</Text>
+          </RuneCard>
         )}
         {analysisElapsed >= 20 && (
           <View style={styles.retryRow}>
-            <Text style={styles.slowText}>Taking longer than expected</Text>
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={() => {
-                setIsAnalyzing(false);
-                Alert.alert('Timeout', 'Analysis took too long. You can edit the fields manually or try again.');
-              }}
-            >
-              <RefreshCw size={16} color="#FFFFFF" />
-              <Text style={styles.retryBtnText}>Cancel</Text>
-            </TouchableOpacity>
+            <RuneCard variant="danger" style={{ width: '90%' }}>
+              <Text style={styles.slowText}>Taking longer than expected</Text>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => {
+                  setIsAnalyzing(false);
+                  Alert.alert('Timeout', 'Analysis took too long. You can edit the fields manually or try again.');
+                }}
+              >
+                <RefreshCw size={16} color="#FFFFFF" />
+                <Text style={styles.retryBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </RuneCard>
           </View>
         )}
         {(analyzeTarget === 'front' && frontImage) && (
@@ -492,19 +595,29 @@ Format response exactly as above, one per line.`;
 
   if (saveSuccess) {
     return (
-      <View style={styles.successContainer}>
-        <View style={styles.successIcon}>
-          <Check size={40} color="#FFFFFF" />
+      <Animated.View style={[
+        styles.successContainer,
+        {
+          opacity: successOpacityAnim,
+          transform: [{ scale: successScaleAnim }],
+        },
+      ]}>
+        <View style={styles.successSigilRing}>
+          <View style={styles.successIcon}>
+            <Check size={36} color="#FFFFFF" />
+          </View>
         </View>
-        <Text style={styles.successTitle}>Product Saved!</Text>
+        <Text style={styles.successTitle}>Inscription Sealed!</Text>
         <Text style={styles.successSubtitle}>
-          {savedProductName || extractedData.name} is now searchable and in your history.
+          {savedProductName || extractedData.name} is now in the Archive.
         </Text>
 
         <View style={styles.successActions}>
           <TouchableOpacity
             style={styles.successPrimaryBtn}
             onPress={() => {
+              autoReturnCancelled.current = true;
+              if (autoReturnTimerRef.current) clearInterval(autoReturnTimerRef.current);
               if (onNavigateToScan) {
                 onNavigateToScan();
               } else {
@@ -520,6 +633,8 @@ Format response exactly as above, one per line.`;
           <TouchableOpacity
             style={styles.successSecondaryBtn}
             onPress={() => {
+              autoReturnCancelled.current = true;
+              if (autoReturnTimerRef.current) clearInterval(autoReturnTimerRef.current);
               if (onNavigateToSearch) {
                 onNavigateToSearch(savedProductName);
               } else {
@@ -528,51 +643,48 @@ Format response exactly as above, one per line.`;
             }}
             activeOpacity={0.8}
           >
+            <Search size={18} color={arcaneColors.primary} />
             <Text style={styles.successSecondaryBtnText}>Search to Confirm</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.comingSoonCard}>
-          <Text style={styles.comingSoonIcon}>🛒</Text>
-          <Text style={styles.comingSoonTitle}>Add to Shopping List</Text>
-          <Text style={styles.comingSoonLabel}>Coming Soon</Text>
-          <Text style={styles.comingSoonDesc}>
-            Save products to a shared shopping list with price comparison and store locations.
-          </Text>
-        </View>
-      </View>
+        {!autoReturnCancelled.current && autoReturnCountdown > 0 && (
+          <TouchableOpacity
+            style={styles.autoReturnRow}
+            onPress={() => {
+              autoReturnCancelled.current = true;
+              if (autoReturnTimerRef.current) clearInterval(autoReturnTimerRef.current);
+              setAutoReturnCountdown(0);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.autoReturnText}>Returning to scan in {autoReturnCountdown}s</Text>
+            <Text style={styles.autoReturnCancel}>Cancel</Text>
+          </TouchableOpacity>
+        )}
+      </Animated.View>
     );
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <View style={styles.stepperRow}>
-        {[1, 2, 3].map(s => (
-          <View key={s} style={styles.stepIndicatorWrap}>
-            <View style={[styles.stepCircle, step >= s && styles.stepCircleActive]}>
-              <Text style={[styles.stepCircleText, step >= s && styles.stepCircleTextActive]}>
-                {s}
-              </Text>
-            </View>
-            <Text style={[styles.stepLabel, step === s && styles.stepLabelActive]}>
-              {s === 1 ? 'Front' : s === 2 ? 'Ingredients' : 'Save'}
-            </Text>
-          </View>
-        ))}
-      </View>
+      {renderRunicStepper()}
 
       {barcode && /^\d{8,14}$/.test(barcode) && (
         <View style={styles.barcodeTag}>
-          <Text style={styles.barcodeTagText}>Barcode: {barcode}</Text>
+          <Text style={styles.barcodeTagText}>◎ {barcode}</Text>
         </View>
       )}
 
       {step === 1 && (
-        <View style={styles.stepBody}>
-          <Text style={styles.stepTitle}>Step 1: Product Front</Text>
-          <Text style={styles.stepDesc}>
-            Take or upload a photo of the product front so we can identify it.
-          </Text>
+        <Animated.View style={[styles.stepBody, { opacity: stepFadeAnim }]}>
+          <Text style={styles.stepTitle}>Product Front</Text>
+          <RuneCard variant="default" style={{ marginBottom: 16 }}>
+            <View style={styles.tipRow}>
+              <Sparkles size={16} color={arcaneColors.primary} />
+              <Text style={styles.tipText}>Hold steady — we’ll read Name + Brand</Text>
+            </View>
+          </RuneCard>
 
           {frontImage ? (
             <View style={styles.imagePreviewWrap}>
@@ -617,15 +729,15 @@ Format response exactly as above, one per line.`;
           )}
 
           {(extractedData.name || extractedData.brand) && (
-            <View style={styles.extractedSection}>
-              <Text style={styles.extractedLabel}>Detected:</Text>
+            <RuneCard variant="gold" style={{ marginBottom: 8 }}>
+              <Text style={styles.extractedLabel}>✨ Detected</Text>
               {extractedData.name ? (
                 <Text style={styles.extractedValue}>Name: {extractedData.name}</Text>
               ) : null}
               {extractedData.brand ? (
                 <Text style={styles.extractedValue}>Brand: {extractedData.brand}</Text>
               ) : null}
-            </View>
+            </RuneCard>
           )}
 
           <View style={styles.navRow}>
@@ -641,15 +753,18 @@ Format response exactly as above, one per line.`;
               <ChevronRight size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {step === 2 && (
-        <View style={styles.stepBody}>
-          <Text style={styles.stepTitle}>Step 2: Ingredients Label</Text>
-          <Text style={styles.stepDesc}>
-            Capture the ingredients list so we can check for allergens. This is strongly encouraged for accurate results.
-          </Text>
+        <Animated.View style={[styles.stepBody, { opacity: stepFadeAnim }]}>
+          <Text style={styles.stepTitle}>Ingredients Label</Text>
+          <RuneCard variant="accent" style={{ marginBottom: 16 }}>
+            <View style={styles.tipRow}>
+              <Sparkles size={16} color={arcaneColors.accent} />
+              <Text style={styles.tipText}>Fill the frame with the ingredients list</Text>
+            </View>
+          </RuneCard>
 
           {ingredientsImage ? (
             <View style={styles.imagePreviewWrap}>
@@ -694,17 +809,17 @@ Format response exactly as above, one per line.`;
           )}
 
           {extractedData.ingredients ? (
-            <View style={styles.extractedSection}>
-              <Text style={styles.extractedLabel}>Extracted ingredients:</Text>
+            <RuneCard variant="gold" style={{ marginBottom: 8 }}>
+              <Text style={styles.extractedLabel}>✨ Extracted ingredients</Text>
               <Text style={styles.extractedValue} numberOfLines={4}>
                 {extractedData.ingredients}
               </Text>
-            </View>
+            </RuneCard>
           ) : null}
 
           <View style={styles.navRow}>
             <TouchableOpacity style={styles.backBtn} onPress={() => setStep(1)}>
-              <ChevronLeft size={18} color="#6B7280" />
+              <ChevronLeft size={18} color={arcaneColors.textSecondary} />
               <Text style={styles.backBtnText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -717,42 +832,47 @@ Format response exactly as above, one per line.`;
               <ChevronRight size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {step === 3 && (
-        <View style={styles.stepBody}>
-          <Text style={styles.stepTitle}>Step 3: Confirm & Save</Text>
+        <Animated.View style={[styles.stepBody, { opacity: stepFadeAnim }]}>
+          <Text style={styles.stepTitle}>Confirm & Seal</Text>
           <Text style={styles.stepDesc}>
-            Review and edit the information below, then save.
+            Review, edit, and seal this product into the Archive.
           </Text>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Product Category</Text>
             <View style={styles.categoryRow}>
-              {(['food', 'skin', 'hair', 'other'] as ProductType[]).map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.categoryChip,
-                    productType === type && { backgroundColor: getProductTypeColor(type) + '18', borderColor: getProductTypeColor(type) },
-                  ]}
-                  onPress={() => {
-                    setProductType(type);
-                    if (Platform.OS !== 'web') {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }
-                  }}
-                >
-                  <Text style={styles.categoryEmoji}>{getProductTypeEmoji(type)}</Text>
-                  <Text style={[
-                    styles.categoryLabel,
-                    productType === type && { color: getProductTypeColor(type), fontWeight: '700' as const },
-                  ]}>
-                    {getProductTypeLabel(type)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {(['food', 'skin', 'hair', 'other'] as ProductType[]).map((type) => {
+                const isSelected = productType === type;
+                const badgeStatus = type === 'food' ? 'safe' as const
+                  : type === 'skin' ? 'caution' as const
+                  : type === 'hair' ? 'legendary' as const
+                  : 'neutral' as const;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.categoryChip,
+                      isSelected && { backgroundColor: getProductTypeColor(type) + '18', borderColor: getProductTypeColor(type) },
+                    ]}
+                    onPress={() => {
+                      setProductType(type);
+                      if (Platform.OS !== 'web') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }
+                    }}
+                  >
+                    <SigilBadge
+                      label={getProductTypeLabel(type)}
+                      status={isSelected ? badgeStatus : 'neutral'}
+                      size="sm"
+                    />
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
@@ -818,7 +938,7 @@ Format response exactly as above, one per line.`;
 
           <View style={styles.navRow}>
             <TouchableOpacity style={styles.backBtn} onPress={() => setStep(2)}>
-              <ChevronLeft size={18} color="#6B7280" />
+              <ChevronLeft size={18} color={arcaneColors.textSecondary} />
               <Text style={styles.backBtnText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -827,78 +947,82 @@ Format response exactly as above, one per line.`;
               disabled={isSaving || !extractedData.name.trim()}
             >
               {isSaving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <View style={styles.savingRow}>
+                  <ArcaneSpinner size={22} />
+                  <Text style={styles.saveBtnText}>Saving to Archive…</Text>
+                </View>
               ) : (
                 <>
-                  <Check size={18} color="#FFFFFF" />
-                  <Text style={styles.saveBtnText}>Save Product</Text>
+                  <Shield size={18} color="#FFFFFF" />
+                  <Text style={styles.saveBtnText}>Seal Product</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  container: { flex: 1, backgroundColor: arcaneColors.bg },
   scrollContent: { padding: 16, paddingBottom: 40 },
-  stepperRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 24, marginBottom: 20, paddingTop: 4 },
-  stepDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#E5E7EB' },
-  stepDotActive: { backgroundColor: '#0891B2' },
-  stepIndicatorWrap: { alignItems: 'center', gap: 6 },
-  stepCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' },
-  stepCircleActive: { backgroundColor: '#0891B2' },
-  stepCircleText: { fontSize: 15, fontWeight: '700' as const, color: '#9CA3AF' },
-  stepCircleTextActive: { color: '#FFF' },
-  stepLabel: { fontSize: 12, fontWeight: '600' as const, color: '#9CA3AF' },
-  stepLabelActive: { color: '#0891B2' },
-  barcodeTag: { alignSelf: 'center', backgroundColor: '#F3F4F6', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 16 },
-  barcodeTagText: { fontSize: 13, fontWeight: '600' as const, color: '#6B7280' },
+  runicStepperRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 0, marginBottom: 24, paddingTop: 4 },
+  runicStepWrap: { alignItems: 'center', gap: 6, flex: 1, position: 'relative' },
+  runicStepCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: arcaneColors.bgMist, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: arcaneColors.border },
+  runicStepCircleActive: { backgroundColor: arcaneColors.primary, borderColor: arcaneColors.primary },
+  runicStepCircleCurrent: { borderColor: arcaneColors.gold, borderWidth: 2.5 },
+  runicStepLabel: { fontSize: 11, fontWeight: '600' as const, color: arcaneColors.textMuted, letterSpacing: 0.5, textTransform: 'uppercase' as const },
+  runicStepLabelActive: { color: arcaneColors.primary, fontWeight: '700' as const },
+  runicStepLine: { position: 'absolute', top: 19, right: '50%', width: '100%', height: 2, backgroundColor: arcaneColors.border, zIndex: -1 },
+  runicStepLineActive: { backgroundColor: arcaneColors.primary },
+  barcodeTag: { alignSelf: 'center', backgroundColor: arcaneColors.primaryMuted, borderRadius: arcaneRadius.pill, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 16, borderWidth: 1, borderColor: arcaneColors.borderRune },
+  barcodeTagText: { fontSize: 13, fontWeight: '600' as const, color: arcaneColors.primary },
   stepBody: { flex: 1 },
-  stepTitle: { fontSize: 22, fontWeight: '700' as const, color: '#111827', marginBottom: 6 },
-  stepDesc: { fontSize: 14, color: '#6B7280', lineHeight: 20, marginBottom: 20 },
+  stepTitle: { fontSize: 22, fontWeight: '700' as const, color: arcaneColors.text, marginBottom: 6 },
+  stepDesc: { fontSize: 14, color: arcaneColors.textSecondary, lineHeight: 20, marginBottom: 16 },
+  tipRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tipText: { fontSize: 14, color: arcaneColors.textSecondary, flex: 1, lineHeight: 20 },
   captureOptions: { gap: 12, marginBottom: 16 },
-  captureOptionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#E5E7EB' },
+  captureOptionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, padding: 16, borderWidth: 1, borderColor: arcaneColors.borderRune, ...arcaneShadows.card },
   captureOptionIcon: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   captureOptionContent: { flex: 1 },
-  captureOptionTitle: { fontSize: 15, fontWeight: '700' as const, color: '#111827', marginBottom: 2 },
-  captureOptionDesc: { fontSize: 13, color: '#6B7280' },
+  captureOptionTitle: { fontSize: 15, fontWeight: '700' as const, color: arcaneColors.text, marginBottom: 2 },
+  captureOptionDesc: { fontSize: 13, color: arcaneColors.textSecondary },
   imagePreviewWrap: { alignItems: 'center', marginBottom: 16 },
-  imagePreview: { width: '100%', height: 200, borderRadius: 14, backgroundColor: '#E5E7EB', marginBottom: 10 },
-  retakeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F0F9FF', borderWidth: 1, borderColor: '#BAE6FD' },
-  retakeBtnText: { fontSize: 14, fontWeight: '600' as const, color: '#0891B2' },
-  extractedSection: { backgroundColor: '#F0FDF4', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#BBF7D0' },
-  extractedLabel: { fontSize: 13, fontWeight: '700' as const, color: '#166534', marginBottom: 4 },
-  extractedValue: { fontSize: 14, color: '#15803D', lineHeight: 20 },
+  imagePreview: { width: '100%', height: 200, borderRadius: arcaneRadius.lg, backgroundColor: arcaneColors.bgMist, marginBottom: 10 },
+  retakeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: arcaneRadius.pill, backgroundColor: arcaneColors.primaryMuted, borderWidth: 1, borderColor: arcaneColors.borderRune },
+  retakeBtnText: { fontSize: 14, fontWeight: '600' as const, color: arcaneColors.primary },
+  extractedLabel: { fontSize: 13, fontWeight: '700' as const, color: arcaneColors.goldDark, marginBottom: 4 },
+  extractedValue: { fontSize: 14, color: arcaneColors.textSecondary, lineHeight: 20 },
   navRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, gap: 12 },
-  cancelBtn: { paddingHorizontal: 20, paddingVertical: 14, borderRadius: 12, backgroundColor: '#F3F4F6' },
-  cancelBtnText: { fontSize: 15, fontWeight: '600' as const, color: '#6B7280' },
-  nextBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 12, backgroundColor: '#0891B2' },
+  cancelBtn: { paddingHorizontal: 20, paddingVertical: 14, borderRadius: arcaneRadius.lg, backgroundColor: arcaneColors.bgMist },
+  cancelBtnText: { fontSize: 15, fontWeight: '600' as const, color: arcaneColors.textSecondary },
+  nextBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 14, borderRadius: arcaneRadius.lg, backgroundColor: arcaneColors.primary, ...arcaneShadows.card },
   nextBtnDisabled: { opacity: 0.4 },
   nextBtnText: { fontSize: 15, fontWeight: '700' as const, color: '#FFF' },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12, backgroundColor: '#F3F4F6' },
-  backBtnText: { fontSize: 15, fontWeight: '600' as const, color: '#6B7280' },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 28, paddingVertical: 14, borderRadius: 12, backgroundColor: '#10B981' },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 16, paddingVertical: 14, borderRadius: arcaneRadius.lg, backgroundColor: arcaneColors.bgMist },
+  backBtnText: { fontSize: 15, fontWeight: '600' as const, color: arcaneColors.textSecondary },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 28, paddingVertical: 14, borderRadius: arcaneRadius.lg, backgroundColor: arcaneColors.safe, ...arcaneShadows.elevated },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { fontSize: 16, fontWeight: '700' as const, color: '#FFF' },
+  savingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   fieldGroup: { marginBottom: 16 },
-  fieldLabel: { fontSize: 14, fontWeight: '600' as const, color: '#374151', marginBottom: 6 },
-  fieldInput: { backgroundColor: '#FFF', borderRadius: 12, padding: 14, fontSize: 15, borderWidth: 1, borderColor: '#E5E7EB', color: '#111827' },
+  fieldLabel: { fontSize: 14, fontWeight: '600' as const, color: arcaneColors.text, marginBottom: 6 },
+  fieldInput: { backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, padding: 14, fontSize: 15, borderWidth: 1, borderColor: arcaneColors.border, color: arcaneColors.text },
   fieldInputMulti: { minHeight: 100, textAlignVertical: 'top' as const },
-  readonlyField: { backgroundColor: '#F3F4F6', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' },
-  readonlyText: { fontSize: 15, color: '#6B7280' },
+  readonlyField: { backgroundColor: arcaneColors.bgMist, borderRadius: arcaneRadius.lg, padding: 14, borderWidth: 1, borderColor: arcaneColors.border },
+  readonlyText: { fontSize: 15, color: arcaneColors.textSecondary },
   previewImages: { flexDirection: 'row', gap: 12, marginBottom: 8 },
-  thumbSmall: { width: 80, height: 80, borderRadius: 10, backgroundColor: '#E5E7EB' },
+  thumbSmall: { width: 80, height: 80, borderRadius: arcaneRadius.md, backgroundColor: arcaneColors.bgMist },
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between' },
   cameraHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 56, paddingHorizontal: 16 },
-  cameraCloseBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  cameraCloseBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(11, 15, 20, 0.7)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: arcaneColors.borderRune },
   cameraHeaderTitle: { fontSize: 17, fontWeight: '700' as const, color: '#FFF' },
   cameraCenterFrame: { width: 280, height: 200, alignSelf: 'center' },
-  cCorner: { position: 'absolute', width: 32, height: 32, borderColor: '#FFF' },
+  cCorner: { position: 'absolute', width: 32, height: 32, borderColor: arcaneColors.primary },
   cTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 8 },
   cTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 8 },
   cBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 8 },
@@ -907,31 +1031,28 @@ const styles = StyleSheet.create({
   flashBtn: { width: 60, alignItems: 'center', gap: 4 },
   flashLabel: { fontSize: 11, fontWeight: '700' as const, color: '#FFF' },
   captureBtn: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: '#FFF', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.2)' },
-  captureBtnInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#0891B2', alignItems: 'center', justifyContent: 'center' },
-  analyzeContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#F9FAFB' },
-  analyzeTitle: { marginTop: 20, fontSize: 18, fontWeight: '700' as const, color: '#111827', textAlign: 'center' },
-  analyzeSubtitle: { marginTop: 6, fontSize: 14, color: '#6B7280' },
-  slowText: { marginTop: 12, fontSize: 14, color: '#D97706', fontWeight: '600' as const },
-  retryRow: { alignItems: 'center', marginTop: 12, gap: 10 },
-  retryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#DC2626', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  captureBtnInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: arcaneColors.primary, alignItems: 'center', justifyContent: 'center' },
+  analyzeContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: arcaneColors.bg },
+  analyzeTitle: { marginTop: 20, fontSize: 18, fontWeight: '700' as const, color: arcaneColors.text, textAlign: 'center' },
+  analyzeSubtitle: { marginTop: 6, fontSize: 14, color: arcaneColors.textSecondary },
+  slowText: { fontSize: 14, color: arcaneColors.caution, fontWeight: '600' as const },
+  retryRow: { alignItems: 'center', marginTop: 12, gap: 10, width: '100%' },
+  retryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: arcaneColors.danger, borderRadius: arcaneRadius.md, paddingHorizontal: 16, paddingVertical: 8, marginTop: 10 },
   retryBtnText: { fontSize: 14, fontWeight: '600' as const, color: '#FFF' },
-  previewThumb: { width: 120, height: 90, borderRadius: 10, marginTop: 20, backgroundColor: '#E5E7EB' },
-  successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#F9FAFB' },
-  successIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  successTitle: { fontSize: 24, fontWeight: '700' as const, color: '#111827', marginBottom: 8 },
-  successSubtitle: { fontSize: 15, color: '#6B7280', textAlign: 'center', lineHeight: 22, marginBottom: 4 },
+  previewThumb: { width: 120, height: 90, borderRadius: arcaneRadius.md, marginTop: 20, backgroundColor: arcaneColors.bgMist },
+  successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: arcaneColors.bg },
+  successSigilRing: { width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: arcaneColors.borderRune, alignItems: 'center', justifyContent: 'center', marginBottom: 20, backgroundColor: 'rgba(5, 150, 105, 0.06)' },
+  successIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: arcaneColors.safe, alignItems: 'center', justifyContent: 'center' },
+  successTitle: { fontSize: 24, fontWeight: '700' as const, color: arcaneColors.text, marginBottom: 8 },
+  successSubtitle: { fontSize: 15, color: arcaneColors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 4 },
   successActions: { width: '100%', maxWidth: 320, gap: 10, marginTop: 20, marginBottom: 8 },
-  successPrimaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#0891B2', borderRadius: 14, paddingVertical: 16, paddingHorizontal: 24 },
+  successPrimaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: arcaneColors.primary, borderRadius: arcaneRadius.lg, paddingVertical: 16, paddingHorizontal: 24, ...arcaneShadows.elevated },
   successPrimaryBtnText: { fontSize: 16, fontWeight: '700' as const, color: '#FFF' },
-  successSecondaryBtn: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 24, borderWidth: 1, borderColor: '#E5E7EB' },
-  successSecondaryBtnText: { fontSize: 15, fontWeight: '600' as const, color: '#374151' },
+  successSecondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, paddingVertical: 14, paddingHorizontal: 24, borderWidth: 1, borderColor: arcaneColors.borderRune },
+  successSecondaryBtnText: { fontSize: 15, fontWeight: '600' as const, color: arcaneColors.primary },
+  autoReturnRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 20, paddingHorizontal: 20, paddingVertical: 12, backgroundColor: arcaneColors.bgMist, borderRadius: arcaneRadius.lg, borderWidth: 1, borderColor: arcaneColors.border },
+  autoReturnText: { fontSize: 13, color: arcaneColors.textSecondary, flex: 1 },
+  autoReturnCancel: { fontSize: 13, fontWeight: '700' as const, color: arcaneColors.primary },
   categoryRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  categoryChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 2, borderColor: '#E5E7EB', backgroundColor: '#FFF' },
-  categoryEmoji: { fontSize: 15 },
-  categoryLabel: { fontSize: 14, fontWeight: '500' as const, color: '#6B7280' },
-  comingSoonCard: { marginTop: 28, backgroundColor: '#FFF', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1.5, borderColor: '#E0E7FF', borderStyle: 'dashed' as const, width: '100%', maxWidth: 320 },
-  comingSoonIcon: { fontSize: 32, marginBottom: 8 },
-  comingSoonTitle: { fontSize: 16, fontWeight: '700' as const, color: '#374151', marginBottom: 4 },
-  comingSoonLabel: { fontSize: 11, fontWeight: '700' as const, color: '#6366F1', backgroundColor: '#EEF2FF', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' as const, marginBottom: 8 },
-  comingSoonDesc: { fontSize: 13, color: '#6B7280', textAlign: 'center' as const, lineHeight: 18 },
+  categoryChip: { paddingHorizontal: 4, paddingVertical: 4, borderRadius: arcaneRadius.pill, borderWidth: 2, borderColor: 'transparent', backgroundColor: 'transparent' },
 });
