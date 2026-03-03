@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,11 @@ import {
   Platform,
   Keyboard,
   ScrollView,
+  Modal,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, Href } from 'expo-router';
-import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Activity, Copy, RotateCcw, Server, Key } from 'lucide-react-native';
+import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Activity, Copy, RotateCcw, Server, Key, Lock } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
 import { isSupabaseConfigured, getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabase';
@@ -29,6 +30,10 @@ import { AnimatedButton } from '@/components/AnimatedButton';
 import { runSupabaseOperationalCheck, formatDiagnosticsForCopy } from '@/utils/supabaseHealth';
 
 type OperationalResult = Awaited<ReturnType<typeof runSupabaseOperationalCheck>>;
+
+const ADMIN_EMAILS = [
+  'eazypeezytechnologies@gmail.com',
+];
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -45,6 +50,43 @@ export default function WelcomeScreen() {
   const [opResult, setOpResult] = useState<OperationalResult | null>(null);
   const [opTesting, setOpTesting] = useState(false);
   const [copiedDiag, setCopiedDiag] = useState(false);
+
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleHiddenTap = useCallback(() => {
+    tapCountRef.current += 1;
+    console.log('[Welcome] Hidden tap count:', tapCountRef.current);
+
+    if (tapTimerRef.current) {
+      clearTimeout(tapTimerRef.current);
+    }
+
+    if (tapCountRef.current >= 7) {
+      tapCountRef.current = 0;
+      setShowAdminModal(true);
+      return;
+    }
+
+    tapTimerRef.current = setTimeout(() => {
+      tapCountRef.current = 0;
+    }, 2000);
+  }, []);
+
+  const handleAdminUnlock = useCallback(() => {
+    const trimmed = adminEmail.trim().toLowerCase();
+    if (ADMIN_EMAILS.includes(trimmed)) {
+      console.log('[Welcome] Admin diagnostics unlocked for:', trimmed);
+      setAdminUnlocked(true);
+      setShowAdminModal(false);
+      setAdminEmail('');
+    } else {
+      Alert.alert('Not Authorized', 'This email is not recognized as an admin account.');
+    }
+  }, [adminEmail]);
 
   useEffect(() => {
     if (authPhase === 'validating') {
@@ -284,8 +326,11 @@ export default function WelcomeScreen() {
     }
   }, [opResult]);
 
-  const maskedHost = getSupabaseUrl()
-    ? getSupabaseUrl()!.replace(/https?:\/\//, '').substring(0, 20) + '···'
+  const rawHost = getSupabaseUrl()?.replace(/https?:\/\//, '') ?? null;
+  const maskedHost = rawHost
+    ? rawHost.length > 12
+      ? rawHost.substring(0, 6) + '······' + rawHost.substring(rawHost.length - 6)
+      : rawHost.substring(0, 6) + '···'
     : null;
 
   const hasAnonKey = !!getSupabaseAnonKey();
@@ -301,9 +346,9 @@ export default function WelcomeScreen() {
           <View style={styles.heroSection}>
             <RuneCard variant="default" style={styles.heroCard}>
               <View style={styles.heroInner}>
-                <View style={styles.shieldContainer}>
+                <Pressable onPress={handleHiddenTap} style={styles.shieldContainer}>
                   <Shield size={64} color={arcaneColors.primary} strokeWidth={1.8} />
-                </View>
+                </Pressable>
                 <Text style={styles.title}>Allergy Guardian</Text>
                 <Text style={styles.subtitle}>
                   Scan products and check for allergens to keep you and your loved ones safe
@@ -336,6 +381,8 @@ export default function WelcomeScreen() {
             </Pressable>
           </View>
 
+          {adminUnlocked && (
+          <>
           <ArcaneDivider label="System" variant="default" style={styles.diagDivider} />
 
           <View style={styles.diagSection}>
@@ -469,7 +516,55 @@ export default function WelcomeScreen() {
               </View>
             </RuneCard>
           </View>
+          </>
+          )}
         </ScrollView>
+
+        <Modal
+          visible={showAdminModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAdminModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Lock size={24} color={arcaneColors.accent} />
+                <Text style={styles.modalTitle}>Admin Diagnostics</Text>
+              </View>
+              <Text style={styles.modalSubtitle}>
+                Enter your admin email to unlock diagnostics on this screen.
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Admin email address"
+                placeholderTextColor={arcaneColors.textMuted}
+                value={adminEmail}
+                onChangeText={setAdminEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <View style={styles.modalButtons}>
+                <Pressable
+                  style={styles.modalCancelBtn}
+                  onPress={() => {
+                    setShowAdminModal(false);
+                    setAdminEmail('');
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.modalUnlockBtn}
+                  onPress={handleAdminUnlock}
+                >
+                  <Text style={styles.modalUnlockText}>Unlock</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         <View style={styles.footerContainer}>
           <Text style={styles.footer}>
@@ -855,6 +950,81 @@ const styles = StyleSheet.create({
     color: arcaneColors.textMuted,
     textAlign: 'center' as const,
     opacity: 0.6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.xl,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+    borderWidth: 1,
+    borderColor: arcaneColors.borderAccent,
+  },
+  modalHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: arcaneColors.text,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: arcaneColors.textSecondary,
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  modalInput: {
+    backgroundColor: arcaneColors.bgElevated,
+    borderRadius: arcaneRadius.md,
+    padding: 14,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: arcaneColors.border,
+    color: arcaneColors.text,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row' as const,
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 12,
+    borderRadius: arcaneRadius.md,
+    borderWidth: 1,
+    borderColor: arcaneColors.border,
+    backgroundColor: arcaneColors.bgElevated,
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: arcaneColors.textSecondary,
+  },
+  modalUnlockBtn: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 12,
+    borderRadius: arcaneRadius.md,
+    backgroundColor: arcaneColors.accent,
+  },
+  modalUnlockText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
 
   authScroll: {

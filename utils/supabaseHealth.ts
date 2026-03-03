@@ -196,29 +196,42 @@ export async function runSupabaseOperationalCheck(): Promise<OperationalCheckRes
   };
 }
 
+function redactUrl(url: string | null): string | null {
+  if (!url) return null;
+  if (url.length <= 12) return url.substring(0, 4) + '······';
+  return url.substring(0, 6) + '······' + url.substring(url.length - 6);
+}
+
+function redactMessage(msg: string): string {
+  return msg.replace(/eyJ[A-Za-z0-9_-]{10,}/g, '[REDACTED_TOKEN]');
+}
+
 export function formatDiagnosticsForCopy(result: OperationalCheckResult): string {
   return JSON.stringify(
     {
       ok: result.ok,
-      summary: result.summary,
+      summary: redactMessage(result.summary),
       timestamp: result.timestamp,
-      buildInfo: result.buildInfo,
+      buildInfo: {
+        url: redactUrl(result.buildInfo.url),
+        keyPresent: result.buildInfo.keyPresent,
+      },
       checks: {
         authHealth: {
           ok: result.checks.authHealth.ok,
           status: result.checks.authHealth.status,
           ms: result.checks.authHealth.ms,
-          message: result.checks.authHealth.message,
+          message: redactMessage(result.checks.authHealth.message),
         },
         restHealth: {
           ok: result.checks.restHealth.ok,
           status: result.checks.restHealth.status,
           ms: result.checks.restHealth.ms,
-          message: result.checks.restHealth.message,
+          message: redactMessage(result.checks.restHealth.message),
         },
         keyValid: {
           ok: result.checks.keyValid.ok,
-          message: result.checks.keyValid.message,
+          message: redactMessage(result.checks.keyValid.message),
         },
       },
     },

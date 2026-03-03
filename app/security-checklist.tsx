@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import {
   Shield,
   CheckCircle,
@@ -85,6 +85,9 @@ CREATE POLICY IF NOT EXISTS "Users can delete own groups"
 
 export default function SecurityChecklistScreen() {
   const { currentUser } = useUser();
+  const router = useRouter();
+  const isAdmin = currentUser?.isAdmin === true;
+
   const [checks, setChecks] = useState<CheckItem[]>([
     { id: 'config', label: 'Supabase configured', status: 'idle', detail: '' },
     { id: 'anon_key', label: 'Anon key present (no service role)', status: 'idle', detail: '' },
@@ -227,6 +230,27 @@ export default function SecurityChecklistScreen() {
   const passCount = checks.filter(c => c.status === 'pass').length;
   const failCount = checks.filter(c => c.status === 'fail').length;
   const warnCount = checks.filter(c => c.status === 'warn').length;
+
+  if (!isAdmin) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: 'Security Checklist' }} />
+        <View style={styles.accessDenied}>
+          <Shield size={48} color="#EF4444" />
+          <Text style={styles.accessDeniedTitle}>Access Denied</Text>
+          <Text style={styles.accessDeniedText}>
+            Administrator privileges required to view the security checklist.
+          </Text>
+          <TouchableOpacity
+            style={styles.accessDeniedButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.accessDeniedButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -511,5 +535,34 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 13,
     color: '#6B7280',
+  },
+  accessDenied: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 16,
+  },
+  accessDeniedTitle: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: '#111827',
+  },
+  accessDeniedText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center' as const,
+  },
+  accessDeniedButton: {
+    backgroundColor: '#0891B2',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  accessDeniedButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
 });

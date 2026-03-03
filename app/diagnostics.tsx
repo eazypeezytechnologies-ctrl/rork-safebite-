@@ -8,7 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import {
   Activity,
   AlertTriangle,
@@ -17,7 +17,9 @@ import {
   RefreshCw,
   Trash2,
   Clock,
+  Shield,
 } from 'lucide-react-native';
+import { useUser } from '@/contexts/UserContext';
 import {
   getErrorStats,
   resetCircuitBreaker,
@@ -29,6 +31,9 @@ import type { GlobalError } from '@/utils/globalErrorHandler';
 
 export default function DiagnosticsScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { currentUser, isLoading: userLoading } = useUser();
+  const isAdmin = currentUser?.isAdmin === true;
   const [networkErrors, setNetworkErrors] = useState<ErrorRecord[]>([]);
   const [globalErrors, setGlobalErrors] = useState<GlobalError[]>([]);
   const [circuitState, setCircuitState] = useState<string>('CLOSED');
@@ -104,6 +109,27 @@ export default function DiagnosticsScreen() {
     if (minutes > 0) return `${minutes}m ago`;
     return `${seconds}s ago`;
   };
+
+  if (!userLoading && !isAdmin) {
+    return (
+      <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+        <Stack.Screen options={{ title: 'Diagnostics' }} />
+        <View style={styles.accessDenied}>
+          <Shield size={48} color="#EF4444" />
+          <Text style={styles.accessDeniedTitle}>Access Denied</Text>
+          <Text style={styles.accessDeniedText}>
+            Administrator privileges required to view diagnostics.
+          </Text>
+          <TouchableOpacity
+            style={styles.accessDeniedButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.accessDeniedButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
@@ -403,5 +429,34 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 32,
+  },
+  accessDenied: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 16,
+  },
+  accessDeniedTitle: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: '#111827',
+  },
+  accessDeniedText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center' as const,
+  },
+  accessDeniedButton: {
+    backgroundColor: '#0891B2',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  accessDeniedButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
 });
