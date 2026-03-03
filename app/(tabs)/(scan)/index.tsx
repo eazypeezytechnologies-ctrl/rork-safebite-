@@ -20,7 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, Href } from 'expo-router';
 
-import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield } from 'lucide-react-native';
+import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield, Sparkles, Zap, RotateCcw } from 'lucide-react-native';
 import { LockOnReticle } from '@/components/LockOnReticle';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
 import { useMysticToast } from '@/components/MysticToast';
@@ -29,6 +29,8 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { searchProductByBarcode, searchProductsByName, searchProductByUrl } from '@/api/products';
 import { generateText } from '@rork-ai/toolkit-sdk';
+import { translateMultiple, isTranslationAvailable, TranslationResult } from '@/services/translationService';
+import { TranslationCard } from '@/components/TranslationCard';
 import { getSearchHistory, addToSearchHistory } from '@/storage/searchHistory';
 import { calculateVerdict, getVerdictColor, getVerdictIcon } from '@/utils/verdict';
 import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
@@ -38,6 +40,20 @@ import { BUILD_ID } from '@/constants/appVersion';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
 import { ArcaneDivider } from '@/components/ArcaneDivider';
+
+interface SmartScanResult {
+  productName: string | null;
+  brand: string | null;
+  ingredients: string | null;
+  allergens: string | null;
+  barcode: string | null;
+  nameTranslation: TranslationResult | null;
+  ingredientsTranslation: TranslationResult | null;
+  capturedImageUri: string;
+}
+
+const SMART_CAPTURE_COOLDOWN_MS = 2000;
+const SMART_CAPTURE_AUTO_INTERVAL_MS = 8000;
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -65,6 +81,13 @@ export default function ScanScreen() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [noResults, setNoResults] = useState(false);
   const [detectedBannerData, setDetectedBannerData] = useState<{ code: string; show: boolean }>({ code: '', show: false });
+  const [scanMode, setScanMode] = useState<'classic' | 'smart'>('classic');
+  const [smartScanActive, setSmartScanActive] = useState(false);
+  const [smartScanProcessing, setSmartScanProcessing] = useState(false);
+  const [smartScanResults, setSmartScanResults] = useState<SmartScanResult | null>(null);
+  const [autoCapture, setAutoCapture] = useState(false);
+  const lastSmartCaptureRef = useRef<number>(0);
+  const smartCaptureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const detectedBannerAnim = useRef(new Animated.Value(0)).current;
@@ -115,8 +138,227 @@ export default function ScanScreen() {
       setCapturedImage(null);
       setTorchEnabled(false);
       setCameraFacing('back');
+      setSmartScanActive(false);
+      setSmartScanProcessing(false);
+      if (smartCaptureTimerRef.current) {
+        clearTimeout(smartCaptureTimerRef.current);
+        smartCaptureTimerRef.current = null;
+      }
     }
   }, [cameraActive]);
+
+  const handleSmartCaptureRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (!smartScanActive || !autoCapture || smartScanProcessing) return;
+    const scheduleAutoCapture = () => {
+      smartCaptureTimerRef.current = setTimeout(() => {
+        if (smartScanActive && autoCapture && !smartScanProcessing) {
+          handleSmartCaptureRef.current();
+        }
+      }, SMART_CAPTURE_AUTO_INTERVAL_MS);
+    };
+    scheduleAutoCapture();
+    return () => {
+      if (smartCaptureTimerRef.current) {
+        clearTimeout(smartCaptureTimerRef.current);
+        smartCaptureTimerRef.current = null;
+      }
+    };
+  }, [smartScanActive, autoCapture, smartScanProcessing]);
+
+  const handleSmartCapture = async () => {
+    const now = Date.now();
+    if (now - lastSmartCaptureRef.current < SMART_CAPTURE_COOLDOWN_MS) {
+      console.log('[SmartScan] Cooldown active, skipping capture');
+      showToast('Please wait before next capture', 'caution');
+      return;
+    }
+    if (smartScanProcessing) {
+      console.log('[SmartScan] Already processing, skipping');
+      return;
+    }
+    if (!cameraRef.current) {
+      console.log('[SmartScan] Camera not ready');
+      showToast('Camera not ready', 'caution');
+      return;
+    }
+
+    lastSmartCaptureRef.current = now;
+    setSmartScanProcessing(true);
+
+    try {
+      if (Platform.OS !== 'web') {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+
+      console.log('[SmartScan] Capturing frame...');
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.85,
+        skipProcessing: true,
+      });
+
+      if (!photo || !photo.base64) {
+        showToast('Failed to capture image', 'danger');
+        setSmartScanProcessing(false);
+        return;
+      }
+
+      const imageUri = `data:image/jpeg;base64,${photo.base64}`;
+      setCapturedImage(imageUri);
+
+      console.log('[SmartScan] Running OCR pipeline...');
+      const ocrResult = await generateText({
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', image: imageUri },
+            {
+              type: 'text',
+              text: `You are an expert product label reader. Extract ALL visible text from this product image.
+
+Return the result in EXACTLY this format:
+PRODUCT_NAME: [exact product name as shown]
+BRAND: [brand name or "Not visible"]
+INGREDIENTS: [full ingredients list as written, preserving original language]
+ALLERGENS: [any allergen warnings or "Not visible"]
+BARCODE: [barcode digits if visible or "Not visible"]
+LANGUAGE: [detected language of the text, e.g. "Spanish", "French", "English", etc.]
+
+IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them. Return them exactly as written on the package.`,
+            },
+          ],
+        }],
+      });
+
+      console.log('[SmartScan] OCR result:', ocrResult.substring(0, 200));
+
+      const nameMatch = ocrResult.match(/PRODUCT_NAME:\s*(.+?)(?:\n|$)/i);
+      const brandMatch = ocrResult.match(/BRAND:\s*(.+?)(?:\n|$)/i);
+      const ingredientsMatch = ocrResult.match(/INGREDIENTS:\s*(.+?)(?:\n|$)/i);
+      const allergensMatch = ocrResult.match(/ALLERGENS:\s*(.+?)(?:\n|$)/i);
+      const barcodeMatch = ocrResult.match(/BARCODE:\s*([0-9]{8,14})/i);
+
+      const extractedName = nameMatch?.[1]?.trim() || null;
+      const extractedBrand = brandMatch?.[1]?.trim() || null;
+      const extractedIngredients = ingredientsMatch?.[1]?.trim() || null;
+      const extractedAllergens = allergensMatch?.[1]?.trim() || null;
+      const extractedBarcode = barcodeMatch?.[1]?.trim() || null;
+
+      const isVisible = (val: string | null) => val && !val.toLowerCase().includes('not visible');
+
+      console.log('[SmartScan] Running translations...');
+      const textsToTranslate: Record<string, string> = {};
+      if (isVisible(extractedName)) textsToTranslate['name'] = extractedName!;
+      if (isVisible(extractedIngredients)) textsToTranslate['ingredients'] = extractedIngredients!;
+
+      let nameTranslation: TranslationResult | null = null;
+      let ingredientsTranslation: TranslationResult | null = null;
+
+      if (Object.keys(textsToTranslate).length > 0) {
+        const translations = await translateMultiple(textsToTranslate);
+        nameTranslation = translations['name'] || null;
+        ingredientsTranslation = translations['ingredients'] || null;
+      }
+
+      const result: SmartScanResult = {
+        productName: isVisible(extractedName) ? extractedName : null,
+        brand: isVisible(extractedBrand) ? extractedBrand : null,
+        ingredients: isVisible(extractedIngredients) ? extractedIngredients : null,
+        allergens: isVisible(extractedAllergens) ? extractedAllergens : null,
+        barcode: extractedBarcode,
+        nameTranslation,
+        ingredientsTranslation,
+        capturedImageUri: imageUri,
+      };
+
+      console.log('[SmartScan] Pipeline complete:', {
+        hasName: !!result.productName,
+        hasBrand: !!result.brand,
+        hasIngredients: !!result.ingredients,
+        hasBarcode: !!result.barcode,
+        nameTranslated: nameTranslation ? !nameTranslation.isEnglish : false,
+        ingredientsTranslated: ingredientsTranslation ? !ingredientsTranslation.isEnglish : false,
+      });
+
+      setSmartScanResults(result);
+      setCameraActive(false);
+
+      if (Platform.OS !== 'web') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('[SmartScan] Pipeline error:', error);
+      showToast('Smart scan failed. Please try again.', 'danger');
+    } finally {
+      setSmartScanProcessing(false);
+    }
+  };
+
+  handleSmartCaptureRef.current = handleSmartCapture;
+
+  const openSmartScan = async () => {
+    console.log('[SmartScan] Opening smart scan camera');
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required for Smart Scan.');
+        return;
+      }
+    }
+    setSmartScanResults(null);
+    setSmartScanActive(true);
+    setCameraActive(true);
+    setImageRecognitionMode(false);
+  };
+
+  const handleSmartScanSaveAndView = async () => {
+    if (!smartScanResults) return;
+    const r = smartScanResults;
+    const productCode = r.barcode || `smart_${Date.now()}`;
+    const finalName = r.nameTranslation && !r.nameTranslation.isEnglish
+      ? r.nameTranslation.translatedText
+      : r.productName || 'Smart Scan Product';
+
+    const finalIngredients = r.ingredientsTranslation && !r.ingredientsTranslation.isEnglish
+      ? r.ingredientsTranslation.translatedText
+      : r.ingredients || undefined;
+
+    const product: Product = {
+      code: productCode,
+      product_name: finalName,
+      brands: r.brand || undefined,
+      ingredients_text: finalIngredients,
+      allergens: r.allergens || undefined,
+      allergens_tags: [],
+      traces_tags: [],
+      source: 'manual_entry' as const,
+    };
+
+    try {
+      await upsertProduct(product);
+      console.log('[SmartScan] Product saved');
+    } catch (err) {
+      console.log('[SmartScan] Non-critical save error:', err);
+    }
+
+    if (currentUser?.id && activeProfile) {
+      const verdict = calculateVerdict(product, activeProfile);
+      recordScanEvent({
+        user_id: currentUser.id,
+        profile_id: activeProfile.id,
+        product_barcode: productCode,
+        product_name: product.product_name || 'Smart Scan',
+        scan_type: 'photo',
+        verdict: verdict.level,
+        verdict_details: verdict.message || null,
+      }).catch(() => {});
+    }
+
+    setSmartScanResults(null);
+    router.push(`/product/${encodeURIComponent(productCode)}` as Href);
+  };
 
   const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
     console.log('=== Barcode Scan Event ===');
@@ -867,8 +1109,8 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           style={StyleSheet.absoluteFillObject}
           facing={cameraFacing}
           enableTorch={cameraFacing === 'back' ? torchEnabled : false}
-          onBarcodeScanned={imageRecognitionMode ? undefined : handleBarCodeScanned}
-          barcodeScannerSettings={imageRecognitionMode ? undefined : {
+          onBarcodeScanned={(imageRecognitionMode || smartScanActive) ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={(imageRecognitionMode || smartScanActive) ? undefined : {
             barcodeTypes: [
               'ean13',
               'ean8',
@@ -947,7 +1189,30 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             />
           )}
           
-          {imageRecognitionMode ? (
+          {smartScanActive ? (
+            <View style={styles.photoFrameContainer}>
+              <LockOnReticle size={280} color="rgba(109, 40, 217, 0.6)" />
+              
+              {smartScanProcessing ? (
+                <View style={styles.smartProcessingOverlay}>
+                  <ArcaneSpinner size={48} />
+                  <Text style={styles.smartProcessingText}>Analyzing...</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.smartCaptureButton}
+                  onPress={handleSmartCapture}
+                  activeOpacity={0.8}
+                  testID="smart-capture-button"
+                >
+                  <View style={styles.smartCaptureButtonInner}>
+                    <Sparkles size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.smartCaptureLabel}>Smart Capture</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : imageRecognitionMode ? (
             <View style={styles.photoFrameContainer}>
               <LockOnReticle size={280} color="rgba(109, 40, 217, 0.6)" />
               
@@ -1020,8 +1285,29 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           </Text>
         </Pressable>
 
+        {/* Auto-capture toggle for Smart Scan */}
+        {smartScanActive && !smartScanProcessing && (
+          <TouchableOpacity
+            style={[
+              styles.autoCaptureToggle,
+              { bottom: Platform.OS === 'ios' ? 140 : 120, right: 20 },
+              autoCapture && styles.autoCaptureToggleActive,
+            ]}
+            onPress={() => {
+              setAutoCapture(prev => !prev);
+              showToast(autoCapture ? 'Auto-capture OFF' : 'Auto-capture ON (every 8s)', 'info');
+            }}
+            activeOpacity={0.7}
+          >
+            <Zap size={18} color={autoCapture ? '#F5C542' : '#FFFFFF'} />
+            <Text style={[styles.autoCaptureText, autoCapture && styles.autoCaptureTextActive]}>
+              {autoCapture ? 'Auto' : 'Auto'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Upload Barcode Photo - Bottom Right */}
-        {!imageRecognitionMode && (
+        {!imageRecognitionMode && !smartScanActive && (
           <TouchableOpacity
             style={styles.uploadBarcodeButton}
             onPress={async () => {
@@ -1047,14 +1333,18 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           </View>
           <View style={styles.bottomCardContent}>
             <Text style={styles.bottomCardTitle}>
-              {imageRecognitionMode ? 'Photo Mode' : scanned ? 'Lock-On!' : 'Guardian Active'}
+              {smartScanActive ? 'AI Smart Scan' : imageRecognitionMode ? 'Photo Mode' : scanned ? 'Lock-On!' : 'Guardian Active'}
             </Text>
             <Text style={styles.bottomCardSubtitle}>
-              {imageRecognitionMode 
-                ? 'Tap button to capture product' 
-                : scanned 
-                  ? 'Barcode acquired — analyzing...' 
-                  : 'Position barcode in the reticle'}
+              {smartScanActive
+                ? smartScanProcessing
+                  ? 'Processing — please hold steady...'
+                  : 'Tap Smart Capture to scan product'
+                : imageRecognitionMode 
+                  ? 'Tap button to capture product' 
+                  : scanned 
+                    ? 'Barcode acquired — analyzing...' 
+                    : 'Position barcode in the reticle'}
             </Text>
           </View>
         </View>
@@ -1071,6 +1361,132 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           <Image source={{ uri: capturedImage }} style={styles.previewImage} />
         )}
         <Text style={styles.loadingSubtext}>Analyzing your product image</Text>
+      </View>
+    );
+  }
+
+  if (smartScanResults) {
+    const r = smartScanResults;
+    return (
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+          bounces={true}
+          keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior="automatic"
+        >
+          <View style={styles.smartResultsHeader}>
+            <View style={styles.smartResultsIconWrap}>
+              <Sparkles size={22} color={arcaneColors.accent} />
+            </View>
+            <View style={styles.smartResultsHeaderText}>
+              <Text style={styles.smartResultsTitle}>AI Smart Scan Results</Text>
+              <Text style={styles.smartResultsSubtitle}>Single-frame OCR + Translation</Text>
+            </View>
+          </View>
+
+          {r.capturedImageUri && (
+            <Image source={{ uri: r.capturedImageUri }} style={styles.smartResultImage} />
+          )}
+
+          <View style={styles.smartFieldCard}>
+            <Text style={styles.smartFieldLabel}>Product Name</Text>
+            <Text style={styles.smartFieldValue} selectable>{r.productName || 'Not detected'}</Text>
+          </View>
+
+          {r.nameTranslation && isTranslationAvailable(r.nameTranslation) && (
+            <TranslationCard
+              originalText={r.nameTranslation.originalText}
+              translatedText={r.nameTranslation.translatedText}
+              detectedLanguage={r.nameTranslation.detectedLanguage}
+              isEnglish={r.nameTranslation.isEnglish}
+              onReportIssue={() => Alert.alert('Feedback', 'Translation issue reported. Thank you!')}
+              testID="name-translation-card"
+            />
+          )}
+
+          {r.brand && (
+            <View style={styles.smartFieldCard}>
+              <Text style={styles.smartFieldLabel}>Brand</Text>
+              <Text style={styles.smartFieldValue} selectable>{r.brand}</Text>
+            </View>
+          )}
+
+          <View style={styles.smartFieldCard}>
+            <Text style={styles.smartFieldLabel}>Ingredients</Text>
+            <Text style={[styles.smartFieldValue, !r.ingredients && styles.smartFieldMissing]} selectable>
+              {r.ingredients || 'Not detected — try capturing the ingredients panel'}
+            </Text>
+          </View>
+
+          {r.ingredientsTranslation && isTranslationAvailable(r.ingredientsTranslation) && (
+            <TranslationCard
+              originalText={r.ingredientsTranslation.originalText}
+              translatedText={r.ingredientsTranslation.translatedText}
+              detectedLanguage={r.ingredientsTranslation.detectedLanguage}
+              isEnglish={r.ingredientsTranslation.isEnglish}
+              onReportIssue={() => Alert.alert('Feedback', 'Translation issue reported. Thank you!')}
+              testID="ingredients-translation-card"
+            />
+          )}
+
+          {r.allergens && (
+            <View style={[styles.smartFieldCard, styles.smartFieldCardDanger]}>
+              <Text style={[styles.smartFieldLabel, { color: arcaneColors.danger }]}>Allergen Warnings</Text>
+              <Text style={styles.smartFieldValue} selectable>{r.allergens}</Text>
+            </View>
+          )}
+
+          {r.barcode && (
+            <View style={styles.smartFieldCard}>
+              <Text style={styles.smartFieldLabel}>Barcode</Text>
+              <Text style={styles.smartFieldValue} selectable>{r.barcode}</Text>
+            </View>
+          )}
+
+          <View style={styles.smartResultActions}>
+            <TouchableOpacity
+              style={styles.smartActionPrimary}
+              onPress={handleSmartScanSaveAndView}
+              activeOpacity={0.8}
+            >
+              <Shield size={20} color="#FFFFFF" />
+              <Text style={styles.smartActionPrimaryText}>Save & View Product</Text>
+            </TouchableOpacity>
+
+            <View style={styles.smartActionRow}>
+              <TouchableOpacity
+                style={styles.smartActionSecondary}
+                onPress={() => {
+                  setSmartScanResults(null);
+                  openSmartScan();
+                }}
+                activeOpacity={0.8}
+              >
+                <RotateCcw size={18} color={arcaneColors.primary} />
+                <Text style={styles.smartActionSecondaryText}>Re-scan</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.smartActionSecondary}
+                onPress={() => setSmartScanResults(null)}
+                activeOpacity={0.8}
+              >
+                <X size={18} color={arcaneColors.textSecondary} />
+                <Text style={styles.smartActionSecondaryText}>Discard</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.disclaimer}>
+            <AlertCircle size={16} color="#9CA3AF" />
+            <Text style={styles.disclaimerText}>
+              AI Smart Scan is in Beta. Results may be imperfect. Always verify ingredients on the physical label.
+            </Text>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -1163,30 +1579,69 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           )}
         </View>
 
-        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-          <TouchableOpacity 
-            style={styles.scanButton} 
-            onPress={() => {
-              Animated.sequence([
-                Animated.timing(scaleAnim, {
-                  toValue: 0.95,
-                  duration: 100,
-                  useNativeDriver: true,
-                }),
-                Animated.timing(scaleAnim, {
-                  toValue: 1,
-                  duration: 100,
-                  useNativeDriver: true,
-                }),
-              ]).start();
-              openCamera();
-            }}
-            activeOpacity={0.9}
+        <View style={styles.modeToggleContainer}>
+          <TouchableOpacity
+            style={[styles.modeToggleBtn, scanMode === 'classic' && styles.modeToggleBtnActive]}
+            onPress={() => setScanMode('classic')}
+            activeOpacity={0.7}
           >
-            <Camera size={32} color="#FFFFFF" />
-            <Text style={styles.scanButtonText}>Scan Barcode</Text>
+            <Camera size={16} color={scanMode === 'classic' ? '#FFFFFF' : arcaneColors.textSecondary} />
+            <Text style={[styles.modeToggleText, scanMode === 'classic' && styles.modeToggleTextActive]}>Classic Scan</Text>
           </TouchableOpacity>
-        </Animated.View>
+          <TouchableOpacity
+            style={[styles.modeToggleBtn, scanMode === 'smart' && styles.modeToggleBtnSmart]}
+            onPress={() => setScanMode('smart')}
+            activeOpacity={0.7}
+          >
+            <Sparkles size={16} color={scanMode === 'smart' ? '#FFFFFF' : arcaneColors.accent} />
+            <Text style={[styles.modeToggleText, scanMode === 'smart' && styles.modeToggleTextActive]}>AI Smart Scan</Text>
+            <View style={styles.betaBadge}>
+              <Text style={styles.betaBadgeText}>Beta</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {scanMode === 'classic' ? (
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <TouchableOpacity 
+              style={styles.scanButton} 
+              onPress={() => {
+                Animated.sequence([
+                  Animated.timing(scaleAnim, {
+                    toValue: 0.95,
+                    duration: 100,
+                    useNativeDriver: true,
+                  }),
+                  Animated.timing(scaleAnim, {
+                    toValue: 1,
+                    duration: 100,
+                    useNativeDriver: true,
+                  }),
+                ]).start();
+                openCamera();
+              }}
+              activeOpacity={0.9}
+            >
+              <Camera size={32} color="#FFFFFF" />
+              <Text style={styles.scanButtonText}>Scan Barcode</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : (
+          <TouchableOpacity
+            style={styles.smartScanMainButton}
+            onPress={openSmartScan}
+            activeOpacity={0.85}
+            testID="smart-scan-main-button"
+          >
+            <View style={styles.smartScanMainIcon}>
+              <Sparkles size={28} color="#FFFFFF" />
+            </View>
+            <View style={styles.smartScanMainContent}>
+              <Text style={styles.smartScanMainTitle}>AI Smart Capture</Text>
+              <Text style={styles.smartScanMainSubtitle}>OCR + Language Detection + Translation</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.photoOptionsContainer}>
           <TouchableOpacity 
@@ -1551,4 +2006,48 @@ const styles = StyleSheet.create({
   noResultsButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' as const },
   noResultsButtonSecondary: { backgroundColor: '#FFF', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center', borderWidth: 2, borderColor: '#E5E7EB' },
   noResultsButtonSecondaryText: { color: '#6B7280', fontSize: 16, fontWeight: '600' as const },
+
+  modeToggleContainer: { flexDirection: 'row', backgroundColor: arcaneColors.bgElevated, borderRadius: arcaneRadius.lg, padding: 4, marginBottom: 16, gap: 4 },
+  modeToggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 12, borderRadius: arcaneRadius.md },
+  modeToggleBtnActive: { backgroundColor: arcaneColors.primary, ...arcaneShadows.card },
+  modeToggleBtnSmart: { backgroundColor: arcaneColors.accent, ...arcaneShadows.glow },
+  modeToggleText: { fontSize: 13, fontWeight: '600' as const, color: arcaneColors.textSecondary },
+  modeToggleTextActive: { color: '#FFFFFF' },
+  betaBadge: { backgroundColor: 'rgba(245, 197, 66, 0.25)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 },
+  betaBadgeText: { fontSize: 9, fontWeight: '700' as const, color: arcaneColors.goldDark, letterSpacing: 0.5 },
+
+  smartScanMainButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: arcaneColors.accent, borderRadius: arcaneRadius.xl, padding: 20, marginBottom: 24, gap: 16, ...arcaneShadows.glow },
+  smartScanMainIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  smartScanMainContent: { flex: 1 },
+  smartScanMainTitle: { fontSize: 18, fontWeight: '700' as const, color: '#FFFFFF', marginBottom: 3 },
+  smartScanMainSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
+
+  smartCaptureButton: { position: 'absolute', bottom: -90, alignSelf: 'center', alignItems: 'center', gap: 6 },
+  smartCaptureButtonInner: { width: 74, height: 74, borderRadius: 37, backgroundColor: arcaneColors.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#FFF', ...arcaneShadows.glow },
+  smartCaptureLabel: { fontSize: 12, fontWeight: '700' as const, color: '#FFF', letterSpacing: 0.3 },
+  smartProcessingOverlay: { position: 'absolute', bottom: -80, alignSelf: 'center', alignItems: 'center', gap: 8 },
+  smartProcessingText: { fontSize: 13, fontWeight: '600' as const, color: '#FFF' },
+
+  autoCaptureToggle: { position: 'absolute' as const, backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, zIndex: 10, minWidth: 44, minHeight: 44 },
+  autoCaptureToggleActive: { backgroundColor: 'rgba(109, 40, 217, 0.85)', borderWidth: 1, borderColor: 'rgba(245, 197, 66, 0.4)' },
+  autoCaptureText: { color: '#FFF', fontSize: 13, fontWeight: '600' as const },
+  autoCaptureTextActive: { color: '#F5C542' },
+
+  smartResultsHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: arcaneColors.borderAccent },
+  smartResultsIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: arcaneColors.accentMuted, alignItems: 'center', justifyContent: 'center' },
+  smartResultsHeaderText: { flex: 1 },
+  smartResultsTitle: { fontSize: 20, fontWeight: '700' as const, color: arcaneColors.accent },
+  smartResultsSubtitle: { fontSize: 12, color: arcaneColors.textMuted, marginTop: 2 },
+  smartResultImage: { width: '100%' as const, height: 200, borderRadius: arcaneRadius.lg, marginBottom: 16, backgroundColor: arcaneColors.bgElevated },
+  smartFieldCard: { backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: arcaneColors.border },
+  smartFieldCardDanger: { borderColor: arcaneColors.dangerMuted, backgroundColor: 'rgba(220, 38, 38, 0.04)' },
+  smartFieldLabel: { fontSize: 11, fontWeight: '700' as const, color: arcaneColors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' as const, marginBottom: 6 },
+  smartFieldValue: { fontSize: 14, lineHeight: 20, color: arcaneColors.text },
+  smartFieldMissing: { color: arcaneColors.textMuted, fontStyle: 'italic' as const },
+  smartResultActions: { marginTop: 12, marginBottom: 16, gap: 10 },
+  smartActionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: arcaneColors.primary, borderRadius: arcaneRadius.lg, paddingVertical: 16, ...arcaneShadows.elevated },
+  smartActionPrimaryText: { fontSize: 16, fontWeight: '700' as const, color: '#FFFFFF' },
+  smartActionRow: { flexDirection: 'row', gap: 10 },
+  smartActionSecondary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.md, paddingVertical: 12, borderWidth: 1, borderColor: arcaneColors.border },
+  smartActionSecondaryText: { fontSize: 14, fontWeight: '600' as const, color: arcaneColors.textSecondary },
 });

@@ -1,216 +1,208 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Platform,
-} from 'react-native';
-import { Languages, Globe, AlertCircle, ChevronDown, ChevronUp, Copy } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import React, { useCallback, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { Copy, Globe, Languages } from 'lucide-react-native';
 import { arcaneColors, arcaneRadius, arcaneShadows } from '@/constants/theme';
-import { SigilBadge } from '@/components/SigilBadge';
 import { translateText, isTranslationAvailable, TranslationResult } from '@/services/translationService';
 
-interface TranslationCardProps {
-  label: string;
-  text: string;
-  compact?: boolean;
-  autoTranslate?: boolean;
+interface DirectTranslationProps {
+  originalText: string;
+  translatedText: string;
+  detectedLanguage: string;
+  isEnglish: boolean;
+  onReportIssue?: () => void;
   testID?: string;
 }
 
-export const TranslationCard = React.memo(function TranslationCard({
-  label,
-  text,
-  compact = false,
-  autoTranslate = false,
-  testID,
-}: TranslationCardProps) {
-  const [translation, setTranslation] = useState<TranslationResult | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [expanded, setExpanded] = useState(true);
-  const [hasError, setHasError] = useState(false);
+interface AutoTranslateProps {
+  label: string;
+  text: string;
+  autoTranslate?: boolean;
+  compact?: boolean;
+  testID?: string;
+}
 
-  const doTranslate = useCallback(async () => {
-    if (!text || text.trim().length === 0) return;
-    setIsLoading(true);
-    setHasError(false);
-    try {
-      console.log('[TranslationCard] Translating:', label);
-      const result = await translateText(text);
-      setTranslation(result);
-    } catch (err) {
-      console.error('[TranslationCard] Translation error:', err);
-      setHasError(true);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [text, label]);
+type TranslationCardProps = DirectTranslationProps | AutoTranslateProps;
 
-  useEffect(() => {
-    if (autoTranslate && text && text.trim().length > 0) {
-      doTranslate();
-    }
-  }, [autoTranslate, text, doTranslate]);
+function isAutoTranslateProps(props: TranslationCardProps): props is AutoTranslateProps {
+  return 'text' in props && 'label' in props;
+}
 
-  const handleCopy = useCallback(async (content: string) => {
-    try {
-      if (Platform.OS === 'web') {
-        await navigator.clipboard.writeText(content);
-      } else {
-        const Clipboard = await import('expo-clipboard');
-        await Clipboard.setStringAsync(content);
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: 'English',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German',
+  it: 'Italian',
+  pt: 'Portuguese',
+  ja: 'Japanese',
+  ko: 'Korean',
+  zh: 'Chinese',
+  ar: 'Arabic',
+  ru: 'Russian',
+  hi: 'Hindi',
+  nl: 'Dutch',
+  sv: 'Swedish',
+  pl: 'Polish',
+  tr: 'Turkish',
+  th: 'Thai',
+  vi: 'Vietnamese',
+  id: 'Indonesian',
+  he: 'Hebrew',
+};
+
+function getLanguageLabel(code: string): string {
+  if (!code) return 'Unknown';
+  const lower = code.toLowerCase().trim();
+  if (LANGUAGE_LABELS[lower]) return LANGUAGE_LABELS[lower];
+  if (lower.length > 3) return code.charAt(0).toUpperCase() + code.slice(1);
+  return code.toUpperCase();
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    if (Platform.OS === 'web') {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
       }
-      Alert.alert('Copied', 'Text copied to clipboard');
-    } catch {
-      console.warn('[TranslationCard] Copy failed');
+    } else {
+      await Clipboard.setStringAsync(text);
     }
-  }, []);
+  } catch (err) {
+    console.warn('[TranslationCard] Copy failed:', err);
+  }
+}
 
-  const handleReport = useCallback(() => {
-    Alert.alert(
-      'Report Translation Issue',
-      'Thank you for helping improve translations. What kind of issue did you notice?',
-      [
-        { text: 'Inaccurate Translation', onPress: () => console.log('[Translation] Report: inaccurate for', label) },
-        { text: 'Wrong Language Detected', onPress: () => console.log('[Translation] Report: wrong language for', label) },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  }, [label]);
+function TranslationCardDirect({
+  originalText,
+  translatedText,
+  detectedLanguage,
+  isEnglish,
+  onReportIssue,
+  testID,
+}: DirectTranslationProps) {
+  const handleCopyOriginal = useCallback(() => {
+    copyToClipboard(originalText);
+  }, [originalText]);
 
-  const showTranslation = translation && isTranslationAvailable(translation);
+  const handleCopyTranslated = useCallback(() => {
+    copyToClipboard(translatedText);
+  }, [translatedText]);
 
-  if (!text || text.trim().length === 0) return null;
-
-  if (!showTranslation && !isLoading && translation) {
+  if (isEnglish) {
     return null;
   }
 
-  if (!autoTranslate && !translation && !isLoading) {
-    return (
-      <TouchableOpacity
-        testID={testID}
-        style={styles.translateButton}
-        onPress={doTranslate}
-        activeOpacity={0.7}
-      >
-        <Languages size={16} color={arcaneColors.accent} />
-        <Text style={styles.translateButtonText}>Translate {label}</Text>
-      </TouchableOpacity>
-    );
-  }
+  return (
+    <View style={styles.container} testID={testID}>
+      <View style={styles.header}>
+        <View style={styles.headerIcon}>
+          <Languages size={18} color={arcaneColors.accent} />
+        </View>
+        <Text style={styles.headerTitle}>Translation</Text>
+        <View style={styles.langBadge}>
+          <Globe size={12} color={arcaneColors.textSecondary} />
+          <Text style={styles.langBadgeText}>{getLanguageLabel(detectedLanguage)}</Text>
+        </View>
+      </View>
 
-  if (isLoading) {
+      <View style={styles.panelsRow}>
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelLabel}>Original</Text>
+            <TouchableOpacity
+              onPress={handleCopyOriginal}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.copyBtn}
+            >
+              <Copy size={14} color={arcaneColors.textMuted} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.panelText} selectable>{originalText}</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={[styles.panelLabel, styles.panelLabelEnglish]}>English</Text>
+            <TouchableOpacity
+              onPress={handleCopyTranslated}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.copyBtn}
+            >
+              <Copy size={14} color={arcaneColors.textMuted} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.panelText} selectable>{translatedText}</Text>
+        </View>
+      </View>
+
+      {onReportIssue && (
+        <TouchableOpacity style={styles.reportBtn} onPress={onReportIssue}>
+          <Text style={styles.reportBtnText}>Report translation issue</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+function TranslationCardAuto({
+  label,
+  text,
+  autoTranslate,
+  compact,
+  testID,
+}: AutoTranslateProps) {
+  const [translationResult, setTranslationResult] = useState<TranslationResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!autoTranslate || !text || text.trim().length === 0) return;
+    let cancelled = false;
+    setLoading(true);
+    translateText(text).then((result) => {
+      if (!cancelled) {
+        setTranslationResult(result);
+        setLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [text, autoTranslate]);
+
+  if (loading) {
     return (
-      <View testID={testID} style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color={arcaneColors.accent} />
-        <Text style={styles.loadingText}>Translating {label.toLowerCase()}...</Text>
+      <View style={[styles.container, compact && styles.containerCompact]} testID={testID}>
+        <View style={styles.loadingRow}>
+          <ActivityIndicator size="small" color={arcaneColors.accent} />
+          <Text style={styles.loadingText}>Detecting language...</Text>
+        </View>
       </View>
     );
   }
 
-  if (hasError) {
-    return (
-      <TouchableOpacity
-        testID={testID}
-        style={styles.errorContainer}
-        onPress={doTranslate}
-        activeOpacity={0.7}
-      >
-        <AlertCircle size={14} color={arcaneColors.caution} />
-        <Text style={styles.errorText}>Translation failed. Tap to retry.</Text>
-      </TouchableOpacity>
-    );
+  if (!translationResult || !isTranslationAvailable(translationResult)) {
+    return null;
   }
 
-  if (!showTranslation) return null;
-
   return (
-    <View testID={testID} style={styles.container}>
-      <TouchableOpacity
-        style={styles.header}
-        onPress={() => setExpanded(!expanded)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.headerLeft}>
-          <Globe size={14} color={arcaneColors.accent} />
-          <Text style={styles.headerLabel}>{label} Translation</Text>
-          <SigilBadge
-            label={translation.detectedLanguage.toUpperCase()}
-            status="legendary"
-            size="sm"
-          />
-        </View>
-        {expanded ? (
-          <ChevronUp size={16} color={arcaneColors.textMuted} />
-        ) : (
-          <ChevronDown size={16} color={arcaneColors.textMuted} />
-        )}
-      </TouchableOpacity>
-
-      {expanded && (
-        <View style={styles.body}>
-          <View style={styles.textBlock}>
-            <View style={styles.textBlockHeader}>
-              <Text style={styles.textBlockLabel}>Original</Text>
-              <TouchableOpacity
-                onPress={() => handleCopy(translation.originalText)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Copy size={12} color={arcaneColors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            <Text
-              style={[styles.originalText, compact && styles.compactText]}
-              selectable
-              numberOfLines={compact ? 4 : undefined}
-            >
-              {translation.originalText}
-            </Text>
-          </View>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Languages size={12} color={arcaneColors.accentLight} />
-            <View style={styles.dividerLine} />
-          </View>
-
-          <View style={styles.textBlock}>
-            <View style={styles.textBlockHeader}>
-              <Text style={styles.textBlockLabelEnglish}>English</Text>
-              <TouchableOpacity
-                onPress={() => handleCopy(translation.translatedText)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Copy size={12} color={arcaneColors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            <Text
-              style={[styles.translatedText, compact && styles.compactText]}
-              selectable
-              numberOfLines={compact ? 4 : undefined}
-            >
-              {translation.translatedText}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.reportButton}
-            onPress={handleReport}
-            activeOpacity={0.7}
-          >
-            <AlertCircle size={11} color={arcaneColors.textMuted} />
-            <Text style={styles.reportText}>Report translation issue</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+    <TranslationCardDirect
+      originalText={translationResult.originalText}
+      translatedText={translationResult.translatedText}
+      detectedLanguage={translationResult.detectedLanguage}
+      isEnglish={translationResult.isEnglish}
+      testID={testID}
+    />
   );
+}
+
+export const TranslationCard = React.memo(function TranslationCard(props: TranslationCardProps) {
+  if (isAutoTranslateProps(props)) {
+    return <TranslationCardAuto {...props} />;
+  }
+  return <TranslationCardDirect {...props} />;
 });
 
 const styles = StyleSheet.create({
@@ -220,139 +212,109 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: arcaneColors.borderAccent,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: 10,
     ...arcaneShadows.card,
+  },
+  containerCompact: {
+    marginBottom: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: arcaneColors.accentMuted,
     borderBottomWidth: 1,
     borderBottomColor: arcaneColors.borderAccent,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
-  headerLabel: {
-    fontSize: 13,
-    fontWeight: '600' as const,
+  headerIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(109, 40, 217, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700' as const,
     color: arcaneColors.accent,
     letterSpacing: 0.3,
   },
-  body: {
-    padding: 14,
+  langBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: arcaneColors.bgElevated,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: arcaneRadius.pill,
   },
-  textBlock: {
-    marginBottom: 4,
+  langBadgeText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: arcaneColors.textSecondary,
   },
-  textBlockHeader: {
+  panelsRow: {
+    padding: 12,
+    gap: 0,
+  },
+  panel: {
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 6,
   },
-  textBlockLabel: {
+  panelLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: arcaneColors.textMuted,
-    textTransform: 'uppercase' as const,
     letterSpacing: 0.8,
+    textTransform: 'uppercase' as const,
   },
-  textBlockLabelEnglish: {
-    fontSize: 11,
-    fontWeight: '700' as const,
+  panelLabelEnglish: {
     color: arcaneColors.primary,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
   },
-  originalText: {
+  copyBtn: {
+    padding: 4,
+  },
+  panelText: {
     fontSize: 14,
-    color: arcaneColors.textSecondary,
     lineHeight: 20,
-  },
-  translatedText: {
-    fontSize: 14,
     color: arcaneColors.text,
-    lineHeight: 20,
-    fontWeight: '500' as const,
-  },
-  compactText: {
-    fontSize: 13,
-    lineHeight: 18,
   },
   divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginVertical: 10,
-  },
-  dividerLine: {
-    flex: 1,
     height: 1,
-    backgroundColor: arcaneColors.borderAccent,
+    backgroundColor: arcaneColors.borderLight,
+    marginHorizontal: -12,
+    marginVertical: 2,
   },
-  reportButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-end',
-    paddingTop: 8,
-  },
-  reportText: {
-    fontSize: 11,
-    color: arcaneColors.textMuted,
-  },
-  translateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: arcaneRadius.pill,
-    backgroundColor: arcaneColors.accentMuted,
-    borderWidth: 1,
-    borderColor: arcaneColors.borderAccent,
-    alignSelf: 'flex-start',
-    marginBottom: 12,
-  },
-  translateButtonText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: arcaneColors.accent,
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
+  reportBtn: {
     paddingVertical: 10,
-    borderRadius: arcaneRadius.lg,
-    backgroundColor: arcaneColors.accentMuted,
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: arcaneColors.borderLight,
+    alignItems: 'center',
+  },
+  reportBtnText: {
+    fontSize: 12,
+    color: arcaneColors.textMuted,
+    fontWeight: '500' as const,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
   },
   loadingText: {
     fontSize: 13,
-    color: arcaneColors.accent,
-    fontWeight: '500' as const,
-  },
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: arcaneRadius.lg,
-    backgroundColor: arcaneColors.cautionMuted,
-    marginBottom: 12,
-  },
-  errorText: {
-    fontSize: 13,
-    color: arcaneColors.caution,
-    fontWeight: '500' as const,
+    color: arcaneColors.textMuted,
   },
 });
