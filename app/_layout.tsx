@@ -16,6 +16,8 @@ import { FamilyErrorBoundary } from "@/components/FamilyErrorBoundary";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { BUILD_ID } from "@/constants/appVersion";
 import { ReduceMotionProvider } from "@/contexts/ReduceMotionContext";
+import { LimitedModeBanner } from "@/components/LimitedModeBanner";
+import { runSimpleConnectionCheck } from "@/utils/supabaseHealth";
 import { MysticToastProvider, MysticToastRenderer } from "@/components/MysticToast";
 import { arcaneColors } from "@/constants/theme";
 
@@ -68,6 +70,9 @@ function RootLayoutNav() {
   const [loadingPhase, setLoadingPhase] = useState<'initial' | 'session' | 'profiles' | 'ready'>('initial');
   const [justSignedIn, setJustSignedIn] = useState(false);
   const signInGraceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [limitedMode, setLimitedMode] = useState(false);
+  const [limitedBannerVisible, setLimitedBannerVisible] = useState(false);
+  const healthCheckDoneRef = React.useRef(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -298,6 +303,40 @@ function RootLayoutNav() {
     };
   }, [currentUser, hasCompletedOnboarding]);
 
+  useEffect(() => {
+    if (healthCheckDoneRef.current) return;
+    if (isInitialized && currentUser) {
+      healthCheckDoneRef.current = true;
+      console.log('[Layout] Running background health check...');
+      runSimpleConnectionCheck().then((result) => {
+        console.log('[Layout] Health check result:', result.message);
+        if (!result.ok) {
+          setLimitedMode(true);
+          setLimitedBannerVisible(true);
+        }
+      }).catch((err) => {
+        console.warn('[Layout] Health check error:', err);
+        setLimitedMode(true);
+        setLimitedBannerVisible(true);
+      });
+    }
+  }, [isInitialized, currentUser]);
+
+  const handleRetryLimitedMode = React.useCallback(() => {
+    console.log('[Layout] Retrying health check from limited mode banner...');
+    runSimpleConnectionCheck().then((result) => {
+      if (result.ok) {
+        setLimitedMode(false);
+        setLimitedBannerVisible(false);
+        console.log('[Layout] Health check passed, exiting limited mode');
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleDismissLimitedMode = React.useCallback(() => {
+    setLimitedBannerVisible(false);
+  }, []);
+
   const handleSkip = () => {
     console.log('[Navigation] User skipped loading');
     setLoadingTimeout(true);
@@ -348,14 +387,21 @@ function RootLayoutNav() {
   }
 
   return (
-    <Stack screenOptions={{
-      headerBackTitle: "Back",
-      headerStyle: { backgroundColor: arcaneColors.headerBg },
-      headerTintColor: arcaneColors.primary,
-      headerTitleStyle: { color: arcaneColors.headerText, fontWeight: '600' as const },
-      headerShadowVisible: false,
-    }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <View style={{ flex: 1 }}>
+      <LimitedModeBanner
+        visible={limitedBannerVisible}
+        message={limitedMode ? 'Limited mode: some online features unavailable' : null}
+        onRetry={handleRetryLimitedMode}
+        onDismiss={handleDismissLimitedMode}
+      />
+      <Stack screenOptions={{
+        headerBackTitle: "Back",
+        headerStyle: { backgroundColor: arcaneColors.headerBg },
+        headerTintColor: arcaneColors.primary,
+        headerTitleStyle: { color: arcaneColors.headerText, fontWeight: '600' as const },
+        headerShadowVisible: false,
+      }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="welcome" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="wizard" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="product/[code]" options={{ title: "Product Details" }} />
@@ -374,8 +420,9 @@ function RootLayoutNav() {
       <Stack.Screen name="reset-password" options={{ headerShown: false }} />
       <Stack.Screen name="subscription" options={{ title: "Subscription" }} />
       <Stack.Screen name="accept-invite" options={{ title: "Family Invitation" }} />
-      <Stack.Screen name="security-checklist" options={{ title: "Security Checklist" }} />
-    </Stack>
+        <Stack.Screen name="security-checklist" options={{ title: "Security Checklist" }} />
+      </Stack>
+    </View>
   );
 }
 

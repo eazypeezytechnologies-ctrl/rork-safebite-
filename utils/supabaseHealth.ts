@@ -101,6 +101,7 @@ export async function runSupabaseOperationalCheck(): Promise<OperationalCheckRes
   const headers = {
     'apikey': supabaseAnonKey,
     'Authorization': `Bearer ${supabaseAnonKey}`,
+    'Accept': 'application/json',
     'Content-Type': 'application/json',
   };
 
@@ -204,6 +205,150 @@ function redactUrl(url: string | null): string | null {
 
 function redactMessage(msg: string): string {
   return msg.replace(/eyJ[A-Za-z0-9_-]{10,}/g, '[REDACTED_TOKEN]');
+}
+
+export interface SimpleConnectionResult {
+  ok: boolean;
+  message: string;
+}
+
+export async function runSimpleConnectionCheck(): Promise<SimpleConnectionResult> {
+  const supabaseUrl = getSupabaseUrl();
+  const supabaseAnonKey = getSupabaseAnonKey();
+
+  if (!supabaseUrl || !supabaseUrl.startsWith('https://')) {
+    console.log('[SimpleCheck] No valid URL configured');
+    return { ok: false, message: 'App not configured' };
+  }
+  if (!supabaseAnonKey || supabaseAnonKey.length < 10) {
+    console.log('[SimpleCheck] No valid anon key');
+    return { ok: false, message: 'App not configured' };
+  }
+
+  try {
+    const headers = {
+      'apikey': supabaseAnonKey,
+      'Authorization': `Bearer ${supabaseAnonKey}`,
+      'Accept': 'application/json',
+    };
+    const res = await timedFetch(`${supabaseUrl}/auth/v1/health`, headers);
+    if (res.status === 200) {
+      console.log('[SimpleCheck] Connection OK');
+      return { ok: true, message: 'Connected' };
+    }
+    console.log('[SimpleCheck] Unexpected status:', res.status);
+    return { ok: false, message: 'Connection issue' };
+  } catch (err: any) {
+    console.log('[SimpleCheck] Error:', err?.message);
+    return { ok: false, message: 'Connection issue' };
+  }
+}
+
+export interface OperationalSelfTestResult {
+  buildOperational: boolean;
+  configValid: boolean;
+  healthOk: boolean;
+  sessionOk: boolean;
+  summary: string;
+  details: {
+    configCheck: string;
+    healthCheck: string;
+    sessionCheck: string;
+  };
+  timestamp: string;
+}
+
+export async function runOperationalSelfTest(
+  getSessionFn?: () => Promise<{ data: { session: any }; error: any }>,
+): Promise<OperationalSelfTestResult> {
+  const timestamp = new Date().toISOString();
+  const supabaseUrl = getSupabaseUrl();
+  const supabaseAnonKey = getSupabaseAnonKey();
+
+  const result: OperationalSelfTestResult = {
+    buildOperational: false,
+    configValid: false,
+    healthOk: false,
+    sessionOk: false,
+    summary: '',
+    details: {
+      configCheck: 'Not checked',
+      healthCheck: 'Not checked',
+      sessionCheck: 'Not checked',
+    },
+    timestamp,
+  };
+
+  if (!supabaseUrl || !supabaseUrl.startsWith('https://')) {
+    result.details.configCheck = 'SUPABASE_URL missing or invalid';
+    result.summary = 'Config invalid — URL missing or does not start with https://';
+    console.log('[SelfTest] Config invalid:', result.details.configCheck);
+    return result;
+  }
+  if (!supabaseAnonKey || supabaseAnonKey.length < 10) {
+    result.details.configCheck = 'SUPABASE_ANON_KEY missing or too short';
+    result.summary = 'Config invalid — anon key missing';
+    console.log('[SelfTest] Config invalid:', result.details.configCheck);
+    return result;
+  }
+
+  result.configValid = true;
+  result.details.configCheck = 'Valid';
+  console.log('[SelfTest] Config valid');
+
+  try {
+    const headers = {
+      'apikey': supabaseAnonKey,
+      'Authorization': `Bearer ${supabaseAnonKey}`,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+    const res = await timedFetch(`${supabaseUrl}/auth/v1/health`, headers);
+    if (res.status === 200) {
+      result.healthOk = true;
+      result.details.healthCheck = `Healthy (${res.ms}ms)`;
+    } else {
+      result.details.healthCheck = `HTTP ${res.status} (${res.ms}ms)`;
+    }
+    console.log('[SelfTest] Health check:', result.details.healthCheck);
+  } catch (err: any) {
+    result.details.healthCheck = err?.message || 'Failed';
+    console.log('[SelfTest] Health check error:', result.details.healthCheck);
+  }
+
+  if (getSessionFn) {
+    try {
+      const { data, error } = await getSessionFn();
+      if (error) {
+        result.details.sessionCheck = `Error: ${error.message}`;
+      } else if (data?.session) {
+        result.sessionOk = true;
+        result.details.sessionCheck = 'Active session found';
+      } else {
+        result.details.sessionCheck = 'No active session';
+      }
+      console.log('[SelfTest] Session check:', result.details.sessionCheck);
+    } catch (err: any) {
+      result.details.sessionCheck = err?.message || 'Failed';
+      console.log('[SelfTest] Session check error:', result.details.sessionCheck);
+    }
+  } else {
+    result.details.sessionCheck = 'Skipped (not logged in)';
+  }
+
+  result.buildOperational = result.configValid && result.healthOk;
+  if (result.buildOperational) {
+    result.summary = 'Build Operational — all checks passed';
+  } else {
+    const failing: string[] = [];
+    if (!result.configValid) failing.push('Config');
+    if (!result.healthOk) failing.push('Health');
+    if (getSessionFn && !result.sessionOk) failing.push('Session');
+    result.summary = `Build Not Operational — ${failing.join(', ')} check(s) failed`;
+  }
+
+  console.log('[SelfTest] Result:', result.summary);
+  return result;
 }
 
 export function formatDiagnosticsForCopy(result: OperationalCheckResult): string {

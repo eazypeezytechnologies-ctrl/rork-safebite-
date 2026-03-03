@@ -19,7 +19,7 @@ import { useRouter, Href } from 'expo-router';
 import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Activity, Copy, RotateCcw, Server, Key, Lock } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
-import { isSupabaseConfigured, getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabase';
+import { isSupabaseConfigured, getSupabaseUrl, getSupabaseAnonKey, supabase } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BUILD_ID, APP_VERSION } from '@/constants/appVersion';
 import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
@@ -27,7 +27,8 @@ import { RuneCard } from '@/components/RuneCard';
 import { SigilBadge } from '@/components/SigilBadge';
 import { ArcaneDivider } from '@/components/ArcaneDivider';
 import { AnimatedButton } from '@/components/AnimatedButton';
-import { runSupabaseOperationalCheck, formatDiagnosticsForCopy } from '@/utils/supabaseHealth';
+import { runSupabaseOperationalCheck, formatDiagnosticsForCopy, runSimpleConnectionCheck, runOperationalSelfTest } from '@/utils/supabaseHealth';
+import type { SimpleConnectionResult, OperationalSelfTestResult } from '@/utils/supabaseHealth';
 
 type OperationalResult = Awaited<ReturnType<typeof runSupabaseOperationalCheck>>;
 
@@ -50,6 +51,12 @@ export default function WelcomeScreen() {
   const [opResult, setOpResult] = useState<OperationalResult | null>(null);
   const [opTesting, setOpTesting] = useState(false);
   const [copiedDiag, setCopiedDiag] = useState(false);
+
+  const [simpleResult, setSimpleResult] = useState<SimpleConnectionResult | null>(null);
+  const [simpleTesting, setSimpleTesting] = useState(false);
+
+  const [selfTestResult, setSelfTestResult] = useState<OperationalSelfTestResult | null>(null);
+  const [selfTesting, setSelfTesting] = useState(false);
 
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -312,6 +319,52 @@ export default function WelcomeScreen() {
     }
   }, []);
 
+  const runSimpleCheck = useCallback(async () => {
+    setSimpleTesting(true);
+    setSimpleResult(null);
+    console.log('[Welcome] Starting simple connection check...');
+    try {
+      const result = await runSimpleConnectionCheck();
+      setSimpleResult(result);
+      console.log('[Welcome] Simple check result:', result.message);
+    } catch (err: any) {
+      console.error('[Welcome] Simple check failed:', err);
+      setSimpleResult({ ok: false, message: 'Connection issue' });
+    } finally {
+      setSimpleTesting(false);
+    }
+  }, []);
+
+  const runSelfTest = useCallback(async () => {
+    setSelfTesting(true);
+    setSelfTestResult(null);
+    console.log('[Welcome] Starting operational self-test...');
+    try {
+      const result = await runOperationalSelfTest(
+        () => supabase.auth.getSession()
+      );
+      setSelfTestResult(result);
+      console.log('[Welcome] Self-test result:', result.summary);
+    } catch (err: any) {
+      console.error('[Welcome] Self-test failed:', err);
+      setSelfTestResult({
+        buildOperational: false,
+        configValid: false,
+        healthOk: false,
+        sessionOk: false,
+        summary: err?.message || 'Self-test failed',
+        details: {
+          configCheck: 'Error',
+          healthCheck: 'Error',
+          sessionCheck: 'Error',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } finally {
+      setSelfTesting(false);
+    }
+  }, []);
+
   const copyDiagnostics = useCallback(async () => {
     if (!opResult) return;
     try {
@@ -381,9 +434,53 @@ export default function WelcomeScreen() {
             </Pressable>
           </View>
 
+          <View style={styles.simpleCheckContainer}>
+            <TouchableOpacity
+              style={styles.simpleCheckButton}
+              onPress={runSimpleCheck}
+              disabled={simpleTesting}
+              hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+              testID="test-connection-button"
+            >
+              {simpleTesting ? (
+                <ActivityIndicator size="small" color={arcaneColors.primary} />
+              ) : simpleResult ? (
+                simpleResult.ok ? (
+                  <CheckCircle size={16} color={arcaneColors.safe} />
+                ) : (
+                  <AlertCircle size={16} color={arcaneColors.danger} />
+                )
+              ) : (
+                <Activity size={16} color={arcaneColors.textMuted} />
+              )}
+              <Text style={[
+                styles.simpleCheckText,
+                simpleTesting && { color: arcaneColors.textMuted },
+              ]}>
+                {simpleTesting
+                  ? 'Checking...'
+                  : simpleResult
+                    ? simpleResult.ok
+                      ? 'Connection: OK'
+                      : 'Connection: Issue'
+                    : 'Test Connection'}
+              </Text>
+            </TouchableOpacity>
+            {simpleResult && !simpleResult.ok && (
+              <TouchableOpacity
+                style={styles.simpleRetryButton}
+                onPress={runSimpleCheck}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <RotateCcw size={14} color={arcaneColors.primary} />
+                <Text style={styles.simpleRetryText}>Retry</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {adminUnlocked && (
           <>
-          <ArcaneDivider label="System" variant="default" style={styles.diagDivider} />
+          <ArcaneDivider label="Admin Diagnostics" variant="default" style={styles.diagDivider} />
 
           <View style={styles.diagSection}>
             <RuneCard variant="accent" style={styles.diagCard}>
@@ -515,6 +612,83 @@ export default function WelcomeScreen() {
                 )}
               </View>
             </RuneCard>
+
+            <View style={styles.selfTestSection}>
+              <RuneCard variant="default" style={styles.diagCard}>
+                <Text style={styles.diagTitle}>BUILD SELF-TEST</Text>
+
+                {selfTestResult && (
+                  <>
+                    <View style={styles.selfTestBadgeRow}>
+                      {selfTestResult.buildOperational ? (
+                        <View style={styles.selfTestPassBadge}>
+                          <CheckCircle size={16} color={arcaneColors.safe} />
+                          <Text style={styles.selfTestPassText}>Build Operational</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.selfTestFailBadge}>
+                          <AlertCircle size={16} color={arcaneColors.danger} />
+                          <Text style={styles.selfTestFailText}>Build Not Operational</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.checkRow}>
+                      <Server size={12} color={selfTestResult.configValid ? arcaneColors.safe : arcaneColors.danger} />
+                      <Text style={styles.checkLabel}>Config</Text>
+                      <SigilBadge
+                        label={selfTestResult.details.configCheck}
+                        status={selfTestResult.configValid ? 'safe' : 'danger'}
+                        size="sm"
+                      />
+                    </View>
+                    <View style={styles.checkRow}>
+                      <Activity size={12} color={selfTestResult.healthOk ? arcaneColors.safe : arcaneColors.danger} />
+                      <Text style={styles.checkLabel}>Health</Text>
+                      <SigilBadge
+                        label={selfTestResult.healthOk ? 'OK' : 'FAIL'}
+                        status={selfTestResult.healthOk ? 'safe' : 'danger'}
+                        size="sm"
+                      />
+                    </View>
+                    <View style={styles.checkRow}>
+                      <Key size={12} color={selfTestResult.sessionOk ? arcaneColors.safe : arcaneColors.caution} />
+                      <Text style={styles.checkLabel}>Session</Text>
+                      <SigilBadge
+                        label={selfTestResult.details.sessionCheck.substring(0, 24)}
+                        status={selfTestResult.sessionOk ? 'safe' : 'caution'}
+                        size="sm"
+                      />
+                    </View>
+
+                    <Text style={styles.summaryText}>{selfTestResult.summary}</Text>
+
+                    {!selfTestResult.buildOperational && (
+                      <View style={styles.hintBox}>
+                        <AlertCircle size={13} color={arcaneColors.caution} />
+                        <Text style={styles.hintText}>
+                          Limited mode enabled. Some online features may be unavailable.
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                )}
+
+                <View style={styles.opButtonRow}>
+                  <TouchableOpacity
+                    style={styles.opButton}
+                    onPress={runSelfTest}
+                    disabled={selfTesting}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <RotateCcw size={13} color={selfTesting ? arcaneColors.textMuted : arcaneColors.accent} />
+                    <Text style={[styles.opButtonText, selfTesting && styles.opButtonTextDisabled]}>
+                      {selfTesting ? 'Testing...' : selfTestResult ? 'Re-run Self-Test' : 'Run Self-Test'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </RuneCard>
+            </View>
           </View>
           </>
           )}
@@ -933,6 +1107,81 @@ const styles = StyleSheet.create({
   },
   opButtonTextDisabled: {
     color: arcaneColors.textMuted,
+  },
+  simpleCheckContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center' as const,
+    alignItems: 'center' as const,
+    marginTop: 16,
+    gap: 8,
+  },
+  simpleCheckButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: arcaneRadius.md,
+    backgroundColor: arcaneColors.bgElevated,
+    borderWidth: 1,
+    borderColor: arcaneColors.border,
+  },
+  simpleCheckText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: arcaneColors.textSecondary,
+  },
+  simpleRetryButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  simpleRetryText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: arcaneColors.primary,
+  },
+  selfTestSection: {
+    marginTop: 12,
+  },
+  selfTestBadgeRow: {
+    alignItems: 'center' as const,
+    marginBottom: 12,
+  },
+  selfTestPassBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: arcaneRadius.md,
+    backgroundColor: arcaneColors.safeMuted,
+    borderWidth: 1,
+    borderColor: 'rgba(5, 150, 105, 0.25)',
+  },
+  selfTestPassText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: arcaneColors.safe,
+  },
+  selfTestFailBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: arcaneRadius.md,
+    backgroundColor: arcaneColors.dangerMuted,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.2)',
+  },
+  selfTestFailText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: arcaneColors.danger,
   },
   footerContainer: {
     paddingHorizontal: 24,
