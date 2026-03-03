@@ -497,6 +497,8 @@ export default function ProductDetailsScreen() {
     const ruleLevel = baseInfo.verdict.level;
     const aiLevel = aiVerdictRecord.aiVerdict;
 
+    console.log('[ProductDetail] AI verdict adjustment - rule:', ruleLevel, 'ai:', aiLevel, 'conflict:', aiVerdictRecord.hasConflict);
+
     if (aiVerdictRecord.hasConflict) {
       return { ...baseInfo, aiAdjusted: false, aiConflict: true };
     }
@@ -504,6 +506,15 @@ export default function ProductDetailsScreen() {
     const hasDirectAllergenMatch = baseInfo.verdict.matches.some(
       m => m.source === 'allergens_tags' || m.source === 'ingredients' || m.source === 'custom_keyword'
     );
+
+    if (aiLevel === 'safe' && ruleLevel === 'safe') {
+      return {
+        ...baseInfo,
+        verdictLabel: 'AI-VERIFIED SAFE',
+        aiAdjusted: true,
+        aiConflict: false,
+      };
+    }
 
     if (aiLevel === 'safe' && ruleLevel !== 'safe' && !hasDirectAllergenMatch) {
       return {
@@ -522,6 +533,14 @@ export default function ProductDetailsScreen() {
       };
     }
 
+    if (aiLevel === 'safe' && ruleLevel !== 'safe' && hasDirectAllergenMatch) {
+      return {
+        ...baseInfo,
+        aiAdjusted: false,
+        aiConflict: true,
+      };
+    }
+
     if (aiLevel === 'danger' && ruleLevel === 'safe') {
       return {
         verdict: {
@@ -535,6 +554,25 @@ export default function ProductDetailsScreen() {
         aiAdjusted: true,
         aiConflict: false,
       };
+    }
+
+    if (aiLevel === 'caution' && ruleLevel === 'safe') {
+      return {
+        verdict: {
+          ...baseInfo.verdict,
+          level: 'caution' as const,
+          message: `AI analysis suggests caution. ${baseInfo.verdict.message}`,
+        },
+        verdictColor: getVerdictColor('caution'),
+        verdictLabel: 'AI: CAUTION',
+        affectedMembers: baseInfo.affectedMembers,
+        aiAdjusted: true,
+        aiConflict: false,
+      };
+    }
+
+    if (aiLevel === ruleLevel) {
+      return { ...baseInfo, aiAdjusted: true, aiConflict: false };
     }
 
     return { ...baseInfo, aiAdjusted: false, aiConflict: false };

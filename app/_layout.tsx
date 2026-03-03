@@ -168,6 +168,7 @@ function RootLayoutNav() {
                           currentPath === 'family-management' ||
                           currentPath === 'scan-emergency-qr' ||
                           currentPath === 'diagnostics' ||
+                          currentPath === 'security-checklist' ||
                           currentPath === 'welcome-tour' ||
                           currentPath === 'exposure-guidance' ||
                           currentPath === 'epipen-demo' ||

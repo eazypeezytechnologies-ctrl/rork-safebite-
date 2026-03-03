@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   TextInput,
   ScrollView,
   Platform,
@@ -15,6 +16,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Camera,
   Upload,
@@ -72,6 +74,7 @@ export default function ProductCaptureWizard({ barcode, onProductSaved, onCancel
   const { currentUser } = useUser();
   const queryClient = useQueryClient();
   const { reduceMotion } = useReduceMotion();
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
 
   const [step, setStep] = useState<WizardStep>(1);
@@ -495,17 +498,27 @@ Format response exactly as above, one per line.`;
           enableTorch={torchEnabled}
         />
         <View style={styles.cameraOverlay}>
-          <View style={styles.cameraHeader}>
-            <TouchableOpacity
-              style={styles.cameraCloseBtn}
-              onPress={() => setCameraActive(false)}
-            >
-              <X size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.wizardBackPill,
+              { top: insets.top + 8, left: Math.max(insets.left, 12) },
+            ]}
+            onPress={() => {
+              setTorchEnabled(false);
+              setCameraActive(false);
+            }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            testID="wizard-camera-back"
+          >
+            <X size={18} color="#FFFFFF" />
+            <Text style={styles.wizardBackPillText}>Back</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.cameraHeaderTitleWrap, { top: insets.top + 8 }]}>
             <Text style={styles.cameraHeaderTitle}>
               {analyzeTarget === 'front' ? 'Product Front' : 'Ingredients Label'}
             </Text>
-            <View style={{ width: 44 }} />
           </View>
 
           <View style={styles.cameraCenterFrame}>
@@ -516,15 +529,21 @@ Format response exactly as above, one per line.`;
           </View>
 
           <View style={styles.cameraBottom}>
-            <TouchableOpacity
-              style={styles.flashBtn}
+            <Pressable
+              style={({ pressed }) => [
+                styles.flashBtn,
+                pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] },
+              ]}
               onPress={async () => {
                 if (Platform.OS !== 'web') {
                   await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }
-                setTorchEnabled(!torchEnabled);
+                const next = !torchEnabled;
+                setTorchEnabled(next);
+                console.log('[CaptureWizard] Torch toggled:', next ? 'ON' : 'OFF');
               }}
               testID="wizard-flash-button"
+              hitSlop={10}
             >
               {torchEnabled ? (
                 <Flashlight size={22} color="#FBBF24" />
@@ -534,7 +553,7 @@ Format response exactly as above, one per line.`;
               <Text style={[styles.flashLabel, torchEnabled && { color: '#FBBF24' }]}>
                 {torchEnabled ? 'ON' : 'OFF'}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
 
             <TouchableOpacity
               style={styles.captureBtn}
@@ -1037,9 +1056,10 @@ const styles = StyleSheet.create({
   thumbSmall: { width: 80, height: 80, borderRadius: arcaneRadius.md, backgroundColor: arcaneColors.bgMist },
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between' },
-  cameraHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 56, paddingHorizontal: 16 },
-  cameraCloseBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(11, 15, 20, 0.7)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: arcaneColors.borderRune },
-  cameraHeaderTitle: { fontSize: 17, fontWeight: '700' as const, color: '#FFF' },
+  wizardBackPill: { position: 'absolute' as const, zIndex: 9999, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: 'rgba(11, 15, 20, 0.8)', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minWidth: 44, minHeight: 44, borderWidth: 1, borderColor: 'rgba(11, 110, 122, 0.4)', elevation: 20 },
+  wizardBackPillText: { fontSize: 16, fontWeight: '700' as const, color: '#FFF' },
+  cameraHeaderTitleWrap: { position: 'absolute' as const, left: 0, right: 0, alignItems: 'center' as const, zIndex: 1 },
+  cameraHeaderTitle: { fontSize: 17, fontWeight: '700' as const, color: '#FFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   cameraCenterFrame: { width: 280, height: 200, alignSelf: 'center' },
   cCorner: { position: 'absolute', width: 32, height: 32, borderColor: arcaneColors.primary },
   cTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 8 },
