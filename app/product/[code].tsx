@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,9 @@ import {
   Alert,
   Platform,
   TextInput,
-  KeyboardAvoidingView,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack, Href } from 'expo-router';
-import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter, Stack, Href, useFocusEffect } from 'expo-router';
+import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle, ShieldCheck } from 'lucide-react-native';
 import ProductCaptureWizard from '@/components/ProductCaptureWizard';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
@@ -22,6 +21,7 @@ import { searchRecallsByBarcode } from '@/api/recalls';
 import { calculateVerdict, getVerdictColor, getVerdictLabel } from '@/utils/verdict';
 import { Product, RecallResult } from '@/types';
 import { addToScanHistory } from '@/storage/scanHistory';
+import { getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
 import { useUser } from '@/contexts/UserContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
@@ -103,6 +103,26 @@ export default function ProductDetailsScreen() {
   const [aiReplyInput, setAiReplyInput] = useState('');
   const [aiConversation, setAiConversation] = useState<{role: 'ai' | 'user'; text: string}[]>([]);
   const [isAiReplying, setIsAiReplying] = useState(false);
+  const [aiVerdictRecord, setAiVerdictRecord] = useState<AIVerdictRecord | null>(null);
+  const hasLoadedInitially = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasLoadedInitially.current) {
+        hasLoadedInitially.current = true;
+        return;
+      }
+      if (code && activeProfile && currentUser) {
+        console.log('[ProductDetail] Screen focused, refreshing AI verdict...');
+        getAIVerdict(code, activeProfile.id, currentUser.id).then((stored) => {
+          if (stored) {
+            console.log('[ProductDetail] Refreshed AI verdict:', stored.aiVerdict);
+            setAiVerdictRecord(stored);
+          }
+        }).catch((err) => console.log('[ProductDetail] AI verdict refresh error:', err));
+      }
+    }, [code, activeProfile?.id, currentUser?.id])
+  );
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -268,6 +288,12 @@ export default function ProductDetailsScreen() {
         
         const favStatus = await isFavorite(code, activeProfile.id);
         setIsFav(favStatus);
+
+        const storedAiVerdict = await getAIVerdict(code, activeProfile.id, currentUser?.id);
+        if (storedAiVerdict) {
+          console.log('[ProductDetail] Found stored AI verdict:', storedAiVerdict.aiVerdict);
+          setAiVerdictRecord(storedAiVerdict);
+        }
       }
     } catch (err) {
       console.error('=== Error loading product ===');
@@ -464,7 +490,57 @@ export default function ProductDetailsScreen() {
     };
   };
 
-  const { verdict, verdictColor, verdictLabel, affectedMembers } = getVerdictInfo();
+  const getAiAdjustedVerdictInfo = () => {
+    const baseInfo = getVerdictInfo();
+    if (!aiVerdictRecord || !baseInfo.verdict) return { ...baseInfo, aiAdjusted: false, aiConflict: false };
+
+    const ruleLevel = baseInfo.verdict.level;
+    const aiLevel = aiVerdictRecord.aiVerdict;
+
+    if (aiVerdictRecord.hasConflict) {
+      return { ...baseInfo, aiAdjusted: false, aiConflict: true };
+    }
+
+    const hasDirectAllergenMatch = baseInfo.verdict.matches.some(
+      m => m.source === 'allergens_tags' || m.source === 'ingredients' || m.source === 'custom_keyword'
+    );
+
+    if (aiLevel === 'safe' && ruleLevel !== 'safe' && !hasDirectAllergenMatch) {
+      return {
+        verdict: {
+          ...baseInfo.verdict,
+          level: 'safe' as const,
+          message: baseInfo.verdict.missingData
+            ? 'AI analysis found no allergen risks for your profile.'
+            : `AI analysis confirms this product appears safe. Original: ${baseInfo.verdict.message}`,
+        },
+        verdictColor: getVerdictColor('safe'),
+        verdictLabel: 'AI-VERIFIED SAFE',
+        affectedMembers: baseInfo.affectedMembers,
+        aiAdjusted: true,
+        aiConflict: false,
+      };
+    }
+
+    if (aiLevel === 'danger' && ruleLevel === 'safe') {
+      return {
+        verdict: {
+          ...baseInfo.verdict,
+          level: 'caution' as const,
+          message: `AI analysis detected potential risks not caught by rule-based check. ${baseInfo.verdict.message}`,
+        },
+        verdictColor: getVerdictColor('caution'),
+        verdictLabel: 'AI: CAUTION',
+        affectedMembers: baseInfo.affectedMembers,
+        aiAdjusted: true,
+        aiConflict: false,
+      };
+    }
+
+    return { ...baseInfo, aiAdjusted: false, aiConflict: false };
+  };
+
+  const { verdict, verdictColor, verdictLabel, affectedMembers, aiAdjusted, aiConflict } = getAiAdjustedVerdictInfo();
   
   const VerdictIcon = verdict?.level === 'safe' ? CheckCircle : verdict?.level === 'caution' ? AlertTriangle : AlertCircle;
   
@@ -676,6 +752,25 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             ) : null}
           </View>
         </View>
+
+        {aiAdjusted && (
+          <View style={styles.aiUpdatedBanner}>
+            <ShieldCheck size={18} color="#065F46" />
+            <Text style={styles.aiUpdatedText}>Updated from AI Analysis</Text>
+          </View>
+        )}
+
+        {aiConflict && aiVerdictRecord && (
+          <View style={styles.aiConflictBanner}>
+            <AlertCircle size={18} color="#991B1B" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.aiConflictTitle}>AI / Rule-Based Conflict</Text>
+              <Text style={styles.aiConflictText}>
+                {aiVerdictRecord.conflictReason || 'The AI assessment differs from the rule-based check. Please review carefully.'}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {verdict && verdict.missingData && showNoDataAlternatives && (
           <View style={styles.alternativesSection}>
@@ -1305,6 +1400,11 @@ const styles = StyleSheet.create({
   recommendationCard: { borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   recommendationTitle: { fontSize: 18, fontWeight: '700' as const, color: '#111827', marginBottom: 12, lineHeight: 24 },
   recommendationText: { fontSize: 15, color: '#111827', lineHeight: 24 },
+  aiUpdatedBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, backgroundColor: '#D1FAE5', borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#6EE7B7' },
+  aiUpdatedText: { fontSize: 13, fontWeight: '600' as const, color: '#065F46' },
+  aiConflictBanner: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: 10, backgroundColor: '#FEF2F2', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1.5, borderColor: '#FCA5A5' },
+  aiConflictTitle: { fontSize: 14, fontWeight: '700' as const, color: '#991B1B', marginBottom: 4 },
+  aiConflictText: { fontSize: 13, color: '#7F1D1D', lineHeight: 18 },
   aiButton: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: '#0891B2', borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#0891B2', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 4 },
   aiButtonContent: { flex: 1 },
   aiButtonTitle: { fontSize: 18, fontWeight: '700' as const, color: '#FFF', marginBottom: 4 },

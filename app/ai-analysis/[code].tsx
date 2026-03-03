@@ -1,31 +1,40 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Sparkles, AlertCircle, ArrowLeft } from 'lucide-react-native';
+import { Sparkles, AlertCircle, ArrowLeft, RefreshCw, ShieldCheck, ShieldAlert, Shield } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
+import { useUser } from '@/contexts/UserContext';
 import { searchProductByBarcode } from '@/api/products';
 import { Product } from '@/types';
+import { calculateVerdict } from '@/utils/verdict';
 import { generateText } from '@rork-ai/toolkit-sdk';
+import { saveAIVerdict, parseAIVerdictFromText, getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
+import { ArcaneSpinner } from '@/components/ArcaneSpinner';
+import * as Haptics from 'expo-haptics';
 
 export default function AIAnalysisScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
   const { activeProfile } = useProfiles();
+  const { currentUser } = useUser();
   
   const [product, setProduct] = useState<Product | null>(null);
   const [analysis, setAnalysis] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiVerdictRecord, setAiVerdictRecord] = useState<AIVerdictRecord | null>(null);
+  const [isRerunning, setIsRerunning] = useState(false);
+  const [lastRunAt, setLastRunAt] = useState<string | null>(null);
 
   useEffect(() => {
     loadProductAndAnalyze();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
   const loadProductAndAnalyze = async () => {
@@ -44,26 +53,15 @@ export default function AIAnalysisScreen() {
       }
       
       setProduct(productData);
-      
-      const prompt = `You are an expert allergist and food safety specialist. Analyze this product for someone with the following allergies: ${activeProfile.allergens.join(', ')}.
 
-Product: ${productData.product_name || 'Unknown'}
-Brand: ${productData.brands || 'Unknown'}
-Ingredients: ${productData.ingredients_text || 'Not available'}
-Listed Allergens: ${productData.allergens || 'None listed'}
-May Contain Traces: ${productData.traces || 'None listed'}
+      const existingVerdict = await getAIVerdict(code, activeProfile.id, currentUser?.id);
+      if (existingVerdict) {
+        console.log('[AIAnalysis] Found cached AI verdict:', existingVerdict.aiVerdict);
+        setAiVerdictRecord(existingVerdict);
+        setLastRunAt(existingVerdict.updatedAt);
+      }
 
-Please provide:
-1. A clear safety assessment (SAFE, CAUTION, or DANGER)
-2. Explanation of any allergen risks found
-3. Analysis of cross-contamination risks
-4. Specific ingredients of concern
-5. Recommendations for this person
-
-Be thorough but concise. Use clear, non-technical language.`;
-
-      const result = await generateText(prompt);
-      setAnalysis(result);
+      await runAnalysis(productData);
     } catch (err) {
       console.error('Error analyzing product:', err);
       setError('Failed to analyze product. Please try again.');
@@ -72,17 +70,125 @@ Be thorough but concise. Use clear, non-technical language.`;
     }
   };
 
+  const runAnalysis = async (productData: Product) => {
+    if (!activeProfile || !code) return;
+
+    const ruleVerdict = calculateVerdict(productData, activeProfile);
+    
+    const prompt = `You are an expert allergist and food safety specialist. Analyze this product for someone with the following allergies: ${activeProfile.allergens.join(', ')}.
+
+Product: ${productData.product_name || 'Unknown'}
+Brand: ${productData.brands || 'Unknown'}
+Ingredients: ${productData.ingredients_text || 'Not available'}
+Listed Allergens: ${productData.allergens || 'None listed'}
+May Contain Traces: ${productData.traces || 'None listed'}
+
+Our rule-based system currently shows: ${ruleVerdict.level.toUpperCase()} — ${ruleVerdict.message}
+${ruleVerdict.matches.length > 0 ? `Rule-based allergen matches: ${ruleVerdict.matches.map(m => `${m.allergen} (${m.source}: ${m.matchedText})`).join(', ')}` : 'No rule-based allergen matches found.'}
+
+Please provide:
+1. A clear safety assessment (SAFE, CAUTION, or DANGER) — state this clearly at the start
+2. Whether you agree or disagree with the rule-based verdict above, and why
+3. Explanation of any allergen risks found
+4. Analysis of cross-contamination risks
+5. Specific ingredients of concern
+6. Recommendations for this person
+
+Be thorough but concise. Use clear, non-technical language.`;
+
+    const result = await generateText(prompt);
+    setAnalysis(result);
+    setLastRunAt(new Date().toISOString());
+
+    const { verdict: aiVerdict, confidence } = parseAIVerdictFromText(result);
+    console.log('[AIAnalysis] Parsed AI verdict:', aiVerdict, 'confidence:', confidence);
+
+    const hasRuleAllergenMatch = ruleVerdict.matches.some(
+      m => m.source === 'allergens_tags' || m.source === 'ingredients' || m.source === 'custom_keyword'
+    );
+
+    let hasConflict = false;
+    let conflictReason: string | undefined;
+
+    if (aiVerdict === 'safe' && hasRuleAllergenMatch) {
+      hasConflict = true;
+      conflictReason = `Rule-based system detected direct allergen matches (${ruleVerdict.matches.map(m => m.allergen).join(', ')}), but AI assessment says SAFE. The rule-based allergen match takes priority for safety.`;
+      console.log('[AIAnalysis] CONFLICT: AI says safe but rule-based found allergens');
+    } else if (aiVerdict === 'danger' && ruleVerdict.level === 'safe') {
+      hasConflict = true;
+      conflictReason = `AI detected potential allergen risks not caught by the rule-based system. Please review carefully.`;
+    }
+
+    const record: AIVerdictRecord = {
+      productCode: code,
+      profileId: activeProfile.id,
+      aiVerdict,
+      aiSummary: result.substring(0, 500),
+      aiConfidence: confidence,
+      hasConflict,
+      conflictReason,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveAIVerdict(record, currentUser?.id);
+    setAiVerdictRecord(record);
+
+    if (Platform.OS !== 'web') {
+      try {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {}
+    }
+  };
+
+  const handleRerun = useCallback(async () => {
+    if (!product || !activeProfile || isRerunning) return;
+
+    const now = Date.now();
+    if (lastRunAt) {
+      const lastRun = new Date(lastRunAt).getTime();
+      const diffSeconds = (now - lastRun) / 1000;
+      if (diffSeconds < 30) {
+        setError(`Please wait ${Math.ceil(30 - diffSeconds)} seconds before re-running.`);
+        return;
+      }
+    }
+
+    setIsRerunning(true);
+    setError(null);
+
+    try {
+      await runAnalysis(product);
+    } catch (err) {
+      console.error('Error re-running analysis:', err);
+      setError('Failed to re-run analysis. Please try again.');
+    } finally {
+      setIsRerunning(false);
+    }
+  }, [product, activeProfile, isRerunning, lastRunAt]);
+
+  const getVerdictDisplay = () => {
+    if (!aiVerdictRecord) return null;
+
+    const v = aiVerdictRecord.aiVerdict;
+    const color = v === 'safe' ? '#10B981' : v === 'caution' ? '#F59E0B' : '#DC2626';
+    const label = v === 'safe' ? 'AI-VERIFIED SAFE' : v === 'caution' ? 'AI: CAUTION' : 'AI: UNSAFE';
+    const Icon = v === 'safe' ? ShieldCheck : v === 'caution' ? Shield : ShieldAlert;
+    const bgColor = v === 'safe' ? '#D1FAE5' : v === 'caution' ? '#FEF3C7' : '#FEE2E2';
+
+    return { color, label, Icon, bgColor };
+  };
+
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <Sparkles size={64} color="#0891B2" />
+        <ArcaneSpinner size={80} />
         <Text style={styles.loadingText}>AI is analyzing ingredients...</Text>
-        <Text style={styles.loadingSubtext}>This may take a moment</Text>
+        <Text style={styles.loadingSubtext}>Comparing with your allergy profile</Text>
       </View>
     );
   }
 
-  if (error || !product) {
+  if (error && !product) {
     return (
       <View style={styles.centerContainer}>
         <AlertCircle size={64} color="#DC2626" />
@@ -93,6 +199,17 @@ Be thorough but concise. Use clear, non-technical language.`;
       </View>
     );
   }
+
+  if (!product) {
+    return (
+      <View style={styles.centerContainer}>
+        <AlertCircle size={64} color="#DC2626" />
+        <Text style={styles.errorText}>Product not found</Text>
+      </View>
+    );
+  }
+
+  const verdictDisplay = getVerdictDisplay();
 
   return (
     <>
@@ -124,6 +241,42 @@ Be thorough but concise. Use clear, non-technical language.`;
           )}
         </View>
 
+        {verdictDisplay && (
+          <View style={[styles.aiVerdictCard, { backgroundColor: verdictDisplay.bgColor, borderColor: verdictDisplay.color }]}>
+            <View style={[styles.aiVerdictBadge, { backgroundColor: verdictDisplay.color }]}>
+              <verdictDisplay.Icon size={28} color="#FFFFFF" />
+            </View>
+            <View style={styles.aiVerdictContent}>
+              <Text style={[styles.aiVerdictLabel, { color: verdictDisplay.color }]}>
+                {verdictDisplay.label}
+              </Text>
+              <Text style={styles.aiVerdictConfidence}>
+                Confidence: {aiVerdictRecord?.aiConfidence === 'high' ? 'High' : aiVerdictRecord?.aiConfidence === 'medium' ? 'Medium' : 'Low'}
+              </Text>
+              {lastRunAt && (
+                <Text style={styles.aiVerdictTimestamp}>
+                  Updated: {new Date(lastRunAt).toLocaleString()}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {aiVerdictRecord?.hasConflict && (
+          <View style={styles.conflictCard}>
+            <View style={styles.conflictHeader}>
+              <AlertCircle size={20} color="#DC2626" />
+              <Text style={styles.conflictTitle}>Conflict Detected</Text>
+            </View>
+            <Text style={styles.conflictText}>
+              {aiVerdictRecord.conflictReason}
+            </Text>
+            <Text style={styles.conflictAdvice}>
+              When in doubt, trust the more conservative assessment and consult your healthcare provider.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.analysisCard}>
           <View style={styles.analysisHeader}>
             <Sparkles size={20} color="#0891B2" />
@@ -131,6 +284,24 @@ Be thorough but concise. Use clear, non-technical language.`;
           </View>
           <Text style={styles.analysisText}>{analysis}</Text>
         </View>
+
+        {error && (
+          <View style={styles.errorBanner}>
+            <AlertCircle size={16} color="#DC2626" />
+            <Text style={styles.errorBannerText}>{error}</Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.rerunButton, isRerunning && styles.rerunButtonDisabled]}
+          onPress={handleRerun}
+          disabled={isRerunning}
+        >
+          <RefreshCw size={20} color={isRerunning ? '#9CA3AF' : '#0891B2'} />
+          <Text style={[styles.rerunButtonText, isRerunning && styles.rerunButtonTextDisabled]}>
+            {isRerunning ? 'Re-analyzing...' : 'Re-run AI Analysis'}
+          </Text>
+        </TouchableOpacity>
 
         <View style={styles.disclaimer}>
           <AlertCircle size={16} color="#F59E0B" />
@@ -240,6 +411,71 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
   },
+  aiVerdictCard: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  aiVerdictBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  aiVerdictContent: {
+    flex: 1,
+  },
+  aiVerdictLabel: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    marginBottom: 2,
+  },
+  aiVerdictConfidence: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500' as const,
+  },
+  aiVerdictTimestamp: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  conflictCard: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#FCA5A5',
+  },
+  conflictHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  conflictTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#DC2626',
+  },
+  conflictText: {
+    fontSize: 14,
+    color: '#7F1D1D',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  conflictAdvice: {
+    fontSize: 13,
+    color: '#991B1B',
+    fontWeight: '600' as const,
+    fontStyle: 'italic',
+  },
   analysisCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -271,6 +507,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111827',
     lineHeight: 26,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#991B1B',
+  },
+  rerunButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#F0FDFA',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#0891B2',
+  },
+  rerunButtonDisabled: {
+    borderColor: '#D1D5DB',
+    backgroundColor: '#F9FAFB',
+  },
+  rerunButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#0891B2',
+  },
+  rerunButtonTextDisabled: {
+    color: '#9CA3AF',
   },
   disclaimer: {
     flexDirection: 'row',
