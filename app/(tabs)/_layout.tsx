@@ -4,6 +4,7 @@ import React, { useMemo, useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useUser } from "@/contexts/UserContext";
 import { BUILD_ID } from "@/constants/appVersion";
+import { arcaneColors } from "@/constants/theme";
 
 export default function TabLayout() {
   const { currentUser, isLoading } = useUser();
@@ -23,7 +24,7 @@ export default function TabLayout() {
   if (!isReady) {
     return (
       <View style={tabStyles.loadingContainer}>
-        <ActivityIndicator size="small" color="#0891B2" />
+        <ActivityIndicator size="small" color={arcaneColors.primary} />
       </View>
     );
   }
@@ -32,14 +33,14 @@ export default function TabLayout() {
     return (
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: "#7C3AED",
+          tabBarActiveTintColor: arcaneColors.accentLight,
           headerShown: false,
           tabBarStyle: {
-            backgroundColor: "#1F2937",
-            borderTopColor: "#374151",
+            backgroundColor: arcaneColors.bgDark,
+            borderTopColor: arcaneColors.bgDarkElevated,
             borderTopWidth: 1,
           },
-          tabBarInactiveTintColor: "#9CA3AF",
+          tabBarInactiveTintColor: arcaneColors.textMuted,
         }}
       >
         <Tabs.Screen
@@ -108,13 +109,14 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#0891B2",
+        tabBarActiveTintColor: arcaneColors.primary,
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: "#FFFFFF",
-          borderTopColor: "#E5E7EB",
+          backgroundColor: arcaneColors.tabBar,
+          borderTopColor: arcaneColors.tabBarBorder,
           borderTopWidth: 1,
         },
+        tabBarInactiveTintColor: arcaneColors.tabBarInactive,
       }}
     >
       <Tabs.Screen
@@ -185,6 +187,6 @@ const tabStyles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
   },
 });

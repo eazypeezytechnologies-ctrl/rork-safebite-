@@ -24,6 +24,7 @@ import {
   clearUserScanHistory,
   removeOneScanHistory,
 } from '@/services/supabaseProducts';
+import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
 
 type TabType = 'history' | 'favorites';
 
@@ -174,7 +175,7 @@ export default function HistoryScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0891B2" />
+        <ActivityIndicator size="large" color={arcaneColors.primary} />
         <Text style={styles.loadingText}>Loading your products...</Text>
       </View>
     );
@@ -189,7 +190,7 @@ export default function HistoryScreen() {
             style={[styles.tab, activeTab === 'history' && styles.tabActive]}
             onPress={() => setActiveTab('history')}
           >
-            <History size={20} color={activeTab === 'history' ? '#0891B2' : '#6B7280'} />
+            <History size={20} color={activeTab === 'history' ? arcaneColors.primary : arcaneColors.textSecondary} />
             <Text style={[styles.tabText, activeTab === 'history' && styles.tabTextActive]}>
               History
             </Text>
@@ -198,7 +199,7 @@ export default function HistoryScreen() {
             style={[styles.tab, activeTab === 'favorites' && styles.tabActive]}
             onPress={() => setActiveTab('favorites')}
           >
-            <Heart size={20} color={activeTab === 'favorites' ? '#0891B2' : '#6B7280'} />
+            <Heart size={20} color={activeTab === 'favorites' ? arcaneColors.primary : arcaneColors.textSecondary} />
             <Text style={[styles.tabText, activeTab === 'favorites' && styles.tabTextActive]}>
               Favorites
             </Text>
@@ -401,13 +402,13 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
   },
   loadingText: {
     marginTop: 12,
@@ -415,18 +416,19 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   header: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: arcaneColors.bgCard,
     paddingTop: 60,
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: arcaneColors.border,
   },
   title: {
     fontSize: 32,
     fontWeight: '700' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginBottom: 16,
+    letterSpacing: 0.5,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -439,21 +441,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    borderRadius: arcaneRadius.lg,
+    backgroundColor: arcaneColors.bgMist,
   },
   tabActive: {
-    backgroundColor: '#F0FDFA',
-    borderWidth: 2,
-    borderColor: '#0891B2',
+    backgroundColor: arcaneColors.primaryMuted,
+    borderWidth: 1,
+    borderColor: arcaneColors.primary,
   },
   tabText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
   },
   tabTextActive: {
-    color: '#0891B2',
+    color: arcaneColors.primary,
   },
   scrollView: {
     flex: 1,
@@ -514,17 +516,13 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.xl,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: arcaneColors.borderRune,
+    ...arcaneShadows.card,
   },
   itemContent: {
     flex: 1,
@@ -555,7 +553,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginBottom: 4,
   },
   itemBrand: {

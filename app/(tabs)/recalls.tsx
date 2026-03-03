@@ -11,6 +11,7 @@ import {
 import { Search, AlertTriangle, X } from 'lucide-react-native';
 import { searchRecalls } from '@/api/recalls';
 import { RecallResult } from '@/types';
+import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
 
 export default function RecallsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,7 +88,7 @@ export default function RecallsScreen() {
 
         {isSearching && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0891B2" />
+            <ActivityIndicator size="large" color={arcaneColors.primary} />
             <Text style={styles.loadingText}>Searching FDA database...</Text>
           </View>
         )}
@@ -180,7 +181,7 @@ function getClassificationStyle(classification: string) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
   },
   scrollView: {
     flex: 1,
@@ -195,8 +196,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginBottom: 8,
+    letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: 16,
@@ -208,13 +210,13 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
     padding: 12,
     gap: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
   },
   searchInput: {
     flex: 1,
@@ -222,8 +224,8 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   searchButton: {
-    backgroundColor: '#0891B2',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.primary,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     alignItems: 'center',
   },
@@ -270,17 +272,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   recallCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.xl,
     padding: 20,
     marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#FEE2E2',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.20)',
+    ...arcaneShadows.card,
   },
   recallHeader: {
     flexDirection: 'row',
@@ -332,15 +330,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     padding: 16,
-    backgroundColor: '#F0FDFA',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.primaryMuted,
+    borderRadius: arcaneRadius.lg,
     borderWidth: 1,
-    borderColor: '#0891B2',
+    borderColor: arcaneColors.borderRune,
   },
   infoText: {
     flex: 1,
     fontSize: 12,
-    color: '#0891B2',
+    color: arcaneColors.primary,
     lineHeight: 18,
   },
 });

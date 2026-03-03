@@ -1,12 +1,11 @@
-// template
-const tintColorLight = "#2f95dc";
+import { arcaneColors } from './theme';
 
 export default {
   light: {
-    text: "#000",
-    background: "#fff",
-    tint: tintColorLight,
-    tabIconDefault: "#ccc",
-    tabIconSelected: tintColorLight,
+    text: arcaneColors.text,
+    background: arcaneColors.bg,
+    tint: arcaneColors.primary,
+    tabIconDefault: arcaneColors.tabBarInactive,
+    tabIconSelected: arcaneColors.primary,
   },
 };

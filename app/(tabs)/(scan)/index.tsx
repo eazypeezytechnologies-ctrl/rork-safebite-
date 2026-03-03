@@ -30,6 +30,8 @@ import { Product } from '@/types';
 import { getRelationshipIcon } from '@/constants/profileColors';
 import { BUILD_ID } from '@/constants/appVersion';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
+import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
+import { ArcaneDivider } from '@/components/ArcaneDivider';
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -792,7 +794,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
   if (profilesLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#0891B2" />
+        <ActivityIndicator size="large" color={arcaneColors.primary} />
       </View>
     );
   }
@@ -801,7 +803,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
     if (profiles.length > 0) {
       return (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#0891B2" />
+          <ActivityIndicator size="large" color={arcaneColors.primary} />
           <Text style={styles.loadingText}>Setting up profile...</Text>
         </View>
       );
@@ -984,7 +986,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
   if (isAnalyzing) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#0891B2" />
+        <ActivityIndicator size="large" color={arcaneColors.primary} />
         <Text style={styles.loadingText}>Analyzing product image...</Text>
         {capturedImage && (
           <Image source={{ uri: capturedImage }} style={styles.previewImage} />
@@ -1010,7 +1012,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
             <View style={styles.switcherHeader}>
               <Text style={styles.switcherLabel}>Quick Switch</Text>
               {isSwitchingProfile && (
-                <ActivityIndicator size="small" color="#0891B2" />
+                <ActivityIndicator size="small" color={arcaneColors.primary} />
               )}
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.profilesScroll}>
@@ -1180,11 +1182,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           </View>
         </TouchableOpacity>
 
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR</Text>
-          <View style={styles.dividerLine} />
-        </View>
+        <ArcaneDivider label="OR" />
 
         <View style={styles.searchSection}>
           <Text style={styles.sectionTitle}>Search Products</Text>
@@ -1355,32 +1353,30 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#F9FAFB' },
+  container: { flex: 1, backgroundColor: arcaneColors.bg },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: arcaneColors.bg },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingTop: 16, paddingBottom: 40, minHeight: '100%' },
-  profileCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  profileCard: { backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.xl, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: arcaneColors.borderRune, ...arcaneShadows.card },
   profileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   profileLabel: { fontSize: 14, color: '#6B7280', marginBottom: 4 },
   profileName: { fontSize: 24, fontWeight: '700' as const, color: '#111827' },
-  changeLink: { fontSize: 16, color: '#0891B2', fontWeight: '600' as const },
+  changeLink: { fontSize: 16, color: arcaneColors.primary, fontWeight: '600' as const },
   allergensList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  allergenTag: { backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  allergenText: { fontSize: 14, color: '#92400E', fontWeight: '500' as const },
-  scanButton: { backgroundColor: '#0891B2', borderRadius: 16, padding: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 24, shadowColor: '#0891B2', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  allergenTag: { backgroundColor: arcaneColors.goldMuted, paddingHorizontal: 12, paddingVertical: 6, borderRadius: arcaneRadius.pill },
+  allergenText: { fontSize: 14, color: arcaneColors.textGold, fontWeight: '500' as const },
+  scanButton: { backgroundColor: arcaneColors.primary, borderRadius: arcaneRadius.xl, padding: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 24, ...arcaneShadows.elevated },
   scanButtonText: { fontSize: 20, fontWeight: '700' as const, color: '#FFF' },
-  divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  dividerText: { marginHorizontal: 16, fontSize: 14, color: '#9CA3AF', fontWeight: '600' as const },
+
   searchSection: { marginBottom: 24 },
   sectionTitle: { fontSize: 18, fontWeight: '700' as const, color: '#111827', marginBottom: 12 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 12, padding: 12, gap: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, padding: 12, gap: 12, marginBottom: 12, borderWidth: 1, borderColor: arcaneColors.border },
   searchInput: { flex: 1, fontSize: 16, color: '#111827' },
-  searchButton: { backgroundColor: '#0891B2', borderRadius: 12, padding: 16, alignItems: 'center' },
+  searchButton: { backgroundColor: arcaneColors.primary, borderRadius: arcaneRadius.lg, padding: 16, alignItems: 'center' },
   searchButtonDisabled: { opacity: 0.6 },
   searchButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#FFF' },
   resultsSection: { marginBottom: 24 },
-  resultCard: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  resultCard: { backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: arcaneColors.borderRune, ...arcaneShadows.card },
   resultContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   resultInfo: { flex: 1, marginRight: 12 },
   resultNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
@@ -1414,33 +1410,33 @@ const styles = StyleSheet.create({
   bottomCardTitle: { fontSize: 16, fontWeight: '600' as const, color: '#FFF', marginBottom: 2 },
   bottomCardSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
   captureButtonModern: { position: 'absolute', bottom: -80, alignSelf: 'center' },
-  captureButtonInner: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#0891B2', alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#FFF' },
-  disclaimer: { flexDirection: 'row', gap: 8, padding: 16, backgroundColor: '#F3F4F6', borderRadius: 12, marginBottom: 24 },
+  captureButtonInner: { width: 70, height: 70, borderRadius: 35, backgroundColor: arcaneColors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#FFF' },
+  disclaimer: { flexDirection: 'row', gap: 8, padding: 16, backgroundColor: arcaneColors.bgMist, borderRadius: arcaneRadius.lg, marginBottom: 24 },
   disclaimerText: { flex: 1, fontSize: 12, color: '#6B7280', lineHeight: 18 },
   emptyText: { fontSize: 20, fontWeight: '600' as const, color: '#111827', marginTop: 16, marginBottom: 8 },
   emptySubtext: { fontSize: 16, color: '#6B7280', marginBottom: 24 },
-  primaryButton: { backgroundColor: '#0891B2', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
+  primaryButton: { backgroundColor: arcaneColors.primary, borderRadius: arcaneRadius.lg, paddingHorizontal: 24, paddingVertical: 12 },
   primaryButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#FFF' },
   profileSwitcher: { marginBottom: 20 },
   switcherHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   switcherLabel: { fontSize: 14, fontWeight: '600' as const, color: '#6B7280' },
   profilesScroll: { flexGrow: 0 },
-  profileChip: { alignItems: 'center', marginRight: 16, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#FFF', borderWidth: 2, borderColor: '#E5E7EB', minWidth: 80 },
-  profileChipActive: { borderColor: '#0891B2', backgroundColor: '#F0FDFA' },
+  profileChip: { alignItems: 'center', marginRight: 16, paddingVertical: 8, paddingHorizontal: 12, borderRadius: arcaneRadius.xl, backgroundColor: arcaneColors.bgCard, borderWidth: 2, borderColor: arcaneColors.border, minWidth: 80 },
+  profileChipActive: { borderColor: arcaneColors.primary, backgroundColor: arcaneColors.primaryMuted },
   profileChipAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   profileChipAvatarActive: { borderWidth: 3, borderColor: '#FFF' },
   profileChipEmoji: { fontSize: 24 },
   profileChipName: { fontSize: 12, fontWeight: '600' as const, color: '#6B7280', textAlign: 'center' },
   profileChipNameActive: { color: '#0891B2' },
   activeIndicator: { position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
-  addManualButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1.5, borderColor: '#0891B2', borderStyle: 'dashed' as const },
-  addManualIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F0FDFA', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  addManualButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, padding: 16, marginBottom: 16, borderWidth: 1.5, borderColor: arcaneColors.primary, borderStyle: 'dashed' as const },
+  addManualIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: arcaneColors.primaryMuted, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   addManualContent: { flex: 1 },
-  addManualTitle: { fontSize: 15, fontWeight: '700' as const, color: '#0891B2', marginBottom: 2 },
+  addManualTitle: { fontSize: 15, fontWeight: '700' as const, color: arcaneColors.primary, marginBottom: 2 },
   addManualSubtitle: { fontSize: 12, color: '#6B7280' },
   photoOptionsContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  imageRecognitionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#8B5CF6', borderRadius: 16, padding: 16, shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  uploadPhotoButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#059669', borderRadius: 16, padding: 16, shadowColor: '#059669', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  imageRecognitionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: arcaneColors.accent, borderRadius: arcaneRadius.xl, padding: 16, ...arcaneShadows.glow },
+  uploadPhotoButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: arcaneColors.safe, borderRadius: arcaneRadius.xl, padding: 16, shadowColor: arcaneColors.safe, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   imageButtonContent: { flex: 1 },
   imageButtonTitle: { fontSize: 14, fontWeight: '700' as const, color: '#FFF', marginBottom: 2 },
   imageButtonSubtitle: { fontSize: 11, color: 'rgba(255,255,255,0.8)' },
@@ -1469,7 +1465,7 @@ const styles = StyleSheet.create({
   noResultsTitle: { fontSize: 18, fontWeight: '700' as const, color: '#111827', marginTop: 16, marginBottom: 8 },
   noResultsText: { fontSize: 14, color: '#6B7280', textAlign: 'center' as const, marginBottom: 20 },
   noResultsActions: { width: '100%', gap: 12 },
-  noResultsButton: { backgroundColor: '#8B5CF6', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  noResultsButton: { backgroundColor: arcaneColors.accent, borderRadius: arcaneRadius.lg, paddingVertical: 14, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   noResultsButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' as const },
   noResultsButtonSecondary: { backgroundColor: '#FFF', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center', borderWidth: 2, borderColor: '#E5E7EB' },
   noResultsButtonSecondaryText: { color: '#6B7280', fontSize: 16, fontWeight: '600' as const },

@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, RefreshControl } from 'react-native';
 import React from 'react';
 import { useRouter, Href } from 'expo-router';
-import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus, AlertTriangle } from 'lucide-react-native';
+import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus, AlertTriangle, Sparkles } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { getRelationshipLabel, getRelationshipIcon } from '@/constants/profileColors';
@@ -9,6 +9,9 @@ import { BUILD_ID } from '@/constants/appVersion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { shareAppInvite } from '@/utils/invites';
+import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
+import { ArcaneDivider } from '@/components/ArcaneDivider';
+import { useReduceMotion } from '@/contexts/ReduceMotionContext';
 
 function SkeletonProfileCard() {
   return (
@@ -21,6 +24,33 @@ function SkeletonProfileCard() {
         </View>
       </View>
     </View>
+  );
+}
+
+function ReduceMotionToggle() {
+  const { reduceMotion, toggleReduceMotion } = useReduceMotion();
+  return (
+    <TouchableOpacity
+      style={styles.settingsButton}
+      onPress={toggleReduceMotion}
+    >
+      <Sparkles size={20} color={arcaneColors.accent} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.settingsButtonText}>Reduce Motion</Text>
+        <Text style={{ fontSize: 12, color: arcaneColors.textMuted, marginTop: 2 }}>
+          {reduceMotion ? 'Animations minimized' : 'Animations enabled'}
+        </Text>
+      </View>
+      <View style={[
+        styles.togglePill,
+        reduceMotion && styles.togglePillActive,
+      ]}>
+        <View style={[
+          styles.toggleKnob,
+          reduceMotion && styles.toggleKnobActive,
+        ]} />
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -126,8 +156,8 @@ export default function ProfilesScreen() {
               }
               setRefreshing(false);
             }}
-            colors={['#0891B2']}
-            tintColor="#0891B2"
+            colors={[arcaneColors.primary]}
+            tintColor={arcaneColors.primary}
           />
         }
       >
@@ -282,8 +312,9 @@ export default function ProfilesScreen() {
           </TouchableOpacity>
         </View>
 
+        <ArcaneDivider label="Settings" variant="accent" />
+
         <View style={styles.settingsSection}>
-          <Text style={styles.settingsSectionTitle}>Settings</Text>
           
           {currentUser && (
             <View style={styles.userInfo}>
@@ -308,11 +339,13 @@ export default function ProfilesScreen() {
             </TouchableOpacity>
           )}
           
+          <ReduceMotionToggle />
+
           <TouchableOpacity
             style={styles.settingsButton}
             onPress={handleSignOut}
           >
-            <LogOut size={20} color="#6B7280" />
+            <LogOut size={20} color={arcaneColors.textSecondary} />
             <Text style={styles.settingsButtonText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
@@ -332,7 +365,7 @@ export default function ProfilesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
   },
   scrollView: {
     flex: 1,
@@ -349,20 +382,17 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700' as const,
-    color: '#111827',
+    color: arcaneColors.text,
+    letterSpacing: 0.5,
   },
   addButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#0891B2',
+    backgroundColor: arcaneColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0891B2',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    ...arcaneShadows.elevated,
   },
   emptyState: {
     alignItems: 'center',
@@ -383,8 +413,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   primaryButton: {
-    backgroundColor: '#0891B2',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.primary,
+    borderRadius: arcaneRadius.lg,
     paddingHorizontal: 24,
     paddingVertical: 12,
   },
@@ -397,20 +427,16 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   profileCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.xl,
     padding: 20,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: arcaneColors.borderRune,
+    ...arcaneShadows.card,
   },
   profileCardActive: {
-    borderColor: '#0891B2',
-    backgroundColor: '#F0FDFA',
+    borderColor: arcaneColors.primary,
+    backgroundColor: arcaneColors.primaryMuted,
   },
   profileContent: {
     flexDirection: 'row',
@@ -473,22 +499,22 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     gap: 4,
     marginTop: 4,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: arcaneColors.cautionMuted,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: arcaneRadius.sm,
     alignSelf: 'flex-start' as const,
   },
   sensitivityBadgeText: {
     fontSize: 11,
-    color: '#D97706',
+    color: arcaneColors.caution,
     fontWeight: '600' as const,
   },
   activeBadge: {
-    backgroundColor: '#0891B2',
+    backgroundColor: arcaneColors.primary,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: arcaneRadius.pill,
   },
   activeBadgeText: {
     fontSize: 12,
@@ -506,13 +532,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    borderRadius: arcaneRadius.md,
+    backgroundColor: arcaneColors.bgMist,
   },
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: '#0891B2',
+    color: arcaneColors.primary,
   },
   actionButtonTextDanger: {
     color: '#DC2626',
@@ -526,11 +552,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 16,
+    backgroundColor: arcaneColors.dangerMuted,
+    borderRadius: arcaneRadius.xl,
     padding: 20,
-    borderWidth: 2,
-    borderColor: '#DC2626',
+    borderWidth: 1,
+    borderColor: arcaneColors.danger,
   },
   emergencyButtonText: {
     fontSize: 18,
@@ -542,36 +568,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    backgroundColor: '#DBEAFE',
-    borderRadius: 16,
+    backgroundColor: arcaneColors.primaryMuted,
+    borderRadius: arcaneRadius.xl,
     padding: 20,
-    borderWidth: 2,
-    borderColor: '#0891B2',
+    borderWidth: 1,
+    borderColor: arcaneColors.primary,
   },
   familyButtonText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: '#0891B2',
+    color: arcaneColors.primary,
   },
   settingsSection: {
-    marginTop: 32,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  settingsSectionTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: '#111827',
-    marginBottom: 16,
+    marginTop: 0,
   },
   userInfo: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
   },
   userInfoLabel: {
     fontSize: 12,
@@ -600,12 +617,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
   },
   settingsButtonDanger: {
     borderColor: '#FEE2E2',
@@ -620,20 +637,20 @@ const styles = StyleSheet.create({
     color: '#DC2626',
   },
   adminButton: {
-    borderColor: '#BAE6FD',
-    backgroundColor: '#F0F9FF',
+    borderColor: arcaneColors.borderRune,
+    backgroundColor: arcaneColors.primaryMuted,
   },
   adminButtonText: {
-    color: '#0891B2',
+    color: arcaneColors.primary,
   },
   disclaimer: {
     marginTop: 24,
     marginBottom: 32,
     padding: 16,
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.goldMuted,
+    borderRadius: arcaneRadius.lg,
     borderWidth: 1,
-    borderColor: '#FDE68A',
+    borderColor: arcaneColors.borderGold,
   },
   disclaimerText: {
     fontSize: 12,
@@ -642,11 +659,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   skeletonCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.xl,
     padding: 20,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderColor: arcaneColors.border,
   },
   skeletonContent: {
     flexDirection: 'row',
@@ -684,26 +701,18 @@ const styles = StyleSheet.create({
   appInviteCard: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: '#10B981',
-    borderRadius: 16,
+    backgroundColor: arcaneColors.safe,
+    borderRadius: arcaneRadius.xl,
     padding: 18,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
+    ...arcaneShadows.elevated,
   },
   familyInviteCard: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: '#2563EB',
-    borderRadius: 16,
+    backgroundColor: arcaneColors.accent,
+    borderRadius: arcaneRadius.xl,
     padding: 18,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
+    ...arcaneShadows.glow,
   },
   inviteCardTitle: {
     fontSize: 15,
@@ -718,9 +727,29 @@ const styles = StyleSheet.create({
   },
   buildId: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: arcaneColors.textMuted,
     textAlign: 'center' as const,
     marginTop: 8,
     marginBottom: 24,
+  },
+  togglePill: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: arcaneColors.border,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  togglePillActive: {
+    backgroundColor: arcaneColors.accent,
+  },
+  toggleKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+  },
+  toggleKnobActive: {
+    alignSelf: 'flex-end' as const,
   },
 });

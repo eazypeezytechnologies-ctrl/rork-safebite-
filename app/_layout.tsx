@@ -14,6 +14,9 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FamilyErrorBoundary } from "@/components/FamilyErrorBoundary";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { BUILD_ID } from "@/constants/appVersion";
+import { ReduceMotionProvider } from "@/contexts/ReduceMotionContext";
+import { MysticToastProvider, MysticToastRenderer } from "@/components/MysticToast";
+import { arcaneColors } from "@/constants/theme";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -322,8 +325,9 @@ function RootLayoutNav() {
 
     return (
       <View style={layoutStyles.loadingContainer}>
+        <Text style={layoutStyles.loadingSigil}>◎</Text>
         <View style={layoutStyles.loadingIconContainer}>
-          <ActivityIndicator size="large" color="#0891B2" />
+          <ActivityIndicator size="large" color={arcaneColors.primary} />
         </View>
         <Text style={layoutStyles.loadingText}>{getLoadingMessage()}</Text>
         {loadingHint ? (
@@ -344,7 +348,13 @@ function RootLayoutNav() {
   }
 
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+    <Stack screenOptions={{
+      headerBackTitle: "Back",
+      headerStyle: { backgroundColor: arcaneColors.headerBg },
+      headerTintColor: arcaneColors.primary,
+      headerTitleStyle: { color: arcaneColors.headerText, fontWeight: '600' as const },
+      headerShadowVisible: false,
+    }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="welcome" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="wizard" options={{ headerShown: false, animation: 'slide_from_right' }} />
@@ -374,8 +384,14 @@ const layoutStyles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
     paddingHorizontal: 24,
+  },
+  loadingSigil: {
+    fontSize: 32,
+    color: arcaneColors.accent,
+    opacity: 0.3,
+    marginBottom: 4,
   },
   loadingIconContainer: {
     width: 64,
@@ -388,30 +404,32 @@ const layoutStyles = StyleSheet.create({
     marginTop: 12,
     fontSize: 17,
     fontWeight: '600' as const,
-    color: '#374151',
+    color: arcaneColors.text,
+    letterSpacing: 0.3,
   },
   loadingSubtext: {
     marginTop: 8,
     fontSize: 14,
-    color: '#9CA3AF',
+    color: arcaneColors.textMuted,
     textAlign: 'center' as const,
   },
   skipButton: {
     marginTop: 24,
     paddingHorizontal: 28,
     paddingVertical: 14,
-    backgroundColor: '#0891B2',
+    backgroundColor: arcaneColors.primary,
     borderRadius: 12,
-    shadowColor: '#0891B2',
+    shadowColor: arcaneColors.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
     elevation: 3,
   },
   skipButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600' as const,
+    letterSpacing: 0.3,
   },
   progressDotsContainer: {
     flexDirection: 'row',
@@ -422,10 +440,10 @@ const layoutStyles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: arcaneColors.borderLight,
   },
   progressDotActive: {
-    backgroundColor: '#0891B2',
+    backgroundColor: arcaneColors.primary,
   },
 });
 
@@ -453,19 +471,24 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
           <trpc.Provider client={trpcClient} queryClient={queryClient}>
-            <UserProvider>
-              <ProfileProvider>
-                <FamilyErrorBoundary>
-                  <FamilyProvider>
-                    <SubscriptionProvider>
-                      <LiveDataContext>
-                        <RootLayoutNav />
-                      </LiveDataContext>
-                    </SubscriptionProvider>
-                  </FamilyProvider>
-                </FamilyErrorBoundary>
-              </ProfileProvider>
-            </UserProvider>
+            <ReduceMotionProvider>
+              <MysticToastProvider>
+                <UserProvider>
+                  <ProfileProvider>
+                    <FamilyErrorBoundary>
+                      <FamilyProvider>
+                        <SubscriptionProvider>
+                          <LiveDataContext>
+                            <RootLayoutNav />
+                            <MysticToastRenderer />
+                          </LiveDataContext>
+                        </SubscriptionProvider>
+                      </FamilyProvider>
+                    </FamilyErrorBoundary>
+                  </ProfileProvider>
+                </UserProvider>
+              </MysticToastProvider>
+            </ReduceMotionProvider>
           </trpc.Provider>
         </QueryClientProvider>
       </GestureHandlerRootView>
