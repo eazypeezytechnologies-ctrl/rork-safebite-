@@ -54,8 +54,8 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   });
 }
 
-const MAX_LOADING_TIME = 800; // 0.8s max loading time
-const SHOW_SKIP_AFTER = 400; // Show skip button after 0.4s
+const MAX_LOADING_TIME = 800;
+const SHOW_SKIP_AFTER = 400;
 
 function RootLayoutNav() {
   const { isLoading: profilesLoadingRaw, profiles, clearAllData: clearProfileData, profilesFetchComplete, hasFetchError } = useProfiles();
@@ -346,7 +346,7 @@ function RootLayoutNav() {
     SplashScreen.hideAsync().catch(() => {});
   };
 
-  if ((profilesLoading || userLoading || !isInitialized || !authChecked) && !loadingTimeout && !hasFetchError) {
+  if ((profilesLoading || userLoading || !isInitialized || !authChecked) && !loadingTimeout && !hasFetchError && !limitedMode) {
     const getLoadingMessage = () => {
       switch (loadingPhase) {
         case 'session': return 'Connecting to server...';

@@ -19,7 +19,7 @@ import { useRouter, Href } from 'expo-router';
 import { Shield, UserPlus, LogIn, WifiOff, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff, Activity, Copy, RotateCcw, Server, Key, Lock } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { categorizeAuthError } from '@/utils/authTimeout';
-import { isSupabaseConfigured, getSupabaseUrl, getSupabaseAnonKey, supabase } from '@/lib/supabase';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BUILD_ID, APP_VERSION } from '@/constants/appVersion';
 import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
@@ -27,8 +27,9 @@ import { RuneCard } from '@/components/RuneCard';
 import { SigilBadge } from '@/components/SigilBadge';
 import { ArcaneDivider } from '@/components/ArcaneDivider';
 import { AnimatedButton } from '@/components/AnimatedButton';
-import { runSupabaseOperationalCheck, formatDiagnosticsForCopy, runSimpleConnectionCheck, runOperationalSelfTest } from '@/utils/supabaseHealth';
-import type { SimpleConnectionResult, OperationalSelfTestResult } from '@/utils/supabaseHealth';
+import { BuildStatusCard } from '@/components/BuildStatusCard';
+import { runSupabaseOperationalCheck, formatDiagnosticsForCopy, runSimpleConnectionCheck } from '@/utils/supabaseHealth';
+import type { SimpleConnectionResult } from '@/utils/supabaseHealth';
 
 type OperationalResult = Awaited<ReturnType<typeof runSupabaseOperationalCheck>>;
 
@@ -55,8 +56,7 @@ export default function WelcomeScreen() {
   const [simpleResult, setSimpleResult] = useState<SimpleConnectionResult | null>(null);
   const [simpleTesting, setSimpleTesting] = useState(false);
 
-  const [selfTestResult, setSelfTestResult] = useState<OperationalSelfTestResult | null>(null);
-  const [selfTesting, setSelfTesting] = useState(false);
+
 
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -335,35 +335,7 @@ export default function WelcomeScreen() {
     }
   }, []);
 
-  const runSelfTest = useCallback(async () => {
-    setSelfTesting(true);
-    setSelfTestResult(null);
-    console.log('[Welcome] Starting operational self-test...');
-    try {
-      const result = await runOperationalSelfTest(
-        () => supabase.auth.getSession()
-      );
-      setSelfTestResult(result);
-      console.log('[Welcome] Self-test result:', result.summary);
-    } catch (err: any) {
-      console.error('[Welcome] Self-test failed:', err);
-      setSelfTestResult({
-        buildOperational: false,
-        configValid: false,
-        healthOk: false,
-        sessionOk: false,
-        summary: err?.message || 'Self-test failed',
-        details: {
-          configCheck: 'Error',
-          healthCheck: 'Error',
-          sessionCheck: 'Error',
-        },
-        timestamp: new Date().toISOString(),
-      });
-    } finally {
-      setSelfTesting(false);
-    }
-  }, []);
+
 
   const copyDiagnostics = useCallback(async () => {
     if (!opResult) return;
@@ -379,14 +351,7 @@ export default function WelcomeScreen() {
     }
   }, [opResult]);
 
-  const rawHost = getSupabaseUrl()?.replace(/https?:\/\//, '') ?? null;
-  const maskedHost = rawHost
-    ? rawHost.length > 12
-      ? rawHost.substring(0, 6) + '······' + rawHost.substring(rawHost.length - 6)
-      : rawHost.substring(0, 6) + '···'
-    : null;
 
-  const hasAnonKey = !!getSupabaseAnonKey();
 
   if (mode === 'welcome') {
     return (
@@ -483,191 +448,61 @@ export default function WelcomeScreen() {
           <ArcaneDivider label="Admin Diagnostics" variant="default" style={styles.diagDivider} />
 
           <View style={styles.diagSection}>
-            <RuneCard variant="accent" style={styles.diagCard}>
-              <Text style={styles.diagTitle}>OPERATIONAL STATUS</Text>
-
-              <View style={styles.diagRow}>
-                <Text style={styles.diagLabel}>Build</Text>
-                <Text style={styles.diagValue} numberOfLines={1}>
-                  v{APP_VERSION} · {BUILD_ID}
-                </Text>
-              </View>
-
-              <ArcaneDivider variant="accent" style={styles.diagInnerDivider} />
-
-              <View style={styles.diagRow}>
-                <Text style={styles.diagLabel}>Host</Text>
-                <Text style={styles.diagValue} numberOfLines={1}>
-                  {maskedHost ?? 'Not configured'}
-                </Text>
-              </View>
-
-              <ArcaneDivider variant="accent" style={styles.diagInnerDivider} />
-
-              <View style={styles.diagRow}>
-                <Text style={styles.diagLabel}>Anon Key</Text>
-                <SigilBadge
-                  label={hasAnonKey ? 'Loaded' : 'Missing'}
-                  status={hasAnonKey ? 'safe' : 'danger'}
-                  size="sm"
-                />
-              </View>
-
-              <ArcaneDivider variant="accent" style={styles.diagInnerDivider} />
-
-              <View style={styles.diagRow}>
-                <Text style={styles.diagLabel}>Overall</Text>
-                {opResult ? (
-                  <SigilBadge
-                    label={opResult.ok ? 'PASS' : 'FAIL'}
-                    status={opResult.ok ? 'safe' : 'danger'}
-                    size="sm"
-                  />
-                ) : (
-                  <Text style={styles.diagValueMuted}>Not tested</Text>
-                )}
-              </View>
-
-              {opResult && (
-                <>
-                  <ArcaneDivider variant="accent" style={styles.diagInnerDivider} />
-
-                  <View style={styles.checkRow}>
-                    <Server size={12} color={opResult.checks.authHealth.ok ? arcaneColors.safe : arcaneColors.danger} />
-                    <Text style={styles.checkLabel}>Auth Health</Text>
-                    <SigilBadge
-                      label={opResult.checks.authHealth.ok ? 'OK' : `${opResult.checks.authHealth.status ?? 'ERR'}`}
-                      status={opResult.checks.authHealth.ok ? 'safe' : 'danger'}
-                      size="sm"
-                    />
-                    {opResult.checks.authHealth.ms != null && (
-                      <Text style={styles.msText}>{opResult.checks.authHealth.ms}ms</Text>
-                    )}
-                  </View>
-
-                  <View style={styles.checkRow}>
-                    <Activity size={12} color={opResult.checks.restHealth.ok ? arcaneColors.safe : arcaneColors.danger} />
-                    <Text style={styles.checkLabel}>REST Health</Text>
-                    <SigilBadge
-                      label={opResult.checks.restHealth.ok ? 'OK' : `${opResult.checks.restHealth.status ?? 'ERR'}`}
-                      status={opResult.checks.restHealth.ok ? 'safe' : 'danger'}
-                      size="sm"
-                    />
-                    {opResult.checks.restHealth.ms != null && (
-                      <Text style={styles.msText}>{opResult.checks.restHealth.ms}ms</Text>
-                    )}
-                  </View>
-
-                  <View style={styles.checkRow}>
-                    <Key size={12} color={opResult.checks.keyValid.ok ? arcaneColors.safe : arcaneColors.danger} />
-                    <Text style={styles.checkLabel}>Key Valid</Text>
-                    <SigilBadge
-                      label={opResult.checks.keyValid.ok ? 'Valid' : 'Invalid'}
-                      status={opResult.checks.keyValid.ok ? 'safe' : 'danger'}
-                      size="sm"
-                    />
-                  </View>
-
-                  <Text style={styles.summaryText}>{opResult.summary}</Text>
-
-                  {!opResult.ok && (
-                    <View style={styles.hintBox}>
-                      <AlertCircle size={13} color={arcaneColors.caution} />
-                      <Text style={styles.hintText}>
-                        If you see 401: confirm SUPABASE_URL uses https:// and anon key matches this project.
-                      </Text>
-                    </View>
-                  )}
-                </>
-              )}
-
-              <View style={styles.opButtonRow}>
-                <TouchableOpacity
-                  style={styles.opButton}
-                  onPress={runOperationalCheck}
-                  disabled={opTesting}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <RotateCcw size={13} color={opTesting ? arcaneColors.textMuted : arcaneColors.accent} />
-                  <Text style={[styles.opButtonText, opTesting && styles.opButtonTextDisabled]}>
-                    {opTesting ? 'Checking...' : opResult ? 'Retry' : 'Run Check'}
-                  </Text>
-                </TouchableOpacity>
-
-                {opResult && (
-                  <TouchableOpacity
-                    style={styles.opButton}
-                    onPress={copyDiagnostics}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    {copiedDiag ? (
-                      <CheckCircle size={13} color={arcaneColors.safe} />
-                    ) : (
-                      <Copy size={13} color={arcaneColors.accent} />
-                    )}
-                    <Text style={styles.opButtonText}>
-                      {copiedDiag ? 'Copied!' : 'Copy Diagnostics'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </RuneCard>
+            <BuildStatusCard
+              showDetailedChecks={true}
+              variant="accent"
+              testID="admin-build-status"
+            />
 
             <View style={styles.selfTestSection}>
               <RuneCard variant="default" style={styles.diagCard}>
-                <Text style={styles.diagTitle}>BUILD SELF-TEST</Text>
+                <Text style={styles.diagTitle}>FULL OPERATIONAL CHECK</Text>
 
-                {selfTestResult && (
+                {opResult && (
                   <>
-                    <View style={styles.selfTestBadgeRow}>
-                      {selfTestResult.buildOperational ? (
-                        <View style={styles.selfTestPassBadge}>
-                          <CheckCircle size={16} color={arcaneColors.safe} />
-                          <Text style={styles.selfTestPassText}>Build Operational</Text>
-                        </View>
-                      ) : (
-                        <View style={styles.selfTestFailBadge}>
-                          <AlertCircle size={16} color={arcaneColors.danger} />
-                          <Text style={styles.selfTestFailText}>Build Not Operational</Text>
-                        </View>
+                    <View style={styles.checkRow}>
+                      <Server size={12} color={opResult.checks.authHealth.ok ? arcaneColors.safe : arcaneColors.danger} />
+                      <Text style={styles.checkLabel}>Auth Health</Text>
+                      <SigilBadge
+                        label={opResult.checks.authHealth.ok ? 'OK' : `${opResult.checks.authHealth.status ?? 'ERR'}`}
+                        status={opResult.checks.authHealth.ok ? 'safe' : 'danger'}
+                        size="sm"
+                      />
+                      {opResult.checks.authHealth.ms != null && (
+                        <Text style={styles.msText}>{opResult.checks.authHealth.ms}ms</Text>
                       )}
                     </View>
 
                     <View style={styles.checkRow}>
-                      <Server size={12} color={selfTestResult.configValid ? arcaneColors.safe : arcaneColors.danger} />
-                      <Text style={styles.checkLabel}>Config</Text>
+                      <Activity size={12} color={opResult.checks.restHealth.ok ? arcaneColors.safe : arcaneColors.danger} />
+                      <Text style={styles.checkLabel}>REST Health</Text>
                       <SigilBadge
-                        label={selfTestResult.details.configCheck}
-                        status={selfTestResult.configValid ? 'safe' : 'danger'}
+                        label={opResult.checks.restHealth.ok ? 'OK' : `${opResult.checks.restHealth.status ?? 'ERR'}`}
+                        status={opResult.checks.restHealth.ok ? 'safe' : 'danger'}
                         size="sm"
                       />
+                      {opResult.checks.restHealth.ms != null && (
+                        <Text style={styles.msText}>{opResult.checks.restHealth.ms}ms</Text>
+                      )}
                     </View>
+
                     <View style={styles.checkRow}>
-                      <Activity size={12} color={selfTestResult.healthOk ? arcaneColors.safe : arcaneColors.danger} />
-                      <Text style={styles.checkLabel}>Health</Text>
+                      <Key size={12} color={opResult.checks.keyValid.ok ? arcaneColors.safe : arcaneColors.danger} />
+                      <Text style={styles.checkLabel}>Key Valid</Text>
                       <SigilBadge
-                        label={selfTestResult.healthOk ? 'OK' : 'FAIL'}
-                        status={selfTestResult.healthOk ? 'safe' : 'danger'}
-                        size="sm"
-                      />
-                    </View>
-                    <View style={styles.checkRow}>
-                      <Key size={12} color={selfTestResult.sessionOk ? arcaneColors.safe : arcaneColors.caution} />
-                      <Text style={styles.checkLabel}>Session</Text>
-                      <SigilBadge
-                        label={selfTestResult.details.sessionCheck.substring(0, 24)}
-                        status={selfTestResult.sessionOk ? 'safe' : 'caution'}
+                        label={opResult.checks.keyValid.ok ? 'Valid' : 'Invalid'}
+                        status={opResult.checks.keyValid.ok ? 'safe' : 'danger'}
                         size="sm"
                       />
                     </View>
 
-                    <Text style={styles.summaryText}>{selfTestResult.summary}</Text>
+                    <Text style={styles.summaryText}>{opResult.summary}</Text>
 
-                    {!selfTestResult.buildOperational && (
+                    {!opResult.ok && (
                       <View style={styles.hintBox}>
                         <AlertCircle size={13} color={arcaneColors.caution} />
                         <Text style={styles.hintText}>
-                          Limited mode enabled. Some online features may be unavailable.
+                          If you see 401: confirm SUPABASE_URL uses https:// and anon key matches this project.
                         </Text>
                       </View>
                     )}
@@ -677,15 +512,32 @@ export default function WelcomeScreen() {
                 <View style={styles.opButtonRow}>
                   <TouchableOpacity
                     style={styles.opButton}
-                    onPress={runSelfTest}
-                    disabled={selfTesting}
+                    onPress={runOperationalCheck}
+                    disabled={opTesting}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <RotateCcw size={13} color={selfTesting ? arcaneColors.textMuted : arcaneColors.accent} />
-                    <Text style={[styles.opButtonText, selfTesting && styles.opButtonTextDisabled]}>
-                      {selfTesting ? 'Testing...' : selfTestResult ? 'Re-run Self-Test' : 'Run Self-Test'}
+                    <RotateCcw size={13} color={opTesting ? arcaneColors.textMuted : arcaneColors.accent} />
+                    <Text style={[styles.opButtonText, opTesting && styles.opButtonTextDisabled]}>
+                      {opTesting ? 'Checking...' : opResult ? 'Retry' : 'Run Full Check'}
                     </Text>
                   </TouchableOpacity>
+
+                  {opResult && (
+                    <TouchableOpacity
+                      style={styles.opButton}
+                      onPress={copyDiagnostics}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {copiedDiag ? (
+                        <CheckCircle size={13} color={arcaneColors.safe} />
+                      ) : (
+                        <Copy size={13} color={arcaneColors.accent} />
+                      )}
+                      <Text style={styles.opButtonText}>
+                        {copiedDiag ? 'Copied!' : 'Copy Diagnostics'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </RuneCard>
             </View>
