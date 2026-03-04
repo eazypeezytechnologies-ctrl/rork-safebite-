@@ -1044,7 +1044,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
     }
   };
 
-  const cameraRef = useRef<CameraView | null>(null);
+  const cameraRef = useRef<CameraView>(null);
 
   const renderVerdictBadge = (product: Product) => {
     if (!activeProfile) return null;
@@ -1110,7 +1110,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           ref={cameraRef}
           style={StyleSheet.absoluteFillObject}
           facing={cameraFacing}
-          enableTorch={cameraFacing === 'back' ? torchEnabled : false}
+          enableTorch={cameraFacing === 'back' && torchEnabled}
           onBarcodeScanned={(imageRecognitionMode || smartScanActive) ? undefined : handleBarCodeScanned}
           barcodeScannerSettings={(imageRecognitionMode || smartScanActive) ? undefined : {
             barcodeTypes: [
@@ -1127,27 +1127,29 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         />
         
         {/* Header - Back/Exit pill — safe-area aware, always on top */}
-        <TouchableOpacity
-          style={[
-            styles.backButtonAbsolute,
-            { top: insets.top + 10, left: Math.max(insets.left, 12) },
-          ]}
-          onPress={() => {
-            console.log('Back button pressed - closing camera');
-            setCameraActive(false);
-            setDetectedBannerData({ code: '', show: false });
-            detectedBannerAnim.setValue(0);
-          }}
-          testID="camera-back-button"
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <X size={18} color="#FFFFFF" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
+        <View style={styles.cameraHeaderOverlay} pointerEvents="box-none">
+          <TouchableOpacity
+            style={[
+              styles.backButtonAbsolute,
+              { top: insets.top + 8, left: Math.max(insets.left, 12) },
+            ]}
+            onPress={() => {
+              console.log('Back button pressed - closing camera');
+              setCameraActive(false);
+              setDetectedBannerData({ code: '', show: false });
+              detectedBannerAnim.setValue(0);
+            }}
+            testID="camera-back-button"
+            activeOpacity={0.7}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+          >
+            <X size={18} color="#FFFFFF" />
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+        </View>
 
         {scanned && (
-          <View style={[styles.processingDotAbsolute, { top: insets.top + 16, right: Math.max(insets.right, 20) }]}>
+          <View style={[styles.processingDotAbsolute, { top: insets.top + 14, right: Math.max(insets.right, 20) }]}>
             <View style={styles.processingDot} />
           </View>
         )}
@@ -1309,24 +1311,23 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
         )}
 
         {/* Upload Barcode Photo - Bottom Right */}
-        {!imageRecognitionMode && !smartScanActive && (
-          <TouchableOpacity
-            style={styles.uploadBarcodeButton}
-            onPress={async () => {
-              console.log('Upload barcode photo pressed');
-              if (Platform.OS !== 'web') {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }
-              setCameraActive(false);
-              handleUploadBarcodePhoto();
-            }}
-            testID="upload-barcode-button"
-            activeOpacity={0.7}
-          >
-            <Upload size={18} color="#FFFFFF" />
-            <Text style={styles.uploadBarcodeText}>Upload</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[styles.uploadBarcodeButton, { bottom: Platform.OS === 'ios' ? insets.bottom + 100 : 120 }]}
+          onPress={async () => {
+            console.log('Upload barcode photo pressed');
+            if (Platform.OS !== 'web') {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+            setCameraActive(false);
+            handleUploadBarcodePhoto();
+          }}
+          testID="upload-barcode-button"
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Upload size={18} color="#FFFFFF" />
+          <Text style={styles.uploadBarcodeText}>Upload</Text>
+        </TouchableOpacity>
 
         {/* Bottom Status Card */}
         <View style={styles.bottomCard}>
@@ -1968,8 +1969,9 @@ const styles = StyleSheet.create({
   productTypeText: { fontSize: 11, fontWeight: '600' as const },
   resultBrand: { fontSize: 13, color: arcaneColors.textSecondary },
   verdictBadge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  cameraContainer: { flex: 1, backgroundColor: '#000' },
-  backButtonAbsolute: { position: 'absolute' as const, zIndex: 9999, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: 'rgba(11, 15, 20, 0.8)', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minWidth: 44, minHeight: 44, borderWidth: 1, borderColor: 'rgba(11, 110, 122, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 20 },
+  cameraContainer: { flex: 1, backgroundColor: '#000', position: 'relative' as const },
+  cameraHeaderOverlay: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, elevation: 9999 },
+  backButtonAbsolute: { position: 'absolute' as const, zIndex: 9999, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: 'rgba(11, 15, 20, 0.85)', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minWidth: 44, minHeight: 44, borderWidth: 1, borderColor: 'rgba(11, 110, 122, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 25 },
   backButtonText: { fontSize: 16, fontWeight: '700' as const, color: '#FFF' },
   processingDotAbsolute: { position: 'absolute' as const, zIndex: 9998, elevation: 19 },
   processingDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FBBF24' },
@@ -2033,13 +2035,13 @@ const styles = StyleSheet.create({
   searchHistoryBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: arcaneColors.bgMist },
   searchHistoryBadgeText: { fontSize: 12 },
   buildId: { fontSize: 11, color: arcaneColors.textMuted, textAlign: 'center' as const, marginTop: 8, marginBottom: 16 },
-  flashButtonBottomLeft: { position: 'absolute', bottom: Platform.OS === 'ios' ? 140 : 120, left: 20, backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, zIndex: 10, minWidth: 44, minHeight: 44 },
+  flashButtonBottomLeft: { position: 'absolute', bottom: Platform.OS === 'ios' ? 140 : 120, left: 20, backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, zIndex: 100, elevation: 100, minWidth: 44, minHeight: 44 },
   flashButtonDisabled: { backgroundColor: 'rgba(30,30,30,0.5)', borderWidth: 1, borderColor: 'rgba(107,114,128,0.3)' },
   flashButtonPressed: { backgroundColor: 'rgba(50,50,50,0.95)', transform: [{ scale: 0.96 }] },
   flashButtonText: { color: '#FFF', fontSize: 14, fontWeight: '600' as const },
   flashButtonTextActive: { color: '#FBBF24' },
   flashButtonTextDisabled: { color: '#6B7280' },
-  uploadBarcodeButton: { position: 'absolute', bottom: Platform.OS === 'ios' ? 140 : 120, right: 20, backgroundColor: 'rgba(8,145,178,0.9)', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  uploadBarcodeButton: { position: 'absolute', right: 20, backgroundColor: 'rgba(8,145,178,0.9)', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 100, elevation: 100, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 },
   uploadBarcodeText: { color: '#FFF', fontSize: 15, fontWeight: '700' as const },
   errorContainer: { backgroundColor: '#FEF2F2', borderRadius: 12, padding: 20, marginBottom: 24, alignItems: 'center', borderWidth: 1, borderColor: '#FEE2E2' },
   errorText: { color: '#DC2626', fontSize: 14, textAlign: 'center' as const, marginTop: 8, marginBottom: 12 },
