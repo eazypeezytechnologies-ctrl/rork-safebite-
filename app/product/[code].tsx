@@ -26,6 +26,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { addToFavorites, removeFromFavorites, isFavorite } from '@/storage/favorites';
+import { getTrustedProduct, markProductTrusted, removeTrustedProduct, TrustedProduct } from '@/storage/trustedProducts';
 import * as Haptics from 'expo-haptics';
 import { analyzeIngredient, parseIngredients, getOverallSafetyScore, IngredientInfo } from '@/utils/ingredientAnalysis';
 import { TranslationCard } from '@/components/TranslationCard';
@@ -104,6 +105,8 @@ export default function ProductDetailsScreen() {
   const [aiConversation, setAiConversation] = useState<{role: 'ai' | 'user'; text: string}[]>([]);
   const [isAiReplying, setIsAiReplying] = useState(false);
   const [aiVerdictRecord, setAiVerdictRecord] = useState<AIVerdictRecord | null>(null);
+  const [trustedProduct, setTrustedProduct] = useState<TrustedProduct | null>(null);
+  const [showMismatchExplainer, setShowMismatchExplainer] = useState(false);
   const hasLoadedInitially = useRef(false);
 
   useFocusEffect(
@@ -293,6 +296,12 @@ export default function ProductDetailsScreen() {
         if (storedAiVerdict) {
           console.log('[ProductDetail] Found stored AI verdict:', storedAiVerdict.aiVerdict);
           setAiVerdictRecord(storedAiVerdict);
+        }
+
+        const trusted = await getTrustedProduct(code, activeProfile.id, currentUser?.id);
+        if (trusted) {
+          console.log('[ProductDetail] Product is trusted for this profile');
+          setTrustedProduct(trusted);
         }
       }
     } catch (err) {
@@ -791,10 +800,84 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
           </View>
         </View>
 
+        {aiVerdictRecord && verdict && (() => {
+          const ruleLevel = getVerdictInfo().verdict?.level;
+          const aiLevel = aiVerdictRecord.aiVerdict;
+          const hasMismatch = ruleLevel !== aiLevel;
+
+          if (!hasMismatch && !aiAdjusted) return null;
+
+          return (
+            <View style={styles.splitVerdictSection}>
+              {hasMismatch && (
+                <View style={styles.splitVerdictRow}>
+                  <View style={styles.splitVerdictItem}>
+                    <Text style={styles.splitVerdictLabel}>Preliminary Check</Text>
+                    <View style={[styles.splitVerdictBadge, { backgroundColor: getVerdictColor(ruleLevel || 'safe') + '18', borderColor: getVerdictColor(ruleLevel || 'safe') }]}>
+                      <Text style={[styles.splitVerdictBadgeText, { color: getVerdictColor(ruleLevel || 'safe') }]}>
+                        {getVerdictLabel(ruleLevel || 'safe')}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.splitVerdictArrow}>
+                    <Text style={styles.splitVerdictArrowText}>→</Text>
+                  </View>
+                  <View style={styles.splitVerdictItem}>
+                    <Text style={styles.splitVerdictLabel}>AI Review</Text>
+                    <View style={[styles.splitVerdictBadge, { backgroundColor: getVerdictColor(aiLevel) + '18', borderColor: getVerdictColor(aiLevel) }]}>
+                      <Text style={[styles.splitVerdictBadgeText, { color: getVerdictColor(aiLevel) }]}>
+                        {aiLevel === 'safe' ? 'AI-VERIFIED SAFE' : aiLevel === 'caution' ? 'AI: CAUTION' : 'AI: UNSAFE'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {hasMismatch && (
+                <TouchableOpacity
+                  style={styles.mismatchToggle}
+                  onPress={() => setShowMismatchExplainer(!showMismatchExplainer)}
+                >
+                  <AlertTriangle size={14} color="#D97706" />
+                  <Text style={styles.mismatchToggleText}>Why the mismatch?</Text>
+                  {showMismatchExplainer ? <ChevronUp size={16} color="#D97706" /> : <ChevronDown size={16} color="#D97706" />}
+                </TouchableOpacity>
+              )}
+
+              {hasMismatch && showMismatchExplainer && (
+                <View style={styles.mismatchExplainer}>
+                  <Text style={styles.mismatchExplainerText}>
+                    The preliminary check uses automated rules that match allergen tags, traces, and ingredient keywords. It can flag false positives from:
+                  </Text>
+                  <Text style={styles.mismatchExplainerBullet}>{'  • Generic \"may contain\" trace warnings'}</Text>
+                  <Text style={styles.mismatchExplainerBullet}>  • Outdated or cached product data</Text>
+                  <Text style={styles.mismatchExplainerBullet}>  • Overly broad keyword matches</Text>
+                  <Text style={styles.mismatchExplainerText}>
+                    The AI review analyzes the full ingredient list in context and may determine the product is actually safe for your profile.
+                  </Text>
+                  <View style={styles.mismatchDisclaimer}>
+                    <AlertCircle size={12} color="#92400E" />
+                    <Text style={styles.mismatchDisclaimerText}>
+                      Always read the physical label. This is educational only — not medical advice.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {!aiAdjusted && !aiConflict && !hasMismatch && (
+                <View style={styles.aiUpdatedBanner}>
+                  <ShieldCheck size={18} color="#065F46" />
+                  <Text style={styles.aiUpdatedText}>AI analysis confirms the preliminary verdict</Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
+
         {aiAdjusted && (
           <View style={styles.aiUpdatedBanner}>
             <ShieldCheck size={18} color="#065F46" />
-            <Text style={styles.aiUpdatedText}>Updated from AI Analysis</Text>
+            <Text style={styles.aiUpdatedText}>Updated after expert AI analysis</Text>
           </View>
         )}
 
@@ -807,6 +890,49 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
                 {aiVerdictRecord.conflictReason || 'The AI assessment differs from the rule-based check. Please review carefully.'}
               </Text>
             </View>
+          </View>
+        )}
+
+        {aiVerdictRecord && activeProfile && !trustedProduct && (aiAdjusted || (aiVerdictRecord.aiVerdict === 'safe')) && (
+          <TouchableOpacity
+            style={styles.trustButton}
+            onPress={async () => {
+              await markProductTrusted(code, activeProfile.id, currentUser?.id, 'AI review confirmed safe');
+              setTrustedProduct({ productCode: code, profileId: activeProfile.id, trustedAt: new Date().toISOString(), reason: 'AI review confirmed safe' });
+              if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+              Alert.alert('Trusted', 'This product has been marked as trusted for this profile. You can remove this any time.');
+            }}
+          >
+            <ShieldCheck size={18} color="#059669" />
+            <Text style={styles.trustButtonText}>Mark as Trusted for {activeProfile.name}</Text>
+          </TouchableOpacity>
+        )}
+
+        {trustedProduct && activeProfile && (
+          <View style={styles.trustedBanner}>
+            <View style={styles.trustedBannerContent}>
+              <ShieldCheck size={18} color="#059669" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.trustedBannerTitle}>Trusted Product</Text>
+                <Text style={styles.trustedBannerText}>
+                  Marked trusted on {new Date(trustedProduct.trustedAt).toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.removeTrustButton}
+              onPress={async () => {
+                await removeTrustedProduct(code, activeProfile.id, currentUser?.id);
+                setTrustedProduct(null);
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+              }}
+            >
+              <Text style={styles.removeTrustButtonText}>Remove</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1443,6 +1569,29 @@ const styles = StyleSheet.create({
   aiConflictBanner: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: 10, backgroundColor: '#FEF2F2', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1.5, borderColor: '#FCA5A5' },
   aiConflictTitle: { fontSize: 14, fontWeight: '700' as const, color: '#991B1B', marginBottom: 4 },
   aiConflictText: { fontSize: 13, color: '#7F1D1D', lineHeight: 18 },
+  splitVerdictSection: { marginBottom: 16 },
+  splitVerdictRow: { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8 },
+  splitVerdictItem: { flex: 1, alignItems: 'center' as const, gap: 6 },
+  splitVerdictLabel: { fontSize: 11, fontWeight: '600' as const, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+  splitVerdictBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1.5 },
+  splitVerdictBadgeText: { fontSize: 12, fontWeight: '700' as const },
+  splitVerdictArrow: { paddingHorizontal: 8 },
+  splitVerdictArrowText: { fontSize: 18, color: '#9CA3AF', fontWeight: '600' as const },
+  mismatchToggle: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, paddingVertical: 8, paddingHorizontal: 4 },
+  mismatchToggleText: { fontSize: 13, fontWeight: '600' as const, color: '#D97706', flex: 1 },
+  mismatchExplainer: { backgroundColor: '#FFFBEB', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#FDE68A' },
+  mismatchExplainerText: { fontSize: 13, color: '#78350F', lineHeight: 20, marginBottom: 6 },
+  mismatchExplainerBullet: { fontSize: 13, color: '#92400E', lineHeight: 20, marginBottom: 2 },
+  mismatchDisclaimer: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#FDE68A' },
+  mismatchDisclaimerText: { flex: 1, fontSize: 11, color: '#92400E', lineHeight: 16 },
+  trustButton: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 8, backgroundColor: '#D1FAE5', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1.5, borderColor: '#6EE7B7' },
+  trustButtonText: { fontSize: 14, fontWeight: '600' as const, color: '#059669' },
+  trustedBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, backgroundColor: '#ECFDF5', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1.5, borderColor: '#A7F3D0' },
+  trustedBannerContent: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10, flex: 1 },
+  trustedBannerTitle: { fontSize: 14, fontWeight: '700' as const, color: '#065F46' },
+  trustedBannerText: { fontSize: 12, color: '#047857' },
+  removeTrustButton: { backgroundColor: '#FEE2E2', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  removeTrustButtonText: { fontSize: 12, fontWeight: '600' as const, color: '#DC2626' },
   aiButton: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: '#0891B2', borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#0891B2', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 4 },
   aiButtonContent: { flex: 1 },
   aiButtonTitle: { fontSize: 18, fontWeight: '700' as const, color: '#FFF', marginBottom: 4 },

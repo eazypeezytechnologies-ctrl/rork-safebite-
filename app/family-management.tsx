@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Stack, useFocusEffect } from 'expo-router';
-import { Users, Plus, Trash2, Check, UserPlus, X, Share2, Clock } from 'lucide-react-native';
+import { Users, Plus, Trash2, Check, UserPlus, X, Share2, Clock, AlertTriangle as AlertTriangleIcon } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { useUser } from '@/contexts/UserContext';
@@ -33,6 +33,7 @@ import {
 } from '@/utils/secureInvites';
 import { logAuditEvent } from '@/utils/auditLog';
 import { actionRateLimiter } from '@/utils/actionRateLimiter';
+import { mapErrorToFriendly } from '@/utils/friendlyErrors';
 
 const MAX_FAMILY_MEMBERS = 6;
 
@@ -59,9 +60,11 @@ export default function FamilyManagementScreen() {
   const [invitations, setInvitations] = useState<Record<string, FamilyInvitation[]>>({});
   const [secureInvitations, setSecureInvitations] = useState<Record<string, SecureInvitation[]>>({});
   const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [inviteLoadError, setInviteLoadError] = useState(false);
 
   const loadAllInvitations = useCallback(async () => {
     try {
+      setInviteLoadError(false);
       const inviteMap: Record<string, FamilyInvitation[]> = {};
       const secureMap: Record<string, SecureInvitation[]> = {};
       for (const group of familyGroups) {
@@ -74,6 +77,7 @@ export default function FamilyManagementScreen() {
       setSecureInvitations(secureMap);
     } catch (error) {
       console.error('Error loading invitations:', error);
+      setInviteLoadError(true);
     }
   }, [familyGroups]);
 
@@ -130,19 +134,8 @@ export default function FamilyManagementScreen() {
     } catch (error) {
       console.error('Error sharing family invite:', error);
       const errMsg = error instanceof Error ? error.message : 'unknown';
-      let friendlyMsg = 'Failed to share family invite. Please try again.';
-      if (errMsg.includes('42501') || errMsg.includes('permission')) {
-        friendlyMsg = 'Permission denied. Your Supabase RLS policies may need updating. Please contact admin.';
-      } else if (errMsg.includes('foreign key') || errMsg.includes('23503') || errMsg.includes('fkey')) {
-        friendlyMsg = 'Family group reference error. Please try deleting and recreating the group.';
-      } else if (errMsg.includes('max') || errMsg.includes('limit')) {
-        friendlyMsg = `This family group has reached the maximum of ${MAX_FAMILY_MEMBERS} members (including pending invites).`;
-      } else if (errMsg.includes('expired')) {
-        friendlyMsg = 'This invitation has expired. Please create a new one.';
-      } else if (errMsg.includes('Load failed') || errMsg.includes('fetch') || errMsg.includes('network')) {
-        friendlyMsg = 'Network error. Please check your connection and try again.';
-      }
-      Alert.alert('Invite Error', friendlyMsg);
+      const friendly = mapErrorToFriendly(error);
+      Alert.alert(friendly.title, friendly.message);
       logAuditEvent({
         eventType: 'error.invite_failed',
         userId: currentUser.id,
@@ -515,7 +508,23 @@ export default function FamilyManagementScreen() {
                           Members: {memberProfiles.length}/{MAX_FAMILY_MEMBERS}
                         </Text>
 
-                        {(secureInvitations[group.id]?.length > 0 || invitations[group.id]?.length > 0) && (
+                        {inviteLoadError && (
+                          <View style={styles.inviteErrorCard}>
+                            <AlertTriangleIcon size={16} color="#D97706" />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.inviteErrorTitle}>Invites temporarily unavailable</Text>
+                              <Text style={styles.inviteErrorText}>Could not load pending invitations. You can still send new invites.</Text>
+                            </View>
+                            <TouchableOpacity
+                              style={styles.inviteErrorRetry}
+                              onPress={loadAllInvitations}
+                            >
+                              <Text style={styles.inviteErrorRetryText}>Retry</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {!inviteLoadError && (secureInvitations[group.id]?.length > 0 || invitations[group.id]?.length > 0) && (
                           <View style={styles.pendingInvites}>
                             <Text style={styles.pendingInvitesTitle}>
                               Pending invites: {(secureInvitations[group.id]?.length || 0) + (invitations[group.id]?.length || 0)}
@@ -550,6 +559,10 @@ export default function FamilyManagementScreen() {
                               </View>
                             ))}
                           </View>
+                        )}
+
+                        {!inviteLoadError && (secureInvitations[group.id] || []).length === 0 && (invitations[group.id] || []).length === 0 && (
+                          <Text style={styles.noInvitesText}>No pending invitations</Text>
                         )}
 
                         <View style={{ gap: 8 }}>
@@ -973,5 +986,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500' as const,
     color: '#0891B2',
+  },
+  inviteErrorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  inviteErrorTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  inviteErrorText: {
+    fontSize: 12,
+    color: '#A16207',
+    lineHeight: 16,
+  },
+  inviteErrorRetry: {
+    backgroundColor: '#FDE68A',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  inviteErrorRetryText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#92400E',
+  },
+  noInvitesText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 8,
+    fontStyle: 'italic' as const,
   },
 });
