@@ -172,7 +172,8 @@ function RootLayoutNav() {
                           currentPath === 'welcome-tour' ||
                           currentPath === 'exposure-guidance' ||
                           currentPath === 'epipen-demo' ||
-                          currentPath === 'manual-ingredient-entry';
+                          currentPath === 'manual-ingredient-entry' ||
+                          currentPath === 'profile-records';
     
     if (!hasCompletedOnboarding || !currentUser) {
       if (!isInAuthFlow) {

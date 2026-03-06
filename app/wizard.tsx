@@ -10,18 +10,15 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
-import { ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Check } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
-import { Profile, EmergencyContact, ProfileRelationship } from '@/types';
+import { Profile, EmergencyContact, ProfileRelationship, ProfileDocument } from '@/types';
 import * as Crypto from 'expo-crypto';
 import { PROFILE_RELATIONSHIPS, getRandomAvatarColor } from '@/constants/profileColors';
-import { FOOD_SENSITIVITY_TRIGGERS } from '@/constants/sensitivityTriggers';
-import { ECZEMA_TRIGGER_GROUPS } from '@/constants/eczemaTriggers';
+import { RestrictionsSetup } from '@/components/RestrictionsSetup';
+import { arcaneColors, arcaneRadius } from '@/constants/theme';
 
-const COMMON_ALLERGENS = [
-  'Milk', 'Eggs', 'Fish', 'Shellfish', 'Tree Nuts', 'Peanuts',
-  'Wheat', 'Soybeans', 'Sesame', 'Mustard', 'Celery', 'Lupin',
-];
+const TOTAL_STEPS = 6;
 
 export default function ProfileWizard() {
   const router = useRouter();
@@ -31,7 +28,6 @@ export default function ProfileWizard() {
   const [name, setName] = useState('');
   const [relationship, setRelationship] = useState<ProfileRelationship | undefined>(undefined);
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
-  const [customAllergen, setCustomAllergen] = useState('');
   const [customKeywords, setCustomKeywords] = useState<string[]>([]);
   const [customKeyword, setCustomKeyword] = useState('');
   const [hasAnaphylaxis, setHasAnaphylaxis] = useState(false);
@@ -44,21 +40,9 @@ export default function ProfileWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [trackEczemaTriggers, setTrackEczemaTriggers] = useState(false);
   const [eczemaTriggerGroups, setEczemaTriggerGroups] = useState<string[]>([]);
-
-  const toggleAllergen = (allergen: string) => {
-    setSelectedAllergens(prev =>
-      prev.includes(allergen)
-        ? prev.filter(a => a !== allergen)
-        : [...prev, allergen]
-    );
-  };
-
-  const addCustomAllergen = () => {
-    if (customAllergen.trim() && !selectedAllergens.includes(customAllergen.trim())) {
-      setSelectedAllergens(prev => [...prev, customAllergen.trim()]);
-      setCustomAllergen('');
-    }
-  };
+  const [dietaryRules, setDietaryRules] = useState<string[]>([]);
+  const [avoidIngredients, setAvoidIngredients] = useState<string[]>([]);
+  const [profileDocuments, setProfileDocuments] = useState<ProfileDocument[]>([]);
 
   const addCustomKeywordItem = () => {
     if (customKeyword.trim() && !customKeywords.includes(customKeyword.trim())) {
@@ -98,14 +82,6 @@ export default function ProfileWizard() {
     setContacts(prev => prev.filter((_, i) => i !== index));
   };
 
-  const toggleTriggerGroup = (groupId: string) => {
-    setEczemaTriggerGroups(prev =>
-      prev.includes(groupId)
-        ? prev.filter(g => g !== groupId)
-        : [...prev, groupId]
-    );
-  };
-
   const canProceed = () => {
     switch (step) {
       case 1:
@@ -117,7 +93,6 @@ export default function ProfileWizard() {
       case 4:
       case 5:
       case 6:
-      case 7:
         return true;
       default:
         return false;
@@ -125,7 +100,7 @@ export default function ProfileWizard() {
   };
 
   const handleNext = async () => {
-    if (step < 7) {
+    if (step < TOTAL_STEPS) {
       setStep(step + 1);
     } else {
       await handleFinish();
@@ -152,6 +127,9 @@ export default function ProfileWizard() {
         avatarColor: getRandomAvatarColor(),
         trackEczemaTriggers,
         eczemaTriggerGroups: trackEczemaTriggers ? eczemaTriggerGroups : [],
+        dietaryRules,
+        avoidIngredients,
+        profileDocuments,
       };
 
       if (__DEV__) console.log('[Wizard] Creating profile:', profile.name);
@@ -178,9 +156,11 @@ export default function ProfileWizard() {
             <TextInput
               style={styles.textInput}
               placeholder="e.g., Emma, Dad, Me"
+              placeholderTextColor={arcaneColors.textMuted}
               value={name}
               onChangeText={setName}
               autoFocus
+              testID="wizard-name-input"
             />
           </View>
         );
@@ -224,60 +204,25 @@ export default function ProfileWizard() {
       case 3:
         return (
           <View style={styles.stepContent}>
-            <Text style={styles.stepTitle}>Select allergens</Text>
-            <Text style={styles.stepSubtitle}>Choose all that apply</Text>
-            <View style={styles.allergenGrid}>
-              {COMMON_ALLERGENS.map(allergen => (
-                <TouchableOpacity
-                  key={allergen}
-                  style={[
-                    styles.allergenButton,
-                    selectedAllergens.includes(allergen) && styles.allergenButtonSelected,
-                  ]}
-                  onPress={() => toggleAllergen(allergen)}
-                >
-                  <Text
-                    style={[
-                      styles.allergenButtonText,
-                      selectedAllergens.includes(allergen) && styles.allergenButtonTextSelected,
-                    ]}
-                  >
-                    {allergen}
-                  </Text>
-                  {selectedAllergens.includes(allergen) && (
-                    <Check size={16} color="#FFFFFF" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.customInput}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Add custom allergen"
-                value={customAllergen}
-                onChangeText={setCustomAllergen}
-                onSubmitEditing={addCustomAllergen}
-              />
-              <TouchableOpacity style={styles.addButton} onPress={addCustomAllergen}>
-                <Text style={styles.addButtonText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-            {selectedAllergens.filter(a => !COMMON_ALLERGENS.includes(a)).length > 0 && (
-              <View style={styles.customList}>
-                {selectedAllergens
-                  .filter(a => !COMMON_ALLERGENS.includes(a))
-                  .map(allergen => (
-                    <View key={allergen} style={styles.customItem}>
-                      <Text style={styles.customItemText}>{allergen}</Text>
-                      <TouchableOpacity
-                        onPress={() => removeItem(selectedAllergens, setSelectedAllergens, allergen)}
-                      >
-                        <Text style={styles.removeText}>Remove</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-              </View>
-            )}
+            <Text style={styles.stepTitle}>Restrictions</Text>
+            <Text style={styles.stepSubtitle}>
+              Set up allergies, sensitivities, and dietary rules — no typing needed
+            </Text>
+            <RestrictionsSetup
+              selectedAllergens={selectedAllergens}
+              onAllergensChange={setSelectedAllergens}
+              trackEczemaTriggers={trackEczemaTriggers}
+              onTrackEczemaTriggersChange={setTrackEczemaTriggers}
+              eczemaTriggerGroups={eczemaTriggerGroups}
+              onEczemaTriggerGroupsChange={setEczemaTriggerGroups}
+              dietaryRules={dietaryRules}
+              onDietaryRulesChange={setDietaryRules}
+              avoidIngredients={avoidIngredients}
+              onAvoidIngredientsChange={setAvoidIngredients}
+              documents={profileDocuments}
+              onDocumentsChange={setProfileDocuments}
+              showUploadRecords
+            />
           </View>
         );
 
@@ -292,6 +237,7 @@ export default function ProfileWizard() {
               <TextInput
                 style={styles.textInput}
                 placeholder="Add keyword"
+                placeholderTextColor={arcaneColors.textMuted}
                 value={customKeyword}
                 onChangeText={setCustomKeyword}
                 onSubmitEditing={addCustomKeywordItem}
@@ -332,7 +278,7 @@ export default function ProfileWizard() {
               <Switch
                 value={hasAnaphylaxis}
                 onValueChange={setHasAnaphylaxis}
-                trackColor={{ false: '#D1D5DB', true: '#0891B2' }}
+                trackColor={{ false: '#D1D5DB', true: arcaneColors.primary }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -343,6 +289,7 @@ export default function ProfileWizard() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="Add medication"
+                    placeholderTextColor={arcaneColors.textMuted}
                     value={medication}
                     onChangeText={setMedication}
                     onSubmitEditing={addMedication}
@@ -373,110 +320,19 @@ export default function ProfileWizard() {
       case 6:
         return (
           <View style={styles.stepContent}>
-            <Text style={styles.stepTitle}>Skin Sensitivity (Eczema Triggers)</Text>
-            <Text style={styles.stepSubtitle}>
-              Track ingredients that may trigger eczema flare-ups, dermatitis, or skin reactions.
-            </Text>
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Track skin sensitivity (eczema flare triggers)</Text>
-              <Switch
-                value={trackEczemaTriggers}
-                onValueChange={setTrackEczemaTriggers}
-                trackColor={{ false: '#D1D5DB', true: '#D97706' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            {trackEczemaTriggers && (
-              <View style={styles.sensitivityHelperBox}>
-                <Text style={styles.sensitivityHelperText}>
-                  These are sensitivity triggers (not allergies). We&apos;ll warn you if ingredients may cause flare-ups.
-                </Text>
-              </View>
-            )}
-            {trackEczemaTriggers && (
-              <>
-                <Text style={styles.triggerLabel}>Food-based triggers to watch for:</Text>
-                <View style={styles.triggerGrid}>
-                  {FOOD_SENSITIVITY_TRIGGERS.map(trigger => {
-                    const isSelected = eczemaTriggerGroups.includes(trigger.id);
-                    return (
-                      <TouchableOpacity
-                        key={trigger.id}
-                        style={[
-                          styles.triggerChip,
-                          isSelected && styles.triggerChipSelected,
-                        ]}
-                        onPress={() => toggleTriggerGroup(trigger.id)}
-                      >
-                        <Text style={styles.triggerIcon}>{trigger.icon}</Text>
-                        <Text
-                          style={[
-                            styles.triggerChipText,
-                            isSelected && styles.triggerChipTextSelected,
-                          ]}
-                        >
-                          {trigger.label}
-                        </Text>
-                        {isSelected && <Check size={14} color="#FFFFFF" />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <Text style={styles.triggerLabel}>Skincare irritants:</Text>
-                <View style={styles.triggerGrid}>
-                  {ECZEMA_TRIGGER_GROUPS.map(group => {
-                    const isSelected = eczemaTriggerGroups.includes(group.id);
-                    return (
-                      <TouchableOpacity
-                        key={group.id}
-                        style={[
-                          styles.triggerChip,
-                          isSelected && styles.triggerChipSelected,
-                        ]}
-                        onPress={() => toggleTriggerGroup(group.id)}
-                      >
-                        <Text style={styles.triggerIcon}>{group.icon}</Text>
-                        <Text
-                          style={[
-                            styles.triggerChipText,
-                            isSelected && styles.triggerChipTextSelected,
-                          ]}
-                        >
-                          {group.label}
-                        </Text>
-                        {isSelected && <Check size={14} color="#FFFFFF" />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <View style={styles.sensitivityDisclaimer}>
-                  <AlertTriangle size={14} color="#92400E" />
-                  <Text style={styles.disclaimerText}>
-                    Triggers vary by person. Not medical advice.
-                  </Text>
-                </View>
-              </>
-            )}
-            <TouchableOpacity style={styles.skipButton} onPress={handleNext}>
-              <Text style={styles.skipButtonText}>Skip this step</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 7:
-        return (
-          <View style={styles.stepContent}>
             <Text style={styles.stepTitle}>Emergency contacts</Text>
             <Text style={styles.stepSubtitle}>Add people to contact in case of emergency</Text>
             <TextInput
               style={styles.textInput}
               placeholder="Name"
+              placeholderTextColor={arcaneColors.textMuted}
               value={contactName}
               onChangeText={setContactName}
             />
             <TextInput
               style={styles.textInput}
               placeholder="Phone number"
+              placeholderTextColor={arcaneColors.textMuted}
               value={contactPhone}
               onChangeText={setContactPhone}
               keyboardType="phone-pad"
@@ -484,6 +340,7 @@ export default function ProfileWizard() {
             <TextInput
               style={styles.textInput}
               placeholder="Relationship (optional)"
+              placeholderTextColor={arcaneColors.textMuted}
               value={contactRelationship}
               onChangeText={setContactRelationship}
             />
@@ -497,7 +354,7 @@ export default function ProfileWizard() {
                     <View>
                       <Text style={styles.contactName}>{contact.name}</Text>
                       <Text style={styles.contactPhone}>{contact.phone}</Text>
-                      <Text style={styles.contactRelationship}>{contact.relationship}</Text>
+                      <Text style={styles.contactRelationshipText}>{contact.relationship}</Text>
                     </View>
                     <TouchableOpacity onPress={() => removeContact(index)}>
                       <Text style={styles.removeText}>Remove</Text>
@@ -517,6 +374,8 @@ export default function ProfileWizard() {
     }
   };
 
+  const stepLabels = ['Name', 'Role', 'Restrictions', 'Keywords', 'Risk', 'Contacts'];
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -530,17 +389,27 @@ export default function ProfileWizard() {
             }
           }}
         >
-          <ChevronLeft size={24} color="#111827" />
+          <ChevronLeft size={24} color={arcaneColors.text} />
         </TouchableOpacity>
         <View style={styles.progressContainer}>
-          {[1, 2, 3, 4, 5, 6, 7].map(s => (
+          {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map(s => (
             <View
               key={s}
-              style={[styles.progressDot, s <= step && styles.progressDotActive]}
+              style={[
+                styles.progressDot,
+                s <= step && styles.progressDotActive,
+                s === step && styles.progressDotCurrent,
+              ]}
             />
           ))}
         </View>
         <View style={styles.backButton} />
+      </View>
+
+      <View style={styles.stepIndicator}>
+        <Text style={styles.stepIndicatorText}>
+          Step {step} of {TOTAL_STEPS} — {stepLabels[step - 1]}
+        </Text>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -552,11 +421,12 @@ export default function ProfileWizard() {
           style={[styles.nextButton, (!canProceed() || isSubmitting) && styles.nextButtonDisabled]}
           onPress={handleNext}
           disabled={!canProceed() || isSubmitting}
+          testID="wizard-next-button"
         >
           <Text style={styles.nextButtonText}>
-            {isSubmitting ? 'Creating...' : step === 7 ? 'Finish' : 'Next'}
+            {isSubmitting ? 'Creating...' : step === TOTAL_STEPS ? 'Finish' : 'Next'}
           </Text>
-          {step < 7 && !isSubmitting && <ChevronRight size={20} color="#FFFFFF" />}
+          {step < TOTAL_STEPS && !isSubmitting && <ChevronRight size={20} color="#FFFFFF" />}
         </TouchableOpacity>
       </View>
     </View>
@@ -566,7 +436,7 @@ export default function ProfileWizard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: arcaneColors.bg,
   },
   header: {
     flexDirection: 'row',
@@ -574,9 +444,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     paddingTop: 60,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: arcaneColors.bgCard,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: arcaneColors.border,
   },
   backButton: {
     width: 40,
@@ -586,74 +456,70 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
+    alignItems: 'center',
   },
   progressDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: arcaneColors.border,
   },
   progressDotActive: {
-    backgroundColor: '#0891B2',
+    backgroundColor: arcaneColors.primaryLight,
+  },
+  progressDotCurrent: {
+    backgroundColor: arcaneColors.primary,
+    width: 20,
+    borderRadius: 4,
+  },
+  stepIndicator: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    backgroundColor: arcaneColors.bgCard,
+    borderBottomWidth: 1,
+    borderBottomColor: arcaneColors.borderLight,
+  },
+  stepIndicatorText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: arcaneColors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.8,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
+    padding: 20,
+    paddingBottom: 40,
   },
   stepContent: {
     flex: 1,
   },
   stepTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700' as const,
-    color: '#111827',
-    marginBottom: 8,
+    color: arcaneColors.text,
+    marginBottom: 6,
+    letterSpacing: 0.2,
   },
   stepSubtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 24,
+    fontSize: 15,
+    color: arcaneColors.textSecondary,
+    marginBottom: 20,
+    lineHeight: 21,
   },
   textInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    flex: 1,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
     marginBottom: 12,
-  },
-  allergenGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
-  },
-  allergenButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-  },
-  allergenButtonSelected: {
-    backgroundColor: '#0891B2',
-    borderColor: '#0891B2',
-  },
-  allergenButtonText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#111827',
-  },
-  allergenButtonTextSelected: {
-    color: '#FFFFFF',
+    color: arcaneColors.text,
   },
   customInput: {
     flexDirection: 'row',
@@ -661,8 +527,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   addButton: {
-    backgroundColor: '#0891B2',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.primary,
+    borderRadius: arcaneRadius.lg,
     paddingHorizontal: 20,
     justifyContent: 'center',
   },
@@ -678,133 +544,67 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
   },
   customItemText: {
     fontSize: 16,
-    color: '#111827',
+    color: arcaneColors.text,
   },
   removeText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: '#DC2626',
-  },
-  triggerLabel: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: '#92400E',
-    marginBottom: 10,
-    marginTop: 4,
-  },
-  triggerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
-  },
-  triggerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-  },
-  triggerChipSelected: {
-    backgroundColor: '#D97706',
-    borderColor: '#D97706',
-  },
-  triggerIcon: {
-    fontSize: 16,
-  },
-  triggerChipText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#374151',
-  },
-  triggerChipTextSelected: {
-    color: '#FFFFFF',
-  },
-  sensitivityDisclaimer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FEF3C7',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 4,
-  },
-  disclaimerText: {
-    fontSize: 12,
-    color: '#92400E',
-    flex: 1,
-  },
-  sensitivityHelperBox: {
-    backgroundColor: '#FFFBEB',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  sensitivityHelperText: {
-    fontSize: 13,
-    color: '#92400E',
-    lineHeight: 19,
+    color: arcaneColors.danger,
   },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
   },
   switchLabel: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: arcaneColors.text,
   },
   medicationLabel: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginBottom: 12,
   },
   contactItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.bgCard,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
   },
   contactName: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: arcaneColors.text,
     marginBottom: 4,
   },
   contactPhone: {
     fontSize: 14,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
     marginBottom: 2,
   },
-  contactRelationship: {
+  contactRelationshipText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: arcaneColors.textMuted,
   },
   skipButton: {
     marginTop: 16,
@@ -813,18 +613,18 @@ const styles = StyleSheet.create({
   },
   skipButtonText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: arcaneColors.textSecondary,
   },
   footer: {
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: arcaneColors.bgCard,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: arcaneColors.border,
   },
   nextButton: {
     flexDirection: 'row',
-    backgroundColor: '#0891B2',
-    borderRadius: 12,
+    backgroundColor: arcaneColors.primary,
+    borderRadius: arcaneRadius.lg,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -850,15 +650,15 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    borderRadius: arcaneRadius.lg,
+    backgroundColor: arcaneColors.bgCard,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: arcaneColors.border,
     minWidth: 120,
   },
   relationshipButtonSelected: {
-    backgroundColor: '#0891B2',
-    borderColor: '#0891B2',
+    backgroundColor: arcaneColors.primary,
+    borderColor: arcaneColors.primary,
   },
   relationshipIcon: {
     fontSize: 20,
@@ -866,7 +666,7 @@ const styles = StyleSheet.create({
   relationshipButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: arcaneColors.text,
   },
   relationshipButtonTextSelected: {
     color: '#FFFFFF',

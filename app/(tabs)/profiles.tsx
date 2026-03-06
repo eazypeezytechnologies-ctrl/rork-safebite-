@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, RefreshControl } from 'react-native';
 import React from 'react';
 import { useRouter, Href } from 'expo-router';
-import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus, AlertTriangle, Sparkles } from 'lucide-react-native';
+import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus, AlertTriangle, Sparkles, FileText, Leaf } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { getRelationshipLabel, getRelationshipIcon } from '@/constants/profileColors';
@@ -240,6 +240,14 @@ export default function ProfilesScreen() {
                         <Text style={styles.sensitivityBadgeText}>Skin Sensitivity: ON</Text>
                       </View>
                     )}
+                    {(profile.dietaryRules?.length ?? 0) > 0 && (
+                      <View style={styles.dietaryBadge}>
+                        <Leaf size={12} color={arcaneColors.safe} />
+                        <Text style={styles.dietaryBadgeText}>
+                          {profile.dietaryRules?.join(', ')}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   {activeProfile?.id === profile.id && (
                     <View style={styles.activeBadge}>
@@ -252,8 +260,15 @@ export default function ProfilesScreen() {
                     style={styles.actionButton}
                     onPress={() => router.push(`/edit-profile?id=${profile.id}` as any)}
                   >
-                    <Edit size={20} color="#0891B2" />
+                    <Edit size={20} color={arcaneColors.primary} />
                     <Text style={styles.actionButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => router.push(`/profile-records?id=${profile.id}` as any)}
+                  >
+                    <FileText size={20} color={arcaneColors.accent} />
+                    <Text style={[styles.actionButtonText, { color: arcaneColors.accent }]}>Records</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionButton}
@@ -751,5 +766,22 @@ const styles = StyleSheet.create({
   },
   toggleKnobActive: {
     alignSelf: 'flex-end' as const,
+  },
+  dietaryBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    marginTop: 4,
+    backgroundColor: arcaneColors.safeMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: arcaneRadius.sm,
+    alignSelf: 'flex-start' as const,
+  },
+  dietaryBadgeText: {
+    fontSize: 11,
+    color: arcaneColors.safe,
+    fontWeight: '600' as const,
+    textTransform: 'capitalize' as const,
   },
 });

@@ -20,6 +20,8 @@ export interface SupabaseProfile {
   avatar_color?: string;
   track_eczema_triggers?: boolean;
   eczema_trigger_groups?: string[];
+  dietary_rules?: string[];
+  avoid_ingredients?: string[];
   created_at: string;
   updated_at: string;
 }

@@ -45,6 +45,18 @@ export interface Profile {
   avatarColor?: string;
   trackEczemaTriggers?: boolean;
   eczemaTriggerGroups?: string[];
+  dietaryRules?: string[];
+  avoidIngredients?: string[];
+  profileDocuments?: ProfileDocument[];
+}
+
+export interface ProfileDocument {
+  id: string;
+  profileId: string;
+  fileName: string;
+  fileType: string;
+  fileUri: string;
+  uploadedAt: string;
 }
 
 export interface User {
