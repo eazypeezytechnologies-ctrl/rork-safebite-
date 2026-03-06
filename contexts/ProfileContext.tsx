@@ -28,6 +28,8 @@ const convertSupabaseProfileToProfile = (sp: SupabaseProfile): Profile => ({
   eczemaTriggerGroups: sp.eczema_trigger_groups || [],
   dietaryRules: sp.dietary_rules || [],
   avoidIngredients: sp.avoid_ingredients || [],
+  dietaryRestrictions: (sp.dietary_restrictions as Record<string, boolean> | undefined) || {},
+  dietaryStrictness: (sp.dietary_strictness as Record<string, 'relaxed' | 'standard' | 'strict'> | undefined) || {},
   createdAt: sp.created_at,
   updatedAt: sp.updated_at,
 });
@@ -46,6 +48,8 @@ const convertProfileToSupabaseProfile = (p: Partial<Profile>): Partial<Omit<Supa
   eczema_trigger_groups: p.eczemaTriggerGroups || [],
   dietary_rules: p.dietaryRules || [],
   avoid_ingredients: p.avoidIngredients || [],
+  dietary_restrictions: p.dietaryRestrictions || {},
+  dietary_strictness: p.dietaryStrictness || {},
 });
 
 export const [ProfileProvider, useProfiles] = createContextHook(() => {

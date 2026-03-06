@@ -16,9 +16,11 @@ import { Profile, EmergencyContact, ProfileRelationship, ProfileDocument } from 
 import * as Crypto from 'expo-crypto';
 import { PROFILE_RELATIONSHIPS, getRandomAvatarColor } from '@/constants/profileColors';
 import { RestrictionsSetup } from '@/components/RestrictionsSetup';
+import { DietaryRestrictionsSetup } from '@/components/DietaryRestrictionsSetup';
 import { arcaneColors, arcaneRadius } from '@/constants/theme';
 
-const TOTAL_STEPS = 6;
+
+const TOTAL_STEPS = 7;
 
 export default function ProfileWizard() {
   const router = useRouter();
@@ -42,6 +44,8 @@ export default function ProfileWizard() {
   const [eczemaTriggerGroups, setEczemaTriggerGroups] = useState<string[]>([]);
   const [dietaryRules, setDietaryRules] = useState<string[]>([]);
   const [avoidIngredients, setAvoidIngredients] = useState<string[]>([]);
+  const [dietaryRestrictions, setDietaryRestrictions] = useState<Record<string, boolean>>({});
+  const [dietaryStrictness, setDietaryStrictness] = useState<Record<string, 'relaxed' | 'standard' | 'strict'>>({});
   const [profileDocuments, setProfileDocuments] = useState<ProfileDocument[]>([]);
 
   const addCustomKeywordItem = () => {
@@ -93,6 +97,7 @@ export default function ProfileWizard() {
       case 4:
       case 5:
       case 6:
+      case 7:
         return true;
       default:
         return false;
@@ -129,6 +134,8 @@ export default function ProfileWizard() {
         eczemaTriggerGroups: trackEczemaTriggers ? eczemaTriggerGroups : [],
         dietaryRules,
         avoidIngredients,
+        dietaryRestrictions,
+        dietaryStrictness,
         profileDocuments,
       };
 
@@ -229,6 +236,25 @@ export default function ProfileWizard() {
       case 4:
         return (
           <View style={styles.stepContent}>
+            <Text style={styles.stepTitle}>Dietary Restrictions</Text>
+            <Text style={styles.stepSubtitle}>
+              Set dietary rules with strictness levels (optional)
+            </Text>
+            <DietaryRestrictionsSetup
+              dietaryRestrictions={dietaryRestrictions}
+              onDietaryRestrictionsChange={setDietaryRestrictions}
+              dietaryStrictness={dietaryStrictness}
+              onDietaryStrictnessChange={setDietaryStrictness}
+            />
+            <TouchableOpacity style={styles.skipButton} onPress={handleNext}>
+              <Text style={styles.skipButtonText}>Skip this step</Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 5:
+        return (
+          <View style={styles.stepContent}>
             <Text style={styles.stepTitle}>Custom keywords</Text>
             <Text style={styles.stepSubtitle}>
               Add specific ingredients to watch for (e.g., casein, whey, tahini)
@@ -266,7 +292,7 @@ export default function ProfileWizard() {
           </View>
         );
 
-      case 5:
+      case 6:
         return (
           <View style={styles.stepContent}>
             <Text style={styles.stepTitle}>Anaphylaxis risk</Text>
@@ -317,7 +343,7 @@ export default function ProfileWizard() {
           </View>
         );
 
-      case 6:
+      case 7:
         return (
           <View style={styles.stepContent}>
             <Text style={styles.stepTitle}>Emergency contacts</Text>
@@ -374,7 +400,7 @@ export default function ProfileWizard() {
     }
   };
 
-  const stepLabels = ['Name', 'Role', 'Restrictions', 'Keywords', 'Risk', 'Contacts'];
+  const stepLabels = ['Name', 'Role', 'Restrictions', 'Dietary', 'Keywords', 'Risk', 'Contacts'];
 
   return (
     <View style={styles.container}>

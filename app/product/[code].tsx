@@ -37,6 +37,7 @@ import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductT
 import { generateSafeSwaps, generateNoDataSwaps } from '@/services/safeSwapService';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { DietaryCompatibilityCard } from '@/components/DietaryCompatibilityCard';
+import { DietaryRestrictionVerdictCard } from '@/components/DietaryRestrictionVerdictCard';
 
 export default function ProductDetailsScreen() {
   const params = useLocalSearchParams<{ code: string | string[] }>();
@@ -942,6 +943,14 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             product={product}
             profile={activeProfile}
             testID="dietary-compatibility-card"
+          />
+        )}
+
+        {activeProfile && product && (
+          <DietaryRestrictionVerdictCard
+            product={product}
+            profile={activeProfile}
+            testID="dietary-restriction-verdict-card"
           />
         )}
 

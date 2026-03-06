@@ -47,6 +47,8 @@ export interface Profile {
   eczemaTriggerGroups?: string[];
   dietaryRules?: string[];
   avoidIngredients?: string[];
+  dietaryRestrictions?: Record<string, boolean>;
+  dietaryStrictness?: Record<string, 'relaxed' | 'standard' | 'strict'>;
   profileDocuments?: ProfileDocument[];
 }
 

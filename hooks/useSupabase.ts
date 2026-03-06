@@ -22,6 +22,8 @@ export interface SupabaseProfile {
   eczema_trigger_groups?: string[];
   dietary_rules?: string[];
   avoid_ingredients?: string[];
+  dietary_restrictions?: Record<string, boolean>;
+  dietary_strictness?: Record<string, string>;
   created_at: string;
   updated_at: string;
 }

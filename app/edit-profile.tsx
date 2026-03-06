@@ -14,6 +14,7 @@ import { X } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { EmergencyContact, ProfileDocument } from '@/types';
 import { RestrictionsSetup } from '@/components/RestrictionsSetup';
+import { DietaryRestrictionsSetup } from '@/components/DietaryRestrictionsSetup';
 import { arcaneColors, arcaneRadius } from '@/constants/theme';
 
 export default function EditProfileScreen() {
@@ -35,6 +36,8 @@ export default function EditProfileScreen() {
   const [eczemaTriggerGroups, setEczemaTriggerGroups] = useState<string[]>([]);
   const [dietaryRules, setDietaryRules] = useState<string[]>([]);
   const [avoidIngredients, setAvoidIngredients] = useState<string[]>([]);
+  const [dietaryRestrictions, setDietaryRestrictions] = useState<Record<string, boolean>>({});
+  const [dietaryStrictness, setDietaryStrictness] = useState<Record<string, 'relaxed' | 'standard' | 'strict'>>({});
   const [profileDocuments, setProfileDocuments] = useState<ProfileDocument[]>([]);
 
   useEffect(() => {
@@ -49,6 +52,8 @@ export default function EditProfileScreen() {
       setEczemaTriggerGroups(profile.eczemaTriggerGroups || []);
       setDietaryRules(profile.dietaryRules || []);
       setAvoidIngredients(profile.avoidIngredients || []);
+      setDietaryRestrictions(profile.dietaryRestrictions || {});
+      setDietaryStrictness(profile.dietaryStrictness || {});
       setProfileDocuments(profile.profileDocuments || []);
     }
   }, [profile]);
@@ -97,6 +102,8 @@ export default function EditProfileScreen() {
         eczemaTriggerGroups: trackEczemaTriggers ? eczemaTriggerGroups : [],
         dietaryRules,
         avoidIngredients,
+        dietaryRestrictions,
+        dietaryStrictness,
         profileDocuments,
         updatedAt: new Date().toISOString(),
       });
@@ -145,6 +152,17 @@ export default function EditProfileScreen() {
             documents={profileDocuments}
             onDocumentsChange={setProfileDocuments}
             showUploadRecords
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dietary Restrictions</Text>
+          <Text style={styles.sectionSubtitle}>Strictness-based dietary rules for food & cosmetics</Text>
+          <DietaryRestrictionsSetup
+            dietaryRestrictions={dietaryRestrictions}
+            onDietaryRestrictionsChange={setDietaryRestrictions}
+            dietaryStrictness={dietaryStrictness}
+            onDietaryStrictnessChange={setDietaryStrictness}
           />
         </View>
 
