@@ -465,6 +465,40 @@ export async function getRecentScansForAdmin(limit: number = 20): Promise<{
   }
 }
 
+export async function updateProductAIVerdict(
+  productCode: string,
+  aiVerdict: 'safe' | 'caution' | 'danger',
+  aiSummary?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log('[SupabaseProducts] Updating AI verdict for', productCode, '->', aiVerdict);
+    const updates: Record<string, any> = {
+      analysis_verdict: aiVerdict,
+      analysis_updated_at: new Date().toISOString(),
+    };
+    if (aiSummary) {
+      updates.analysis_summary = aiSummary.substring(0, 1000);
+    }
+
+    const { error } = await supabase
+      .from('products')
+      .update(updates)
+      .eq('code', productCode);
+
+    if (error) {
+      console.log('[SupabaseProducts] AI verdict update error (non-critical):', error.message);
+      return { success: false, error: error.message };
+    }
+
+    console.log('[SupabaseProducts] AI verdict persisted for', productCode);
+    return { success: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.log('[SupabaseProducts] AI verdict update exception (non-critical):', msg);
+    return { success: false, error: msg };
+  }
+}
+
 function mapSupabaseToProduct(data: any): Product {
   return {
     code: data.code || '',

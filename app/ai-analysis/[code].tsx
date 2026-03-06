@@ -17,6 +17,7 @@ import { calculateVerdict } from '@/utils/verdict';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { saveAIVerdict, parseAIVerdictFromText, getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
+import { updateProductAIVerdict } from '@/services/supabaseProducts';
 import * as Haptics from 'expo-haptics';
 
 export default function AIAnalysisScreen() {
@@ -132,6 +133,10 @@ Be thorough but concise. Use clear, non-technical language.`;
 
     await saveAIVerdict(record, currentUser?.id);
     setAiVerdictRecord(record);
+
+    updateProductAIVerdict(code, aiVerdict, result.substring(0, 500)).catch((err) =>
+      console.log('[AIAnalysis] Non-critical: could not persist AI verdict to product record:', err)
+    );
 
     if (Platform.OS !== 'web') {
       try {

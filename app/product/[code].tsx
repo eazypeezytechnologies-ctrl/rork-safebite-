@@ -36,6 +36,7 @@ import { SkeletonProductCard } from '@/components/Skeleton';
 import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { generateSafeSwaps, generateNoDataSwaps } from '@/services/safeSwapService';
 import { generateText } from '@rork-ai/toolkit-sdk';
+import { DietaryCompatibilityCard } from '@/components/DietaryCompatibilityCard';
 
 export default function ProductDetailsScreen() {
   const params = useLocalSearchParams<{ code: string | string[] }>();
@@ -934,6 +935,14 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
               <Text style={styles.removeTrustButtonText}>Remove</Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {activeProfile && product && (
+          <DietaryCompatibilityCard
+            product={product}
+            profile={activeProfile}
+            testID="dietary-compatibility-card"
+          />
         )}
 
         {verdict && verdict.missingData && showNoDataAlternatives && (

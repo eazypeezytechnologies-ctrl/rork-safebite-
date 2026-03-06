@@ -36,6 +36,7 @@ import {
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { Product, ProductType } from '@/types';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
+import { addToShoppingList } from '@/storage/shoppingList';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -668,6 +669,42 @@ Format response exactly as above, one per line.`;
           </TouchableOpacity>
         </View>
 
+        <View style={styles.quickActionsRow}>
+          <TouchableOpacity
+            style={styles.quickActionBtn}
+            onPress={async () => {
+              try {
+                const productCode = barcode && /^\d{8,14}$/.test(barcode) ? barcode.trim() : `manual_${Date.now()}`;
+                await addToShoppingList({
+                  id: `${productCode}_${Date.now()}`,
+                  name: savedProductName || 'Product',
+                  barcode: productCode,
+                  checked: false,
+                  addedAt: new Date().toISOString(),
+                  profileId: activeProfile?.id,
+                });
+                if (Platform.OS !== 'web') {
+                  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+                Alert.alert('Added', 'Product added to shopping list.');
+              } catch {
+                Alert.alert('Error', 'Could not add to shopping list.');
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.quickActionIcon}>🛒</Text>
+            <Text style={styles.quickActionLabel}>Add to Shopping List</Text>
+          </TouchableOpacity>
+          <View style={[styles.quickActionBtn, styles.quickActionBtnDisabled]}>
+            <Text style={styles.quickActionIcon}>📋</Text>
+            <Text style={styles.quickActionLabelDisabled}>Restrictions List</Text>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonText}>Coming Soon</Text>
+            </View>
+          </View>
+        </View>
+
         {!autoReturnCancelled.current && autoReturnCountdown > 0 && (
           <TouchableOpacity
             style={styles.autoReturnRow}
@@ -1094,4 +1131,12 @@ const styles = StyleSheet.create({
   autoReturnCancel: { fontSize: 13, fontWeight: '700' as const, color: arcaneColors.primary },
   categoryRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   categoryChip: { paddingHorizontal: 4, paddingVertical: 4, borderRadius: arcaneRadius.pill, borderWidth: 2, borderColor: 'transparent', backgroundColor: 'transparent' },
+  quickActionsRow: { flexDirection: 'row', gap: 10, width: '100%', maxWidth: 320, marginTop: 16 },
+  quickActionBtn: { flex: 1, alignItems: 'center', backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.lg, padding: 14, borderWidth: 1, borderColor: arcaneColors.borderRune, gap: 6, ...arcaneShadows.card },
+  quickActionBtnDisabled: { opacity: 0.55, borderColor: arcaneColors.border },
+  quickActionIcon: { fontSize: 22 },
+  quickActionLabel: { fontSize: 12, fontWeight: '600' as const, color: arcaneColors.primary, textAlign: 'center' as const },
+  quickActionLabelDisabled: { fontSize: 12, fontWeight: '600' as const, color: arcaneColors.textMuted, textAlign: 'center' as const },
+  comingSoonBadge: { backgroundColor: arcaneColors.cautionMuted, borderRadius: arcaneRadius.sm, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2 },
+  comingSoonText: { fontSize: 9, fontWeight: '700' as const, color: arcaneColors.caution, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
 });
