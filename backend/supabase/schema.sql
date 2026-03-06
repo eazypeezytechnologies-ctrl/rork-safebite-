@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   avatar_color TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  dietary_rules JSONB DEFAULT '{}'::JSONB,
+  avoid_ingredients TEXT[] DEFAULT '{}'::TEXT[]
 );
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -53,6 +55,28 @@ CREATE POLICY "Users can update own profiles" ON public.profiles
   FOR UPDATE USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete own profiles" ON public.profiles
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Profile documents table
+CREATE TABLE IF NOT EXISTS public.profile_documents (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  file_path TEXT NOT NULL,
+  file_type TEXT NOT NULL,
+  title TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.profile_documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own documents" ON public.profile_documents
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own documents" ON public.profile_documents
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own documents" ON public.profile_documents
   FOR DELETE USING (auth.uid() = user_id);
 
 -- Products cache table
@@ -245,6 +269,8 @@ CREATE INDEX idx_products_code ON public.products(code);
 CREATE INDEX idx_recall_cache_product_code ON public.recall_cache(product_code);
 CREATE INDEX idx_recall_cache_expires_at ON public.recall_cache(expires_at);
 CREATE INDEX idx_family_groups_user_id ON public.family_groups(user_id);
+CREATE INDEX idx_profile_documents_user_id ON public.profile_documents(user_id);
+CREATE INDEX idx_profile_documents_profile_id ON public.profile_documents(profile_id);
 CREATE INDEX idx_user_settings_user_id ON public.user_settings(user_id);
 
 -- Trigger to update updated_at timestamp

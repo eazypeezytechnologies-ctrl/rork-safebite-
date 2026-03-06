@@ -630,6 +630,140 @@ export function useDeleteFamilyGroup(userId: string) {
   });
 }
 
+export interface SupabaseProfileDocument {
+  id: string;
+  user_id: string;
+  profile_id: string;
+  file_path: string;
+  file_type: string;
+  title: string | null;
+  created_at: string;
+}
+
+export function useSupabaseProfileDocuments(userId?: string, profileId?: string) {
+  return useQuery({
+    queryKey: ['supabase-profile-documents', userId, profileId],
+    queryFn: async () => {
+      if (!userId) return [];
+
+      let query = supabase
+        .from('profile_documents')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (profileId) {
+        query = query.eq('profile_id', profileId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('[useSupabaseProfileDocuments] Error:', error);
+        throw error;
+      }
+
+      return data as SupabaseProfileDocument[];
+    },
+    enabled: !!userId,
+  });
+}
+
+export function useCreateProfileDocument(userId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (doc: {
+      profile_id: string;
+      file_path: string;
+      file_type: string;
+      title?: string;
+    }) => {
+      const { data, error } = await supabase
+        .from('profile_documents')
+        .insert({
+          user_id: userId,
+          ...doc,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[useCreateProfileDocument] Error:', error);
+        throw error;
+      }
+
+      return data as SupabaseProfileDocument;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['supabase-profile-documents', userId] });
+    },
+  });
+}
+
+export function useDeleteProfileDocument(userId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, filePath }: { id: string; filePath: string }) => {
+      const { error: storageError } = await supabase.storage
+        .from('profile-documents')
+        .remove([filePath]);
+
+      if (storageError) {
+        console.warn('[useDeleteProfileDocument] Storage delete error (non-fatal):', storageError);
+      }
+
+      const { error } = await supabase
+        .from('profile_documents')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('[useDeleteProfileDocument] Error:', error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['supabase-profile-documents', userId] });
+    },
+  });
+}
+
+export function useUploadProfileDocument(userId: string) {
+  return useMutation({
+    mutationFn: async ({
+      fileUri,
+      fileName,
+      fileType,
+    }: {
+      fileUri: string;
+      fileName: string;
+      fileType: string;
+    }) => {
+      const filePath = `${userId}/${Date.now()}_${fileName}`;
+
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+
+      const { data, error } = await supabase.storage
+        .from('profile-documents')
+        .upload(filePath, blob, {
+          contentType: fileType,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error('[useUploadProfileDocument] Upload error:', error);
+        throw error;
+      }
+
+      console.log('[useUploadProfileDocument] Uploaded to:', data.path);
+      return data.path;
+    },
+  });
+}
+
 export function useSupabaseUserSettings(userId?: string) {
   return useQuery({
     queryKey: ['supabase-user-settings', userId],
