@@ -18,6 +18,8 @@ import { generateText } from '@rork-ai/toolkit-sdk';
 import { saveAIVerdict, parseAIVerdictFromText, getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
 import { updateProductAIVerdict } from '@/services/supabaseProducts';
+import { removeCachedProduct } from '@/storage/productCache';
+import { resetBarcodeDebounce } from '@/api/products';
 import * as Haptics from 'expo-haptics';
 
 export default function AIAnalysisScreen() {
@@ -35,7 +37,8 @@ export default function AIAnalysisScreen() {
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
 
   useEffect(() => {
-    loadProductAndAnalyze();
+    void loadProductAndAnalyze();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
   const loadProductAndAnalyze = async () => {
@@ -104,17 +107,22 @@ Be thorough but concise. Use clear, non-technical language.`;
     const { verdict: aiVerdict, confidence } = parseAIVerdictFromText(result);
     console.log('[AIAnalysis] Parsed AI verdict:', aiVerdict, 'confidence:', confidence);
 
-    const hasRuleAllergenMatch = ruleVerdict.matches.some(
-      m => m.source === 'allergens_tags' || m.source === 'ingredients' || m.source === 'custom_keyword'
+    const hasApiAllergenTagMatch = ruleVerdict.matches.some(
+      m => m.source === 'allergens_tags'
     );
+    const hasOnlyIngredientTextMatch = ruleVerdict.matches.length > 0 &&
+      ruleVerdict.matches.every(m => m.source === 'ingredients' || m.source === 'traces_tags');
 
     let hasConflict = false;
     let conflictReason: string | undefined;
 
-    if (aiVerdict === 'safe' && hasRuleAllergenMatch) {
+    if (aiVerdict === 'safe' && hasApiAllergenTagMatch && confidence !== 'high') {
       hasConflict = true;
-      conflictReason = `Rule-based system detected direct allergen matches (${ruleVerdict.matches.map(m => m.allergen).join(', ')}), but AI assessment says SAFE. The rule-based allergen match takes priority for safety.`;
-      console.log('[AIAnalysis] CONFLICT: AI says safe but rule-based found allergens');
+      conflictReason = `Rule-based system found allergens in API tags (${ruleVerdict.matches.filter(m => m.source === 'allergens_tags').map(m => m.allergen).join(', ')}), but AI says SAFE. Review carefully — when in doubt, trust the more conservative result.`;
+      console.log('[AIAnalysis] CONFLICT: AI says safe but API allergen tags found');
+    } else if (aiVerdict === 'safe' && hasOnlyIngredientTextMatch) {
+      hasConflict = false;
+      console.log('[AIAnalysis] AI overrides ingredient-text false positive — no conflict');
     } else if (aiVerdict === 'danger' && ruleVerdict.level === 'safe') {
       hasConflict = true;
       conflictReason = `AI detected potential allergen risks not caught by the rule-based system. Please review carefully.`;
@@ -137,6 +145,10 @@ Be thorough but concise. Use clear, non-technical language.`;
     updateProductAIVerdict(code, aiVerdict, result.substring(0, 500)).catch((err) =>
       console.log('[AIAnalysis] Non-critical: could not persist AI verdict to product record:', err)
     );
+
+    removeCachedProduct(code).catch(() => {});
+    resetBarcodeDebounce();
+    console.log('[AIAnalysis] Cleared product cache and reset debounce for', code);
 
     if (Platform.OS !== 'web') {
       try {
@@ -169,6 +181,7 @@ Be thorough but concise. Use clear, non-technical language.`;
     } finally {
       setIsRerunning(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product, activeProfile, isRerunning, lastRunAt]);
 
   const getVerdictDisplay = () => {

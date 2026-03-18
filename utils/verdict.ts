@@ -20,7 +20,7 @@ const ALLERGEN_SYNONYMS: Record<string, string[]> = {
   ],
   'eggs': [
     'egg', 'eggs', 'albumin', 'albumen', 'ovalbumin', 'ovomucin', 'ovomucoid',
-    'ovovitellin', 'globulin', 'livetin', 'lysozyme', 'vitellin', 'lecithin',
+    'ovovitellin', 'globulin', 'livetin', 'lysozyme', 'vitellin',
     'egg white', 'egg yolk', 'egg powder', 'dried egg', 'egg solids',
     'egg substitute', 'eggnog', 'mayonnaise', 'meringue', 'surimi',
     'simplesse', 'apovitellin', 'cholesterol free egg substitute',
@@ -69,32 +69,31 @@ const ALLERGEN_SYNONYMS: Record<string, string[]> = {
     'ground nuts', 'arachis', 'valencias', 'spanish peanuts'
   ],
   'wheat': [
-    'wheat', 'flour', 'wheat flour', 'whole wheat', 'white flour', 'bread flour',
+    'wheat', 'wheat flour', 'whole wheat', 'white wheat', 'bread flour',
     'all-purpose flour', 'wheat bran', 'wheat germ', 'wheat starch', 'wheat protein',
-    'gluten', 'vital wheat gluten', 'seitan', 'bulgur', 'couscous', 'cracker meal',
+    'vital wheat gluten', 'seitan', 'bulgur', 'couscous', 'cracker meal',
     'durum', 'einkorn', 'emmer', 'farina', 'farro', 'fu', 'graham flour', 'kamut',
     'matzoh', 'matzo', 'semolina', 'spelt', 'triticale', 'wheat berries',
     'wheat grass', 'hydrolyzed wheat protein', 'wheat germ oil', 'wheat maltodextrin',
-    'modified wheat starch', 'wheat dextrin', 'enriched flour', 'bromated flour'
+    'modified wheat starch', 'wheat dextrin', 'enriched flour', 'bromated flour',
+    'enriched wheat flour', 'bleached flour', 'unbleached flour', 'plain flour',
+    'self-rising flour', 'self raising flour', 'cake flour', 'pastry flour'
   ],
   'gluten': [
     'gluten', 'wheat', 'barley', 'rye', 'malt', 'malt extract', 'malt flavoring',
     'malt syrup', 'malt vinegar', 'malted milk', 'brewers yeast', 'wheat starch',
     'wheat protein', 'hydrolyzed wheat protein', 'triticale', 'spelt', 'kamut',
     'farro', 'bulgur', 'couscous', 'seitan', 'durum', 'semolina', 'farina',
-    'graham flour', 'matzo', 'matzoh', 'beer', 'ale', 'lager', 'oats',
-    'oat flour', 'oatmeal', 'modified food starch', 'dextrin', 'maltodextrin'
+    'graham flour', 'matzo', 'matzoh', 'beer', 'ale', 'lager'
   ],
   'soybeans': [
     'soy', 'soya', 'soybean', 'soybeans', 'soy bean', 'edamame', 'tofu', 'tempeh',
     'miso', 'natto', 'shoyu', 'tamari', 'soy sauce', 'soy milk', 'soy protein',
-    'soy flour', 'soy lecithin', 'soy oil', 'soybean oil', 'vegetable oil',
-    'textured vegetable protein', 'tvp', 'hydrolyzed soy protein', 'soy protein isolate',
+    'soy flour', 'soy lecithin', 'soy oil', 'soybean oil',
+    'textured soy protein', 'tvp', 'hydrolyzed soy protein', 'soy protein isolate',
     'soy protein concentrate', 'soy albumin', 'soy fiber', 'soy grits', 'soy nuts',
     'soy sprouts', 'soy yogurt', 'yuba', 'kinako', 'okara', 'glycine max',
-    'hydrolyzed vegetable protein', 'hvp', 'lecithin', 'mono-diglyceride',
-    'monosodium glutamate', 'msg', 'teriyaki', 'vegetable broth', 'vegetable gum',
-    'vegetable starch'
+    'teriyaki'
   ],
   'sesame': [
     'sesame', 'sesame seed', 'sesame seeds', 'tahini', 'tahina', 'sesame oil',
@@ -176,6 +175,68 @@ function checkAllergenTags(
   return matches;
 }
 
+const FLOUR_SAFE_PREFIXES = [
+  'rice', 'coconut', 'almond', 'oat', 'corn', 'tapioca', 'potato', 'chickpea',
+  'cassava', 'buckwheat', 'millet', 'sorghum', 'teff', 'amaranth', 'quinoa',
+  'arrowroot', 'bean', 'lentil', 'pea', 'garbanzo', 'plantain', 'banana',
+  'hazelnut', 'chestnut', 'acorn', 'mesquite', 'tigernut', 'hemp', 'flax',
+  'sunflower', 'pumpkin seed', 'sweet potato', 'yam', 'water chestnut',
+];
+
+function isContextualFalsePositive(
+  normalizedText: string,
+  synonym: string,
+  allergen: string
+): boolean {
+  const lowerSynonym = synonym.toLowerCase();
+  const lowerAllergen = allergen.toLowerCase();
+
+  const flourSynonyms = [
+    'flour', 'enriched flour', 'bleached flour', 'unbleached flour', 'plain flour',
+    'all-purpose flour', 'bread flour', 'cake flour', 'pastry flour',
+    'self-rising flour', 'self raising flour',
+  ];
+
+  if (
+    (lowerAllergen === 'wheat' || lowerAllergen === 'gluten') &&
+    flourSynonyms.includes(lowerSynonym)
+  ) {
+    const hasWheatFlour = /\bwheat\s+flour\b/i.test(normalizedText);
+    if (hasWheatFlour) {
+      return false;
+    }
+
+    let hasNonWheatFlour = false;
+    for (const prefix of FLOUR_SAFE_PREFIXES) {
+      const safePattern = new RegExp('\\b' + prefix + '\\s+flour\\b', 'i');
+      if (safePattern.test(normalizedText)) {
+        hasNonWheatFlour = true;
+        break;
+      }
+    }
+
+    if (hasNonWheatFlour) {
+      const standaloneFlourPattern = /(?:^|[,;.()\s])flour(?:[,;.()\s]|$)/i;
+      if (!standaloneFlourPattern.test(normalizedText)) {
+        console.log('   \u23ed\ufe0f FALSE POSITIVE SKIPPED: "' + synonym + '" is a non-wheat flour type');
+        return true;
+      }
+    }
+  }
+
+  if (lowerAllergen === 'eggs' && lowerSynonym === 'lecithin') {
+    const hasSoyLecithin = /\bsoy\s+lecithin\b/i.test(normalizedText);
+    const hasSunflowerLecithin = /\bsunflower\s+lecithin\b/i.test(normalizedText);
+    const hasEggLecithin = /\begg\s+lecithin\b/i.test(normalizedText);
+    if ((hasSoyLecithin || hasSunflowerLecithin) && !hasEggLecithin) {
+      console.log('   \u23ed\ufe0f FALSE POSITIVE SKIPPED: "lecithin" is soy/sunflower-derived, not egg');
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function checkIngredientsText(
   ingredientsText: string | undefined,
   profileAllergens: string[],
@@ -183,7 +244,7 @@ function checkIngredientsText(
 ): AllergenMatch[] {
   if (!ingredientsText) return [];
   
-  console.log('\n🔬 CHECKING INGREDIENTS TEXT:');
+  console.log('\n\ud83d\udd2c CHECKING INGREDIENTS TEXT:');
   console.log('Ingredients:', ingredientsText.substring(0, 200));
   console.log('Profile allergens to check:', profileAllergens.join(', '));
   
@@ -192,13 +253,12 @@ function checkIngredientsText(
   const foundAllergens = new Set<string>();
   
   for (const allergen of profileAllergens) {
-    console.log(`\n🔍 Checking allergen: ${allergen}`);
+    console.log('\n\ud83d\udd0d Checking allergen: ' + allergen);
     const synonyms = getAllergenSynonyms(allergen);
-    console.log(`   Found ${synonyms.length} synonyms to check`);
+    console.log('   Found ' + synonyms.length + ' synonyms to check');
     
     if (allergen.toLowerCase().includes('tree nut') || allergen.toLowerCase().includes('nut')) {
-      console.log('   🥜 This is a TREE NUT allergy - extra vigilant for shea butter!');
-      console.log('   Checking for: shea, shea butter, butyrospermum, vitellaria, karite');
+      console.log('   \ud83e\udd5c This is a TREE NUT allergy - extra vigilant for shea butter!');
       
       const sheaVariants = [
         'shea', 'shea butter', 'shea oil', 'sheabutter', 'sheanut', 'sheaoil',
@@ -208,7 +268,7 @@ function checkIngredientsText(
       
       for (const sheaVariant of sheaVariants) {
         if (normalizedText.includes(sheaVariant.toLowerCase())) {
-          console.log(`   ⚠️ ⚠️ ⚠️  SHEA BUTTER DETECTED: "${sheaVariant}" found in ingredients!`);
+          console.log('   \u26a0\ufe0f SHEA BUTTER DETECTED: "' + sheaVariant + '" found in ingredients!');
           if (!foundAllergens.has(allergen)) {
             foundAllergens.add(allergen);
             matches.push({
@@ -225,11 +285,12 @@ function checkIngredientsText(
     for (const synonym of synonyms) {
       const normalizedSynonym = normalizeAllergen(synonym);
       const escapedSynonym = normalizedSynonym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const wordBoundaryRegex = new RegExp('\\b' + escapedSynonym + '\\b', 'i');
       
-      const wordBoundaryRegex = new RegExp(`\\b${escapedSynonym}\\b`, 'i');
-      const partialMatchRegex = new RegExp(escapedSynonym, 'i');
-      
-      if (wordBoundaryRegex.test(normalizedText) || partialMatchRegex.test(normalizedText)) {
+      if (wordBoundaryRegex.test(normalizedText)) {
+        if (isContextualFalsePositive(normalizedText, synonym, allergen)) {
+          continue;
+        }
         if (!foundAllergens.has(allergen)) {
           foundAllergens.add(allergen);
           matches.push({
@@ -237,7 +298,7 @@ function checkIngredientsText(
             source: 'ingredients',
             matchedText: synonym,
           });
-          console.log(`   ✅ ALLERGEN DETECTED: ${allergen} (matched: ${synonym})`);
+          console.log('   \u2705 ALLERGEN DETECTED: ' + allergen + ' (matched: ' + synonym + ')');
         }
         break;
       }
@@ -247,17 +308,15 @@ function checkIngredientsText(
   for (const keyword of customKeywords) {
     const normalizedKeyword = normalizeAllergen(keyword);
     const escapedKeyword = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const kwRegex = new RegExp('\\b' + escapedKeyword + '\\b', 'i');
     
-    const wordBoundaryRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
-    const partialMatchRegex = new RegExp(escapedKeyword, 'i');
-    
-    if (wordBoundaryRegex.test(normalizedText) || partialMatchRegex.test(normalizedText)) {
+    if (kwRegex.test(normalizedText)) {
       matches.push({
         allergen: keyword,
         source: 'custom_keyword',
         matchedText: keyword,
       });
-      console.log(`✅ CUSTOM KEYWORD DETECTED: ${keyword}`);
+      console.log('\u2705 CUSTOM KEYWORD DETECTED: ' + keyword);
     }
   }
   
@@ -269,15 +328,15 @@ export async function calculateVerdictEnhanced(product: Product, profile: Profil
 }
 
 export function calculateVerdict(product: Product, profile: Profile): Verdict {
-  console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-  console.log('║          ULTRA-ACCURATE ALLERGEN DETECTION SYSTEM             ║');
-  console.log('╚═══════════════════════════════════════════════════════════════╝');
-  console.log('\n📦 PRODUCT:', product.product_name);
-  console.log('👤 PROFILE:', profile.name);
-  console.log('🚨 PROFILE ALLERGENS:', profile.allergens.join(', '));
-  console.log('🔑 CUSTOM KEYWORDS:', profile.customKeywords.join(', ') || 'none');
-  console.log('\n📝 PRODUCT DATA:');
-  console.log('   Ingredients text:', product.ingredients_text ? `"${product.ingredients_text.substring(0, 150)}..."` : 'NONE');
+  console.log('\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557');
+  console.log('\u2551          ALLERGEN DETECTION SYSTEM                             \u2551');
+  console.log('\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d');
+  console.log('\n\ud83d\udce6 PRODUCT:', product.product_name);
+  console.log('\ud83d\udc64 PROFILE:', profile.name);
+  console.log('\ud83d\udea8 PROFILE ALLERGENS:', profile.allergens.join(', '));
+  console.log('\ud83d\udd11 CUSTOM KEYWORDS:', profile.customKeywords.join(', ') || 'none');
+  console.log('\n\ud83d\udcdd PRODUCT DATA:');
+  console.log('   Ingredients text:', product.ingredients_text ? ('"' + product.ingredients_text.substring(0, 150) + '..."') : 'NONE');
   console.log('   Allergens tags:', product.allergens_tags || 'NONE');
   console.log('   Traces tags:', product.traces_tags || 'NONE');
   console.log('   Product source:', product.source);
@@ -318,14 +377,14 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
   allMatches.push(...ingredientMatches);
   
   const uniqueMatches = Array.from(
-    new Map(allMatches.map(m => [`${m.allergen}-${m.source}`, m])).values()
+    new Map(allMatches.map(m => [m.allergen + '-' + m.source, m])).values()
   );
   
   console.log('Found matches:', uniqueMatches);
   
   let eczemaTriggers: EczemaTriggerMatch[] = [];
   if (profile.trackEczemaTriggers && profile.eczemaTriggerGroups && profile.eczemaTriggerGroups.length > 0) {
-    console.log('\n🧴 CHECKING SENSITIVITY TRIGGERS:');
+    console.log('\n\ud83e\uddf4 CHECKING SENSITIVITY TRIGGERS:');
     console.log('   Enabled trigger groups:', profile.eczemaTriggerGroups.join(', '));
     
     const skincareTriggerMatches = findEczemaTriggerMatches(
@@ -358,22 +417,21 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
     }
     
     if (eczemaTriggers.length > 0) {
-      console.log('   ⚠️ SENSITIVITY TRIGGERS FOUND:', eczemaTriggers.map(t => t.triggerName).join(', '));
+      console.log('   \u26a0\ufe0f SENSITIVITY TRIGGERS FOUND:', eczemaTriggers.map(t => t.triggerName).join(', '));
     } else {
-      console.log('   ✅ No sensitivity triggers detected');
+      console.log('   \u2705 No sensitivity triggers detected');
     }
   }
 
   if (uniqueMatches.length === 0) {
     if (eczemaTriggers.length > 0) {
-      const highSeverityTriggers = eczemaTriggers.filter(t => t.severityHint === 'high');
       const triggerNames = eczemaTriggers.map(t => t.triggerName).join(', ');
       
       return {
-        level: highSeverityTriggers.length > 0 ? 'caution' : 'caution',
+        level: 'caution',
         matches: [],
         eczemaTriggers,
-        message: `No allergens found, but contains potential eczema triggers: ${triggerNames}`,
+        message: 'No allergens found, but contains potential eczema triggers: ' + triggerNames,
         missingData: !hasAnyData,
       };
     }
@@ -403,7 +461,7 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
       level: 'danger',
       matches: uniqueMatches,
       eczemaTriggers,
-      message: `Contains: ${allergenList}`,
+      message: 'Contains: ' + allergenList,
       missingData: false,
     };
   }
@@ -417,7 +475,7 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
     level: 'caution',
     matches: uniqueMatches,
     eczemaTriggers,
-    message: `May contain traces: ${traceAllergenList}`,
+    message: 'May contain traces: ' + traceAllergenList,
     missingData: false,
   };
 }

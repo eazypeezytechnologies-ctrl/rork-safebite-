@@ -27,6 +27,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { addToFavorites, removeFromFavorites, isFavorite } from '@/storage/favorites';
 import { getTrustedProduct, markProductTrusted, removeTrustedProduct, TrustedProduct } from '@/storage/trustedProducts';
+import { resetBarcodeDebounce } from '@/api/products';
 import * as Haptics from 'expo-haptics';
 import { analyzeIngredient, parseIngredients, getOverallSafetyScore, IngredientInfo } from '@/utils/ingredientAnalysis';
 import { TranslationCard } from '@/components/TranslationCard';
@@ -118,14 +119,23 @@ export default function ProductDetailsScreen() {
         return;
       }
       if (code && activeProfile && currentUser) {
-        console.log('[ProductDetail] Screen focused, refreshing AI verdict...');
-        getAIVerdict(code, activeProfile.id, currentUser.id).then((stored) => {
+        console.log('[ProductDetail] Screen focused, refreshing AI verdict + trusted status...');
+        resetBarcodeDebounce();
+        void getAIVerdict(code, activeProfile.id, currentUser.id).then((stored) => {
           if (stored) {
             console.log('[ProductDetail] Refreshed AI verdict:', stored.aiVerdict);
             setAiVerdictRecord(stored);
           }
         }).catch((err) => console.log('[ProductDetail] AI verdict refresh error:', err));
+
+        void getTrustedProduct(code, activeProfile.id, currentUser.id).then((trusted) => {
+          if (trusted) {
+            console.log('[ProductDetail] Refreshed trusted status: trusted');
+            setTrustedProduct(trusted);
+          }
+        }).catch((err) => console.log('[ProductDetail] Trusted status refresh error:', err));
       }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [code, activeProfile?.id, currentUser?.id])
   );
   const scrollViewRef = useRef<ScrollView>(null);
@@ -143,7 +153,7 @@ export default function ProductDetailsScreen() {
     
     if (code && code !== 'undefined' && code !== 'null' && code.trim() !== '' && !/^https?:\/\//.test(code)) {
       console.log('Code is valid, loading product...');
-      loadProduct();
+      void loadProduct();
     } else {
       console.error('Invalid code detected:', code);
       if (code && /^https?:\/\//.test(code)) {
@@ -230,7 +240,7 @@ export default function ProductDetailsScreen() {
           }).catch((err) => console.log('[ProductDetail] Non-critical scan event error:', err));
         }
 
-        trackActivity('product_scan', {
+        void trackActivity('product_scan', {
           productCode: code,
           productName: productData.product_name,
           profileId: activeProfile.id,
@@ -264,13 +274,13 @@ export default function ProductDetailsScreen() {
             ]
           );
           
-          loadAlternativeRecommendations(productData, verdict);
+          void loadAlternativeRecommendations(productData, verdict);
         } else if (verdict.level === 'caution') {
-          loadAlternativeRecommendations(productData, verdict);
+          void loadAlternativeRecommendations(productData, verdict);
         }
         
         if (verdict.missingData) {
-          loadNoDataAlternativeRecommendations(productData);
+          void loadNoDataAlternativeRecommendations(productData);
         }
         
         if (verdict.level === 'caution') {
@@ -400,15 +410,15 @@ export default function ProductDetailsScreen() {
             setShowCaptureWizard(false);
             setIsLoading(false);
             setError(null);
-            queryClient.invalidateQueries({ queryKey: ['supabase-scan-history'] });
-            queryClient.invalidateQueries({ queryKey: ['supabase-product', code] });
+            void queryClient.invalidateQueries({ queryKey: ['supabase-scan-history'] });
+            void queryClient.invalidateQueries({ queryKey: ['supabase-product', code] });
             queryClient.removeQueries({ queryKey: ['supabase-product', code] });
           }}
           onCancel={() => router.back()}
           onNavigateToScan={() => {
             router.replace('/(tabs)/(scan)' as Href);
           }}
-          onNavigateToSearch={(query) => {
+          onNavigateToSearch={(_query) => {
             router.replace('/(tabs)/(scan)' as Href);
           }}
         />
@@ -503,6 +513,23 @@ export default function ProductDetailsScreen() {
 
   const getAiAdjustedVerdictInfo = () => {
     const baseInfo = getVerdictInfo();
+
+    if (trustedProduct && baseInfo.verdict) {
+      console.log('[ProductDetail] Product is TRUSTED - overriding verdict to SAFE');
+      return {
+        verdict: {
+          ...baseInfo.verdict,
+          level: 'safe' as const,
+          message: `Trusted product — marked safe for this profile.`,
+        },
+        verdictColor: getVerdictColor('safe'),
+        verdictLabel: 'TRUSTED',
+        affectedMembers: baseInfo.affectedMembers,
+        aiAdjusted: true,
+        aiConflict: false,
+      };
+    }
+
     if (!aiVerdictRecord || !baseInfo.verdict) return { ...baseInfo, aiAdjusted: false, aiConflict: false };
 
     const ruleLevel = baseInfo.verdict.level;
@@ -510,13 +537,11 @@ export default function ProductDetailsScreen() {
 
     console.log('[ProductDetail] AI verdict adjustment - rule:', ruleLevel, 'ai:', aiLevel, 'conflict:', aiVerdictRecord.hasConflict);
 
-    if (aiVerdictRecord.hasConflict) {
-      return { ...baseInfo, aiAdjusted: false, aiConflict: true };
-    }
-
-    const hasDirectAllergenMatch = baseInfo.verdict.matches.some(
-      m => m.source === 'allergens_tags' || m.source === 'ingredients' || m.source === 'custom_keyword'
+    const hasApiAllergenTagMatch = baseInfo.verdict.matches.some(
+      m => m.source === 'allergens_tags'
     );
+    const hasOnlyIngredientTextMatch = baseInfo.verdict.matches.length > 0 &&
+      baseInfo.verdict.matches.every(m => m.source === 'ingredients' || m.source === 'traces_tags');
 
     if (aiLevel === 'safe' && ruleLevel === 'safe') {
       return {
@@ -527,28 +552,30 @@ export default function ProductDetailsScreen() {
       };
     }
 
-    if (aiLevel === 'safe' && ruleLevel !== 'safe' && !hasDirectAllergenMatch) {
+    if (aiLevel === 'safe' && ruleLevel !== 'safe') {
+      if (hasApiAllergenTagMatch && aiVerdictRecord.aiConfidence !== 'high') {
+        return {
+          ...baseInfo,
+          aiAdjusted: false,
+          aiConflict: true,
+        };
+      }
+
       return {
         verdict: {
           ...baseInfo.verdict,
           level: 'safe' as const,
-          message: baseInfo.verdict.missingData
-            ? 'AI analysis found no allergen risks for your profile.'
-            : `AI analysis confirms this product appears safe. Original: ${baseInfo.verdict.message}`,
+          message: hasOnlyIngredientTextMatch
+            ? `AI analysis confirms safe — preliminary match was a false positive. Original: ${baseInfo.verdict.message}`
+            : baseInfo.verdict.missingData
+              ? 'AI analysis found no allergen risks for your profile.'
+              : `AI analysis confirms this product appears safe. Original: ${baseInfo.verdict.message}`,
         },
         verdictColor: getVerdictColor('safe'),
         verdictLabel: 'AI-VERIFIED SAFE',
         affectedMembers: baseInfo.affectedMembers,
         aiAdjusted: true,
         aiConflict: false,
-      };
-    }
-
-    if (aiLevel === 'safe' && ruleLevel !== 'safe' && hasDirectAllergenMatch) {
-      return {
-        ...baseInfo,
-        aiAdjusted: false,
-        aiConflict: true,
       };
     }
 
@@ -597,7 +624,7 @@ export default function ProductDetailsScreen() {
     if (!activeProfile) return;
     
     if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     
     try {
@@ -639,7 +666,7 @@ export default function ProductDetailsScreen() {
       });
       
       if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       
       Alert.alert('Added', 'Product added to shopping list');
@@ -851,7 +878,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
                   <Text style={styles.mismatchExplainerText}>
                     The preliminary check uses automated rules that match allergen tags, traces, and ingredient keywords. It can flag false positives from:
                   </Text>
-                  <Text style={styles.mismatchExplainerBullet}>{'  • Generic \"may contain\" trace warnings'}</Text>
+                  <Text style={styles.mismatchExplainerBullet}>{'  • Generic "may contain" trace warnings'}</Text>
                   <Text style={styles.mismatchExplainerBullet}>  • Outdated or cached product data</Text>
                   <Text style={styles.mismatchExplainerBullet}>  • Overly broad keyword matches</Text>
                   <Text style={styles.mismatchExplainerText}>
@@ -902,7 +929,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
               await markProductTrusted(code, activeProfile.id, currentUser?.id, 'AI review confirmed safe');
               setTrustedProduct({ productCode: code, profileId: activeProfile.id, trustedAt: new Date().toISOString(), reason: 'AI review confirmed safe' });
               if (Platform.OS !== 'web') {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               }
               Alert.alert('Trusted', 'This product has been marked as trusted for this profile. You can remove this any time.');
             }}
@@ -929,7 +956,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
                 await removeTrustedProduct(code, activeProfile.id, currentUser?.id);
                 setTrustedProduct(null);
                 if (Platform.OS !== 'web') {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }
               }}
             >
@@ -1139,7 +1166,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
                 editable={!isAiReplying}
                 returnKeyType="send"
                 onSubmitEditing={() => {
-                  if (aiReplyInput.trim() && !isAiReplying) handleAiReply();
+                  if (aiReplyInput.trim() && !isAiReplying) void handleAiReply();
                 }}
               />
               <TouchableOpacity
