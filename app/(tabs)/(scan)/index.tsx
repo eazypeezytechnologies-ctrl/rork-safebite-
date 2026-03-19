@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,14 +13,15 @@ import {
   Image,
   Animated,
   Easing,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRouter, Href } from 'expo-router';
+import { useRouter, Href, useFocusEffect } from 'expo-router';
 
-import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, ImageIcon, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield, Sparkles, Zap, RotateCcw, Lock, Languages, Wand2 } from 'lucide-react-native';
+import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield, Sparkles, Zap, RotateCcw, ScanBarcode, Heart, Ban, ChevronRight, ShieldCheck, BookOpen } from 'lucide-react-native';
 import { LockOnReticle } from '@/components/LockOnReticle';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
 import { useMysticToast } from '@/components/MysticToast';
@@ -37,11 +38,11 @@ import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductT
 import { Product } from '@/types';
 import { getRelationshipIcon } from '@/constants/profileColors';
 import { BUILD_ID } from '@/constants/appVersion';
-import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
+import { upsertProduct, recordScanEvent, getScanHistory as getSupabaseScanHistory } from '@/services/supabaseProducts';
 import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
-import { ArcaneDivider } from '@/components/ArcaneDivider';
-import { RuneCard } from '@/components/RuneCard';
-import { SigilBadge } from '@/components/SigilBadge';
+
+import { getFavorites } from '@/storage/favorites';
+import { getAvoidList } from '@/storage/avoidList';
 
 interface SmartScanResult {
   productName: string | null;
@@ -83,14 +84,14 @@ export default function ScanScreen() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [noResults, setNoResults] = useState(false);
   const [detectedBannerData, setDetectedBannerData] = useState<{ code: string; show: boolean }>({ code: '', show: false });
-  const [scanMode, setScanMode] = useState<'classic' | 'smart'>('classic');
   const [smartScanActive, setSmartScanActive] = useState(false);
   const [smartScanProcessing, setSmartScanProcessing] = useState(false);
   const [smartScanResults, setSmartScanResults] = useState<SmartScanResult | null>(null);
   const [autoCapture, setAutoCapture] = useState(false);
+  const [homeStats, setHomeStats] = useState<{ historyCount: number; favoritesCount: number; avoidCount: number }>({ historyCount: 0, favoritesCount: 0, avoidCount: 0 });
+  const [homeRefreshing, setHomeRefreshing] = useState(false);
   const lastSmartCaptureRef = useRef<number>(0);
   const smartCaptureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const detectedBannerAnim = useRef(new Animated.Value(0)).current;
   const lockPulseAnim = useRef(new Animated.Value(0)).current;
@@ -105,6 +106,33 @@ export default function ScanScreen() {
   useEffect(() => {
     loadSearchHistory();
   }, []);
+
+  const loadHomeStats = useCallback(async () => {
+    try {
+      const userId = currentUser?.id;
+      const profileId = activeProfile?.id;
+      const [historyData, favoritesData, avoidData] = await Promise.all([
+        userId ? getSupabaseScanHistory(userId, profileId, 50) : Promise.resolve([]),
+        getFavorites(userId),
+        getAvoidList(userId),
+      ]);
+      const filteredFavs = profileId ? favoritesData.filter(f => f.profileId === profileId) : favoritesData;
+      const filteredAvoid = profileId ? avoidData.filter(a => a.profileId === profileId) : avoidData;
+      setHomeStats({
+        historyCount: historyData.length,
+        favoritesCount: filteredFavs.length,
+        avoidCount: filteredAvoid.length,
+      });
+    } catch (err) {
+      console.log('[Home] Error loading stats:', err);
+    }
+  }, [currentUser?.id, activeProfile?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadHomeStats();
+    }, [loadHomeStats])
+  );
 
   const loadSearchHistory = async () => {
     const history = await getSearchHistory();
@@ -1494,240 +1522,213 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
     );
   }
 
+  const isFirstTimeUser = homeStats.historyCount === 0 && homeStats.favoritesCount === 0 && homeStats.avoidCount === 0;
+
+  const onHomeRefresh = async () => {
+    setHomeRefreshing(true);
+    await loadHomeStats();
+    await loadSearchHistory();
+    setHomeRefreshing(false);
+  };
+
   return (
     <View style={styles.container}>
-      <ScrollView 
-        style={styles.scrollView} 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={true}
-        bounces={true}
-        overScrollMode="always"
-        keyboardShouldPersistTaps="handled"
-        contentInsetAdjustmentBehavior="automatic"
-      >
-        {profiles.length > 1 && (
-          <View style={styles.profileSwitcher}>
-            <View style={styles.switcherHeader}>
-              <Text style={styles.switcherLabel}>Quick Switch</Text>
-              {isSwitchingProfile && (
-                <ActivityIndicator size="small" color={arcaneColors.primary} />
-              )}
+      <View style={styles.homeHeader}>
+        <View style={{ paddingTop: insets.top + 4 }}>
+          <View style={styles.homeHeaderRow}>
+            <View style={styles.homeBrandRow}>
+              <View style={styles.homeBrandIcon}>
+                <ShieldCheck size={20} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text style={styles.homeBrandName}>SafeBite</Text>
+                <Text style={styles.homeBrandTagline}>Product Safety Scanner</Text>
+              </View>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.profilesScroll}>
-              {profiles.map((profile) => {
-                const isActive = activeProfile.id === profile.id;
-                return (
-                  <TouchableOpacity
-                    key={profile.id}
-                    style={[
-                      styles.profileChip,
-                      isActive && styles.profileChipActive,
-                    ]}
-                    onPress={async () => {
-                      if (isActive || isSwitchingProfile) return;
-                      if (Platform.OS !== 'web') {
-                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }
-                      setActiveProfile(profile.id);
-                    }}
-                    disabled={isSwitchingProfile}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[
-                      styles.profileChipAvatar,
-                      { backgroundColor: profile.avatarColor || '#0891B2' },
-                      isActive && styles.profileChipAvatarActive,
-                    ]}>
-                      <Text style={styles.profileChipEmoji}>{getRelationshipIcon(profile.relationship)}</Text>
-                    </View>
-                    <Text style={[
-                      styles.profileChipName,
-                      isActive && styles.profileChipNameActive,
-                    ]}>
-                      {profile.name}
-                    </Text>
-                    {isActive && (
-                      <View style={styles.activeIndicator} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
-
-        <View style={styles.profileCard}>
-          <View style={styles.profileHeader}>
-            <View>
-              <Text style={styles.profileLabel}>Scanning for</Text>
-              <Text style={styles.profileName}>{activeProfile.name}</Text>
-            </View>
-            <TouchableOpacity onPress={() => router.push('/profiles' as Href)}>
-              <Text style={styles.changeLink}>Manage</Text>
-            </TouchableOpacity>
-          </View>
-          {activeProfile.allergens.length > 0 && (
-            <View style={styles.allergensList}>
-              {activeProfile.allergens.slice(0, 5).map((allergen, index) => (
-                <View key={index} style={styles.allergenTag}>
-                  <Text style={styles.allergenText}>{allergen}</Text>
-                </View>
-              ))}
-              {activeProfile.allergens.length > 5 && (
-                <View style={styles.allergenTag}>
-                  <Text style={styles.allergenText}>+{activeProfile.allergens.length - 5}</Text>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.modeToggleContainer}>
-          <TouchableOpacity
-            style={[styles.modeToggleBtn, scanMode === 'classic' && styles.modeToggleBtnActive]}
-            onPress={() => setScanMode('classic')}
-            activeOpacity={0.7}
-          >
-            <Camera size={16} color={scanMode === 'classic' ? '#FFFFFF' : arcaneColors.textSecondary} />
-            <Text style={[styles.modeToggleText, scanMode === 'classic' && styles.modeToggleTextActive]}>Classic Scan</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeToggleBtn, scanMode === 'smart' && styles.modeToggleBtnSmart]}
-            onPress={() => setScanMode('smart')}
-            activeOpacity={0.7}
-          >
-            <Sparkles size={16} color={scanMode === 'smart' ? '#FFFFFF' : arcaneColors.accent} />
-            <Text style={[styles.modeToggleText, scanMode === 'smart' && styles.modeToggleTextActive]}>AI Smart Scan</Text>
-            <View style={styles.betaBadge}>
-              <Text style={styles.betaBadgeText}>Beta</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {scanMode === 'classic' ? (
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <TouchableOpacity 
-              style={styles.scanButton} 
-              onPress={() => {
-                Animated.sequence([
-                  Animated.timing(scaleAnim, {
-                    toValue: 0.95,
-                    duration: 100,
-                    useNativeDriver: true,
-                  }),
-                  Animated.timing(scaleAnim, {
-                    toValue: 1,
-                    duration: 100,
-                    useNativeDriver: true,
-                  }),
-                ]).start();
-                openCamera();
-              }}
-              activeOpacity={0.9}
+            <TouchableOpacity
+              style={styles.homeSettingsBtn}
+              onPress={() => router.push('/profiles' as Href)}
+              activeOpacity={0.7}
+              testID="manage-profiles-btn"
             >
-              <Camera size={32} color="#FFFFFF" />
-              <Text style={styles.scanButtonText}>Scan Barcode</Text>
+              <Text style={styles.homeSettingsBtnText}>Profiles</Text>
+              <ChevronRight size={14} color={arcaneColors.primary} />
             </TouchableOpacity>
-          </Animated.View>
-        ) : (
-          <TouchableOpacity
-            style={styles.smartScanMainButton}
-            onPress={openSmartScan}
-            activeOpacity={0.85}
-            testID="smart-scan-main-button"
-          >
-            <View style={styles.smartScanMainIcon}>
-              <Sparkles size={28} color="#FFFFFF" />
-            </View>
-            <View style={styles.smartScanMainContent}>
-              <Text style={styles.smartScanMainTitle}>AI Smart Capture</Text>
-              <Text style={styles.smartScanMainSubtitle}>OCR + Language Detection + Translation</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+          </View>
+        </View>
+      </View>
 
-        <View style={styles.photoOptionsContainer}>
-          <TouchableOpacity 
-            style={styles.imageRecognitionButton} 
-            onPress={() => {
-              Animated.sequence([
-                Animated.timing(scaleAnim, {
-                  toValue: 0.95,
-                  duration: 100,
-                  useNativeDriver: true,
-                }),
-                Animated.timing(scaleAnim, {
-                  toValue: 1,
-                  duration: 100,
-                  useNativeDriver: true,
-                }),
-              ]).start();
-              openImageRecognition();
-            }}
-            activeOpacity={0.9}
-          >
-            <Camera size={24} color="#FFFFFF" />
-            <View style={styles.imageButtonContent}>
-              <Text style={styles.imageButtonTitle}>Take Photo</Text>
-              <Text style={styles.imageButtonSubtitle}>Capture product label</Text>
-            </View>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.uploadPhotoButton} 
-            onPress={() => {
-              Animated.sequence([
-                Animated.timing(scaleAnim, {
-                  toValue: 0.95,
-                  duration: 100,
-                  useNativeDriver: true,
-                }),
-                Animated.timing(scaleAnim, {
-                  toValue: 1,
-                  duration: 100,
-                  useNativeDriver: true,
-                }),
-              ]).start();
-              pickImageFromGallery();
-            }}
-            activeOpacity={0.9}
-          >
-            <Upload size={24} color="#FFFFFF" />
-            <View style={styles.imageButtonContent}>
-              <Text style={styles.imageButtonTitle}>Upload Photo</Text>
-              <Text style={styles.imageButtonSubtitle}>From camera roll</Text>
-            </View>
-          </TouchableOpacity>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.homeScrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={homeRefreshing} onRefresh={onHomeRefresh} tintColor={arcaneColors.primary} />
+        }
+      >
+        {/* Profile Switcher */}
+        <View style={styles.homeSwitcherRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.homeSwitcherScroll}>
+            {profiles.map((profile) => {
+              const isActive = activeProfile.id === profile.id;
+              return (
+                <TouchableOpacity
+                  key={profile.id}
+                  style={[
+                    styles.homeProfileChip,
+                    isActive && styles.homeProfileChipActive,
+                  ]}
+                  onPress={async () => {
+                    if (isActive || isSwitchingProfile) return;
+                    if (Platform.OS !== 'web') {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                    void setActiveProfile(profile.id);
+                  }}
+                  disabled={isSwitchingProfile}
+                  activeOpacity={0.7}
+                  testID={`profile-chip-${profile.id}`}
+                >
+                  <View style={[
+                    styles.homeChipAvatar,
+                    { backgroundColor: isActive ? (profile.avatarColor || arcaneColors.primary) : arcaneColors.bgElevated },
+                  ]}>
+                    <Text style={styles.homeChipEmoji}>{getRelationshipIcon(profile.relationship)}</Text>
+                  </View>
+                  <Text style={[
+                    styles.homeChipName,
+                    isActive && styles.homeChipNameActive,
+                  ]} numberOfLines={1}>
+                    {profile.name}
+                  </Text>
+                  {isActive && <View style={styles.homeChipDot} />}
+                </TouchableOpacity>
+              );
+            })}
+            {isSwitchingProfile && (
+              <View style={styles.homeSwitchingIndicator}>
+                <ActivityIndicator size="small" color={arcaneColors.primary} />
+              </View>
+            )}
+          </ScrollView>
         </View>
 
+        {/* Active Profile Card */}
+        <View style={styles.homeActiveProfile}>
+          <View style={[
+            styles.homeActiveAvatarLarge,
+            { backgroundColor: activeProfile.avatarColor || arcaneColors.primary },
+          ]}>
+            <Text style={styles.homeActiveEmoji}>{getRelationshipIcon(activeProfile.relationship)}</Text>
+          </View>
+          <View style={styles.homeActiveInfo}>
+            <Text style={styles.homeActiveLabel}>Checking safety for</Text>
+            <Text style={styles.homeActiveName}>{activeProfile.name}</Text>
+            {activeProfile.allergens.length > 0 && (
+              <View style={styles.homeAllergenRow}>
+                {activeProfile.allergens.slice(0, 3).map((a, i) => (
+                  <View key={i} style={styles.homeAllergenPill}>
+                    <Text style={styles.homeAllergenPillText}>{a}</Text>
+                  </View>
+                ))}
+                {activeProfile.allergens.length > 3 && (
+                  <Text style={styles.homeAllergenMore}>+{activeProfile.allergens.length - 3}</Text>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Onboarding Helper */}
+        {isFirstTimeUser && (
+          <View style={styles.homeOnboarding}>
+            <View style={styles.homeOnboardingIcon}>
+              <BookOpen size={18} color={arcaneColors.primary} />
+            </View>
+            <View style={styles.homeOnboardingContent}>
+              <Text style={styles.homeOnboardingText}>
+                Scan any product to see if it's safe for you or your family.
+              </Text>
+              <Text style={styles.homeOnboardingSub}>
+                Use the barcode scanner, take a photo, or search by name.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Primary CTA - Scan Product */}
         <TouchableOpacity
-          style={styles.addManualButton}
+          style={styles.homeScanBtn}
           onPress={() => {
             if (Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             }
-            router.push('/manual-ingredient-entry' as Href);
+            openCamera();
           }}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
+          testID="scan-product-btn"
         >
-          <View style={styles.addManualIcon}>
-            <Plus size={20} color="#0891B2" />
-          </View>
-          <View style={styles.addManualContent}>
-            <Text style={styles.addManualTitle}>Add Product Manually</Text>
-            <Text style={styles.addManualSubtitle}>Type or upload ingredients • No barcode needed</Text>
+          <View style={styles.homeScanBtnInner}>
+            <View style={styles.homeScanIconCircle}>
+              <ScanBarcode size={28} color="#FFFFFF" />
+            </View>
+            <View style={styles.homeScanBtnContent}>
+              <Text style={styles.homeScanBtnTitle}>Scan Product</Text>
+              <Text style={styles.homeScanBtnSub}>Point camera at barcode</Text>
+            </View>
+            <ChevronRight size={20} color="rgba(255,255,255,0.6)" />
           </View>
         </TouchableOpacity>
 
-        <ArcaneDivider label="OR" />
+        {/* Secondary Actions Row */}
+        <View style={styles.homeSecondaryRow}>
+          <TouchableOpacity
+            style={styles.homeSecondaryBtn}
+            onPress={openSmartScan}
+            activeOpacity={0.8}
+            testID="smart-scan-btn"
+          >
+            <Sparkles size={20} color={arcaneColors.accent} />
+            <Text style={styles.homeSecondaryBtnText}>Smart Scan</Text>
+            <View style={styles.homeBetaPill}>
+              <Text style={styles.homeBetaPillText}>AI</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.homeSecondaryBtn}
+            onPress={pickImageFromGallery}
+            activeOpacity={0.8}
+            testID="photo-scan-btn"
+          >
+            <Upload size={20} color={arcaneColors.safe} />
+            <Text style={styles.homeSecondaryBtnText}>Upload</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.homeSecondaryBtn}
+            onPress={() => {
+              if (Platform.OS !== 'web') {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/manual-ingredient-entry' as Href);
+            }}
+            activeOpacity={0.8}
+            testID="manual-entry-btn"
+          >
+            <Plus size={20} color={arcaneColors.caution} />
+            <Text style={styles.homeSecondaryBtnText}>Manual</Text>
+          </TouchableOpacity>
+        </View>
 
-        <View style={styles.searchSection}>
-          <Text style={styles.sectionTitle}>Search Products</Text>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#9CA3AF" />
+        {/* Search Bar */}
+        <View style={styles.homeSearchSection}>
+          <View style={styles.homeSearchBar}>
+            <Search size={18} color={arcaneColors.textMuted} />
             <TextInput
-              style={styles.searchInput}
-              placeholder="Product name, barcode, or URL"
+              style={styles.homeSearchInput}
+              placeholder="Search by name, barcode, or URL..."
+              placeholderTextColor={arcaneColors.textMuted}
               value={searchQuery}
               onChangeText={(text) => {
                 setSearchQuery(text);
@@ -1740,59 +1741,57 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
               }}
               onSubmitEditing={handleSearch}
               returnKeyType="search"
+              testID="search-input"
             />
-            {searchQuery.length > 0 && (
+            {searchQuery.length > 0 ? (
               <TouchableOpacity onPress={() => {
                 setSearchQuery('');
+                setSearchResults([]);
+                setNoResults(false);
+                setSearchError(null);
                 setShowSearchHistory(searchHistory.length > 0);
               }}>
-                <X size={20} color="#9CA3AF" />
+                <X size={18} color={arcaneColors.textMuted} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.homeSearchAction}
+                onPress={handleSearch}
+                disabled={isSearching || !searchQuery.trim()}
+              >
+                {isSearching ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Search size={16} color="#FFFFFF" />
+                )}
               </TouchableOpacity>
             )}
           </View>
-          
+
           {showSearchHistory && searchHistory.length > 0 && (
-            <View style={styles.searchHistoryContainer}>
-              <View style={styles.searchHistoryHeader}>
-                <Text style={styles.searchHistoryTitle}>Recent Searches</Text>
-              </View>
+            <View style={styles.homeSearchHistoryDrop}>
               {searchHistory.map((item) => (
                 <TouchableOpacity
                   key={item.id}
-                  style={styles.searchHistoryItem}
+                  style={styles.homeSearchHistoryItem}
                   onPress={() => {
                     setSearchQuery(item.query);
                     setShowSearchHistory(false);
-                    setTimeout(() => handleSearch(), 100);
+                    setTimeout(() => void handleSearch(), 100);
                   }}
                 >
-                  <Clock size={16} color="#9CA3AF" />
-                  <Text style={styles.searchHistoryText} numberOfLines={1}>{item.query}</Text>
-                  <View style={styles.searchHistoryBadge}>
-                    <Text style={styles.searchHistoryBadgeText}>
-                      {item.type === 'barcode' ? '🔢' : item.type === 'url' ? '🔗' : '📝'}
-                    </Text>
-                  </View>
+                  <Clock size={14} color={arcaneColors.textMuted} />
+                  <Text style={styles.homeSearchHistoryText} numberOfLines={1}>{item.query}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           )}
-          <TouchableOpacity
-            style={[styles.searchButton, isSearching && styles.searchButtonDisabled]}
-            onPress={handleSearch}
-            disabled={isSearching}
-          >
-            {isSearching ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.searchButtonText}>Search</Text>
-            )}
-          </TouchableOpacity>
         </View>
 
+        {/* Search Results */}
         {searchError && (
           <View style={styles.errorContainer}>
-            <AlertCircle size={24} color="#DC2626" />
+            <AlertCircle size={20} color="#DC2626" />
             <Text style={styles.errorText}>{searchError}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={handleSearch}>
               <Text style={styles.retryButtonText}>Retry</Text>
@@ -1802,24 +1801,18 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
 
         {noResults && !searchError && (
           <View style={styles.noResultsContainer}>
-            <Search size={48} color="#9CA3AF" />
-            <Text style={styles.noResultsTitle}>No Results Found</Text>
-            <Text style={styles.noResultsText}>
-              We could not find any products matching &quot;{searchQuery}&quot;
-            </Text>
+            <Search size={36} color={arcaneColors.textMuted} />
+            <Text style={styles.noResultsTitle}>No results for "{searchQuery}"</Text>
             <View style={styles.noResultsActions}>
-              <TouchableOpacity 
-                style={styles.noResultsButton}
-                onPress={openImageRecognition}
-              >
-                <ImageIcon size={20} color="#FFFFFF" />
-                <Text style={styles.noResultsButtonText}>Try Photo Recognition</Text>
+              <TouchableOpacity style={styles.noResultsButton} onPress={openImageRecognition}>
+                <Camera size={16} color="#FFFFFF" />
+                <Text style={styles.noResultsButtonText}>Try Photo</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.noResultsButtonSecondary}
                 onPress={() => router.push('/manual-ingredient-entry' as Href)}
               >
-                <Text style={styles.noResultsButtonSecondaryText}>Enter Ingredients Manually</Text>
+                <Text style={styles.noResultsButtonSecondaryText}>Enter Manually</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1827,15 +1820,13 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
 
         {searchResults.length > 0 && (
           <View style={styles.resultsSection}>
-            <Text style={styles.sectionTitle}>Results ({searchResults.length})</Text>
+            <Text style={styles.homeSectionLabel}>Results ({searchResults.length})</Text>
             {searchResults.map((product) => (
               <TouchableOpacity
                 key={product.code}
                 style={styles.resultCard}
                 onPress={() => {
-                  console.log('Navigating to product from search results:', product.code);
                   if (!product.code || product.code === 'undefined' || product.code === 'null' || product.code.trim() === '') {
-                    console.error('Invalid product code in search results:', product.code);
                     Alert.alert('Error', 'This product has an invalid code.');
                     return;
                   }
@@ -1844,11 +1835,9 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
               >
                 <View style={styles.resultContent}>
                   <View style={styles.resultInfo}>
-                    <View style={styles.resultNameRow}>
-                      <Text style={styles.resultName} numberOfLines={2}>
-                        {product.product_name || 'Unknown Product'}
-                      </Text>
-                    </View>
+                    <Text style={styles.resultName} numberOfLines={2}>
+                      {product.product_name || 'Unknown Product'}
+                    </Text>
                     <View style={styles.resultMetaRow}>
                       {(() => {
                         const pType = product.product_type || guessProductType(product.ingredients_text, product.product_name, product.categories);
@@ -1861,9 +1850,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
                         );
                       })()}
                       {product.brands && (
-                        <Text style={styles.resultBrand} numberOfLines={1}>
-                          {product.brands}
-                        </Text>
+                        <Text style={styles.resultBrand} numberOfLines={1}>{product.brands}</Text>
                       )}
                     </View>
                   </View>
@@ -1874,57 +1861,73 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
           </View>
         )}
 
-
-
-        <ArcaneDivider label="Coming Soon" variant="gold" />
-
-        <View style={styles.comingSoonSection}>
-          <RuneCard variant="accent">
-            <View style={styles.comingSoonCardHeader}>
-              <View style={[styles.comingSoonIconBg, { backgroundColor: arcaneColors.accentMuted }]}>
-                <Wand2 size={20} color={arcaneColors.accent} />
-              </View>
-              <View style={styles.comingSoonCardContent}>
-                <Text style={styles.comingSoonCardTitle}>Smart Scan Auto-Capture</Text>
-                <Text style={styles.comingSoonCardDesc}>
-                  Hands-free scanning with automatic steady-detection and continuous product recognition.
-                </Text>
-              </View>
+        {/* Quick Access Cards */}
+        <Text style={styles.homeSectionLabel}>Your Products</Text>
+        <View style={styles.homeQuickGrid}>
+          <TouchableOpacity
+            style={styles.homeQuickCard}
+            onPress={() => router.push('/history' as Href)}
+            activeOpacity={0.75}
+            testID="quick-history"
+          >
+            <View style={[styles.homeQuickIcon, { backgroundColor: 'rgba(11, 110, 122, 0.1)' }]}>
+              <Clock size={20} color={arcaneColors.primary} />
             </View>
-            <SigilBadge label="Beta — Improving" status="legendary" size="sm" />
-          </RuneCard>
+            <Text style={styles.homeQuickLabel}>Scan History</Text>
+            <Text style={styles.homeQuickCount}>
+              {homeStats.historyCount > 0 ? `${homeStats.historyCount} scans` : 'No scans yet'}
+            </Text>
+          </TouchableOpacity>
 
-          <RuneCard variant="gold">
-            <View style={styles.comingSoonCardHeader}>
-              <View style={[styles.comingSoonIconBg, { backgroundColor: arcaneColors.goldMuted }]}>
-                <Languages size={20} color={arcaneColors.goldDark} />
-              </View>
-              <View style={styles.comingSoonCardContent}>
-                <Text style={styles.comingSoonCardTitle}>OCR Translation Improvements</Text>
-                <Text style={styles.comingSoonCardDesc}>
-                  Enhanced multi-language support, better ingredient detection, and offline translation cache.
-                </Text>
-              </View>
+          <TouchableOpacity
+            style={styles.homeQuickCard}
+            onPress={() => router.push('/history' as Href)}
+            activeOpacity={0.75}
+            testID="quick-saved"
+          >
+            <View style={[styles.homeQuickIcon, { backgroundColor: 'rgba(5, 150, 105, 0.1)' }]}>
+              <Heart size={20} color={arcaneColors.safe} />
             </View>
-            <SigilBadge label="Planned" status="legendary" size="sm" />
-          </RuneCard>
+            <Text style={styles.homeQuickLabel}>Saved Products</Text>
+            <Text style={styles.homeQuickCount}>
+              {homeStats.favoritesCount > 0 ? `${homeStats.favoritesCount} saved` : 'None saved'}
+            </Text>
+          </TouchableOpacity>
 
-          <View style={styles.comingSoonLockedRow}>
-            <View style={styles.comingSoonLockedItem}>
-              <Lock size={14} color={arcaneColors.textMuted} />
-              <Text style={styles.comingSoonLockedText}>Batch Scan</Text>
+          <TouchableOpacity
+            style={styles.homeQuickCard}
+            onPress={() => router.push('/history' as Href)}
+            activeOpacity={0.75}
+            testID="quick-avoid"
+          >
+            <View style={[styles.homeQuickIcon, { backgroundColor: 'rgba(220, 38, 38, 0.08)' }]}>
+              <Ban size={20} color={arcaneColors.danger} />
             </View>
-            <View style={styles.comingSoonLockedItem}>
-              <Lock size={14} color={arcaneColors.textMuted} />
-              <Text style={styles.comingSoonLockedText}>Scan History Export</Text>
+            <Text style={styles.homeQuickLabel}>Avoid List</Text>
+            <Text style={styles.homeQuickCount}>
+              {homeStats.avoidCount > 0 ? `${homeStats.avoidCount} items` : 'None flagged'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.homeQuickCard}
+            onPress={() => router.push('/shopping-list' as Href)}
+            activeOpacity={0.75}
+            testID="quick-shopping"
+          >
+            <View style={[styles.homeQuickIcon, { backgroundColor: 'rgba(245, 197, 66, 0.12)' }]}>
+              <ShieldCheck size={20} color={arcaneColors.goldDark} />
             </View>
-          </View>
+            <Text style={styles.homeQuickLabel}>Shopping List</Text>
+            <Text style={styles.homeQuickCount}>Plan safe trips</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.disclaimer}>
-          <AlertCircle size={16} color={arcaneColors.textMuted} />
-          <Text style={styles.disclaimerText}>
-            This app is informational only. Databases may be incomplete. Always read labels and follow medical guidance.
+        {/* Trust Disclaimer */}
+        <View style={styles.homeTrustFooter}>
+          <Shield size={14} color={arcaneColors.textMuted} />
+          <Text style={styles.homeTrustText}>
+            SafeBite is for informational purposes only. Always read physical labels and consult medical professionals for severe allergies.
           </Text>
         </View>
 
@@ -2109,4 +2112,73 @@ const styles = StyleSheet.create({
   comingSoonLockedRow: { flexDirection: 'row' as const, gap: 10, marginTop: 4 },
   comingSoonLockedItem: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6, backgroundColor: arcaneColors.bgCard, borderRadius: arcaneRadius.md, paddingVertical: 12, borderWidth: 1, borderColor: arcaneColors.border, borderStyle: 'dashed' as const, opacity: 0.65 },
   comingSoonLockedText: { fontSize: 12, fontWeight: '600' as const, color: arcaneColors.textMuted },
+
+  homeHeader: { backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: arcaneColors.border, paddingHorizontal: 20, paddingBottom: 14 },
+  homeHeaderRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
+  homeBrandRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10 },
+  homeBrandIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: arcaneColors.primary, alignItems: 'center' as const, justifyContent: 'center' as const },
+  homeBrandName: { fontSize: 20, fontWeight: '700' as const, color: arcaneColors.text, letterSpacing: -0.3 },
+  homeBrandTagline: { fontSize: 11, color: arcaneColors.textMuted, marginTop: -1 },
+  homeSettingsBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, backgroundColor: arcaneColors.primaryMuted, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  homeSettingsBtnText: { fontSize: 13, fontWeight: '600' as const, color: arcaneColors.primary },
+  homeScrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
+
+  homeSwitcherRow: { marginBottom: 16 },
+  homeSwitcherScroll: { gap: 8, paddingRight: 8 },
+  homeProfileChip: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 24, backgroundColor: arcaneColors.bgCard, borderWidth: 1.5, borderColor: arcaneColors.border },
+  homeProfileChipActive: { borderColor: arcaneColors.primary, backgroundColor: arcaneColors.primaryMuted },
+  homeChipAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center' as const, justifyContent: 'center' as const },
+  homeChipEmoji: { fontSize: 14 },
+  homeChipName: { fontSize: 13, fontWeight: '600' as const, color: arcaneColors.textSecondary, maxWidth: 80 },
+  homeChipNameActive: { color: arcaneColors.primary },
+  homeChipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: arcaneColors.safe, marginLeft: -2 },
+  homeSwitchingIndicator: { justifyContent: 'center' as const, alignItems: 'center' as const, paddingHorizontal: 12 },
+
+  homeActiveProfile: { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: arcaneColors.bgCard, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: arcaneColors.borderRune, ...arcaneShadows.card },
+  homeActiveAvatarLarge: { width: 48, height: 48, borderRadius: 24, alignItems: 'center' as const, justifyContent: 'center' as const, marginRight: 14 },
+  homeActiveEmoji: { fontSize: 22 },
+  homeActiveInfo: { flex: 1 },
+  homeActiveLabel: { fontSize: 11, fontWeight: '600' as const, color: arcaneColors.textMuted, textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 2 },
+  homeActiveName: { fontSize: 18, fontWeight: '700' as const, color: arcaneColors.text, marginBottom: 6 },
+  homeAllergenRow: { flexDirection: 'row' as const, alignItems: 'center' as const, flexWrap: 'wrap' as const, gap: 4 },
+  homeAllergenPill: { backgroundColor: arcaneColors.goldMuted, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  homeAllergenPillText: { fontSize: 11, fontWeight: '600' as const, color: arcaneColors.textGold },
+  homeAllergenMore: { fontSize: 11, fontWeight: '600' as const, color: arcaneColors.textMuted, marginLeft: 2 },
+
+  homeOnboarding: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, backgroundColor: 'rgba(11, 110, 122, 0.06)', borderRadius: 14, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(11, 110, 122, 0.15)' },
+  homeOnboardingIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: arcaneColors.primaryMuted, alignItems: 'center' as const, justifyContent: 'center' as const, marginRight: 12, marginTop: 2 },
+  homeOnboardingContent: { flex: 1 },
+  homeOnboardingText: { fontSize: 14, fontWeight: '600' as const, color: arcaneColors.text, lineHeight: 20, marginBottom: 4 },
+  homeOnboardingSub: { fontSize: 12, color: arcaneColors.textSecondary, lineHeight: 17 },
+
+  homeScanBtn: { backgroundColor: arcaneColors.primary, borderRadius: 16, marginBottom: 12, overflow: 'hidden' as const, ...arcaneShadows.elevated },
+  homeScanBtnInner: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 18, paddingHorizontal: 20 },
+  homeScanIconCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center' as const, justifyContent: 'center' as const, marginRight: 16 },
+  homeScanBtnContent: { flex: 1 },
+  homeScanBtnTitle: { fontSize: 18, fontWeight: '700' as const, color: '#FFFFFF', marginBottom: 2 },
+  homeScanBtnSub: { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+
+  homeSecondaryRow: { flexDirection: 'row' as const, gap: 10, marginBottom: 20 },
+  homeSecondaryBtn: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6, backgroundColor: arcaneColors.bgCard, borderRadius: 14, paddingVertical: 16, borderWidth: 1, borderColor: arcaneColors.border, ...arcaneShadows.card },
+  homeSecondaryBtnText: { fontSize: 12, fontWeight: '600' as const, color: arcaneColors.text },
+  homeBetaPill: { position: 'absolute' as const, top: 6, right: 6, backgroundColor: arcaneColors.accentMuted, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6 },
+  homeBetaPillText: { fontSize: 8, fontWeight: '700' as const, color: arcaneColors.accent, letterSpacing: 0.5 },
+
+  homeSearchSection: { marginBottom: 20 },
+  homeSearchBar: { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: arcaneColors.bgCard, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, gap: 10, borderWidth: 1, borderColor: arcaneColors.border },
+  homeSearchInput: { flex: 1, fontSize: 15, color: arcaneColors.text, paddingVertical: 2 },
+  homeSearchAction: { width: 32, height: 32, borderRadius: 10, backgroundColor: arcaneColors.primary, alignItems: 'center' as const, justifyContent: 'center' as const },
+  homeSearchHistoryDrop: { backgroundColor: arcaneColors.bgCard, borderRadius: 12, marginTop: 6, borderWidth: 1, borderColor: arcaneColors.border, overflow: 'hidden' as const },
+  homeSearchHistoryItem: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: arcaneColors.borderLight },
+  homeSearchHistoryText: { flex: 1, fontSize: 14, color: arcaneColors.text },
+
+  homeSectionLabel: { fontSize: 15, fontWeight: '700' as const, color: arcaneColors.text, marginBottom: 12, letterSpacing: -0.2 },
+  homeQuickGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 10, marginBottom: 24 },
+  homeQuickCard: { width: '48%' as const, backgroundColor: arcaneColors.bgCard, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: arcaneColors.border, ...arcaneShadows.card },
+  homeQuickIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: 10 },
+  homeQuickLabel: { fontSize: 14, fontWeight: '600' as const, color: arcaneColors.text, marginBottom: 3 },
+  homeQuickCount: { fontSize: 12, color: arcaneColors.textMuted },
+
+  homeTrustFooter: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: 8, backgroundColor: arcaneColors.bgMist, borderRadius: 12, padding: 14, marginBottom: 16 },
+  homeTrustText: { flex: 1, fontSize: 11, color: arcaneColors.textMuted, lineHeight: 16 },
 });

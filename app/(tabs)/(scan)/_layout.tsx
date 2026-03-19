@@ -6,8 +6,7 @@ export default function ScanLayout() {
       <Stack.Screen 
         name="index" 
         options={{ 
-          title: 'Allergy Guardian',
-          headerLargeTitle: true,
+          headerShown: false,
         }} 
       />
     </Stack>
