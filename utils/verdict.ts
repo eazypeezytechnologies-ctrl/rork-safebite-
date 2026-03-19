@@ -436,14 +436,24 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
       };
     }
     
+    if (!hasAnyData) {
+      return {
+        level: 'unknown',
+        matches: [],
+        eczemaTriggers: [],
+        message: 'No ingredient data available — cannot verify safety.',
+        missingData: true,
+        explanation: 'This product has no ingredient information in any database. Read the physical label or contact the manufacturer.',
+      };
+    }
+
     return {
       level: 'safe',
       matches: [],
       eczemaTriggers: [],
-      message: hasAnyData 
-        ? 'No listed allergens found for this profile.'
-        : 'No ingredient data available - cannot verify safety.',
-      missingData: !hasAnyData,
+      message: 'No listed allergens found for this profile.',
+      missingData: false,
+      explanation: 'All available ingredient data was checked against your allergen profile. No matches found.',
     };
   }
   
@@ -463,6 +473,7 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
       eczemaTriggers,
       message: 'Contains: ' + allergenList,
       missingData: false,
+      explanation: 'Direct allergen match found in product data. ' + uniqueMatches.filter(m => m.source !== 'traces_tags').map(m => `"${m.matchedText || m.allergen}" matched your "${m.allergen}" allergen (source: ${m.source === 'allergens_tags' ? 'listed allergen' : m.source === 'ingredients' ? 'ingredient text' : 'custom keyword'})`).join('. ') + '.',
     };
   }
   
@@ -477,6 +488,7 @@ export function calculateVerdict(product: Product, profile: Profile): Verdict {
     eczemaTriggers,
     message: 'May contain traces: ' + traceAllergenList,
     missingData: false,
+    explanation: 'This product lists possible traces of your allergens due to manufacturing cross-contamination. The product itself does not list these as direct ingredients.',
   };
 }
 
@@ -486,6 +498,8 @@ export function getVerdictColor(level: VerdictLevel): string {
       return '#DC2626';
     case 'caution':
       return '#F59E0B';
+    case 'unknown':
+      return '#6B7280';
     case 'safe':
       return '#10B981';
   }
@@ -497,6 +511,8 @@ export function getVerdictIcon(level: VerdictLevel): string {
       return 'alert-circle';
     case 'caution':
       return 'alert-triangle';
+    case 'unknown':
+      return 'help-circle';
     case 'safe':
       return 'check-circle';
   }
@@ -505,9 +521,11 @@ export function getVerdictIcon(level: VerdictLevel): string {
 export function getVerdictLabel(level: VerdictLevel): string {
   switch (level) {
     case 'danger':
-      return 'UNSAFE';
+      return 'AVOID';
     case 'caution':
       return 'CAUTION';
+    case 'unknown':
+      return 'UNKNOWN';
     case 'safe':
       return 'SAFE';
   }

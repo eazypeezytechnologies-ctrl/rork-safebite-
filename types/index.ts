@@ -1,4 +1,4 @@
-export type VerdictLevel = 'safe' | 'caution' | 'danger';
+export type VerdictLevel = 'safe' | 'caution' | 'danger' | 'unknown';
 
 export interface AllergenMatch {
   allergen: string;
@@ -19,6 +19,8 @@ export interface Verdict {
   eczemaTriggers?: EczemaTriggerMatch[];
   message: string;
   missingData?: boolean;
+  affectedProfiles?: string[];
+  explanation?: string;
 }
 
 export interface EmergencyContact {
@@ -86,6 +88,38 @@ export interface Product {
   categories_tags?: string[];
   product_type?: ProductType;
   source: 'openfoodfacts' | 'openbeautyfacts' | 'openproductsfacts' | 'upcdatabase' | 'upcitemdb' | 'barcodelookup' | 'worldupc' | 'eansearch' | 'datakick' | 'usda' | 'nutritionix' | 'edamam' | 'manual_entry';
+  lastUpdated?: string;
+}
+
+export interface HouseholdMemberVerdict {
+  profileId: string;
+  profileName: string;
+  relationship?: ProfileRelationship;
+  avatarColor?: string;
+  verdict: Verdict;
+  hasAnaphylaxis: boolean;
+}
+
+export interface HouseholdVerdict {
+  overallLevel: VerdictLevel;
+  memberVerdicts: HouseholdMemberVerdict[];
+  affectedMembers: string[];
+  safeMembers: string[];
+  message: string;
+}
+
+export interface ConfidenceBreakdown {
+  score: number;
+  label: 'Very High' | 'High' | 'Moderate' | 'Low' | 'Very Low';
+  factors: ConfidenceFactor[];
+  color: string;
+}
+
+export interface ConfidenceFactor {
+  name: string;
+  present: boolean;
+  weight: number;
+  description: string;
 }
 
 export interface ProductSearchResult {

@@ -467,7 +467,7 @@ export async function getRecentScansForAdmin(limit: number = 20): Promise<{
 
 export async function updateProductAIVerdict(
   productCode: string,
-  aiVerdict: 'safe' | 'caution' | 'danger',
+  aiVerdict: 'safe' | 'caution' | 'danger' | 'unknown',
   aiSummary?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {

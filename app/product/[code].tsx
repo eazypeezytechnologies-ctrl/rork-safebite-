@@ -12,7 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, Href, useFocusEffect } from 'expo-router';
-import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle, ShieldCheck, Ban } from 'lucide-react-native';
+import { AlertCircle, CheckCircle, AlertTriangle, HelpCircle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle, ShieldCheck, Ban } from 'lucide-react-native';
 import ProductCaptureWizard from '@/components/ProductCaptureWizard';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
@@ -42,6 +42,10 @@ import { DietaryRestrictionVerdictCard } from '@/components/DietaryRestrictionVe
 import { ConfidenceScoreBar } from '@/components/ConfidenceScoreBar';
 import { ManufacturerWarningsCard } from '@/components/ManufacturerWarningsCard';
 import { addToAvoidList, isOnAvoidList, removeFromAvoidList } from '@/storage/avoidList';
+import { HouseholdVerdictCard } from '@/components/HouseholdVerdictCard';
+import { LegalDisclaimer } from '@/components/LegalDisclaimer';
+import { calculateHouseholdVerdict } from '@/utils/householdVerdict';
+import { calculateConfidence } from '@/utils/confidenceScore';
 
 export default function ProductDetailsScreen() {
   const params = useLocalSearchParams<{ code: string | string[] }>();
@@ -626,7 +630,13 @@ export default function ProductDetailsScreen() {
 
   const { verdict, verdictColor, verdictLabel, affectedMembers, aiAdjusted, aiConflict } = getAiAdjustedVerdictInfo();
   
-  const VerdictIcon = verdict?.level === 'safe' ? CheckCircle : verdict?.level === 'caution' ? AlertTriangle : AlertCircle;
+  const VerdictIcon = verdict?.level === 'safe' ? CheckCircle : verdict?.level === 'caution' ? AlertTriangle : verdict?.level === 'unknown' ? HelpCircle : AlertCircle;
+
+  const householdVerdict = (viewMode === 'family' && activeFamilyGroup && product)
+    ? calculateHouseholdVerdict(product, getFamilyMembers(profiles))
+    : null;
+
+  const confidence = product ? calculateConfidence(product) : null;
   
   const handleToggleFavorite = async () => {
     if (!activeProfile) return;
@@ -696,26 +706,7 @@ export default function ProductDetailsScreen() {
     }
   };
 
-  const confidenceScore = (() => {
-    const hasIngredients = !!product?.ingredients_text?.trim();
-    const hasAllergenTags = (product?.allergens_tags?.length || 0) > 0;
-    const hasTracesTags = (product?.traces_tags?.length || 0) > 0;
-    const hasImage = !!product?.image_front_url;
-    const hasName = !!product?.product_name;
-    const hasBrand = !!product?.brands;
-    const hasCategories = (product?.categories_tags?.length || 0) > 0;
-
-    let score = 20;
-    if (hasName) score += 10;
-    if (hasBrand) score += 5;
-    if (hasIngredients) score += 35;
-    if (hasAllergenTags) score += 15;
-    if (hasTracesTags) score += 5;
-    if (hasImage) score += 5;
-    if (hasCategories) score += 5;
-
-    return Math.min(100, score);
-  })();
+  const confidenceScore = confidence?.score ?? 50;
 
   const handleAddToShoppingList = async () => {
     if (!product) return;
@@ -1029,6 +1020,21 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             >
               <Text style={styles.removeTrustButtonText}>Remove</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {householdVerdict && householdVerdict.memberVerdicts.length > 1 && (
+          <HouseholdVerdictCard
+            householdVerdict={householdVerdict}
+            familyGroupName={activeFamilyGroup?.name}
+            testID="household-verdict-card"
+          />
+        )}
+
+        {'explanation' in (verdict || {}) && (verdict as any)?.explanation && (
+          <View style={styles.whyResultCard}>
+            <Text style={styles.whyResultTitle}>Why this result?</Text>
+            <Text style={styles.whyResultText}>{(verdict as any).explanation}</Text>
           </View>
         )}
 
@@ -1558,12 +1564,11 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
           )}
         </View>
 
-        <View style={styles.disclaimer}>
-          <AlertCircle size={16} color="#9CA3AF" />
-          <Text style={styles.disclaimerText}>
-            This app is informational only. Databases may be incomplete or outdated. Always read labels and follow clinician guidance. In case of anaphylaxis, use prescribed epinephrine and call emergency services.
-          </Text>
-        </View>
+        <LegalDisclaimer
+          hasAnaphylaxis={activeProfile?.hasAnaphylaxis}
+          variant="compact"
+          testID="legal-disclaimer"
+        />
       </ScrollView>
     </View>
   );
@@ -1713,6 +1718,9 @@ const styles = StyleSheet.create({
   sourceText: { fontSize: 12, color: '#6B7280', textAlign: 'center' },
   disclaimer: { flexDirection: 'row', gap: 8, padding: 16, backgroundColor: '#FEF3C7', borderRadius: 12, borderWidth: 1, borderColor: '#F59E0B' },
   disclaimerText: { flex: 1, fontSize: 12, color: '#92400E', lineHeight: 18 },
+  whyResultCard: { backgroundColor: '#F8FAFC', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E2E8F0' },
+  whyResultTitle: { fontSize: 14, fontWeight: '700' as const, color: '#374151', marginBottom: 8 },
+  whyResultText: { fontSize: 13, color: '#6B7280', lineHeight: 20 },
   recommendationCard: { borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   recommendationTitle: { fontSize: 18, fontWeight: '700' as const, color: '#111827', marginBottom: 12, lineHeight: 24 },
   recommendationText: { fontSize: 15, color: '#111827', lineHeight: 24 },
