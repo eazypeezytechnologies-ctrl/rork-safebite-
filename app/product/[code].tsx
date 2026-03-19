@@ -12,7 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, Href, useFocusEffect } from 'expo-router';
-import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle, ShieldCheck } from 'lucide-react-native';
+import { AlertCircle, CheckCircle, AlertTriangle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle, ShieldCheck, Ban } from 'lucide-react-native';
 import ProductCaptureWizard from '@/components/ProductCaptureWizard';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
@@ -39,6 +39,9 @@ import { generateSafeSwaps, generateNoDataSwaps } from '@/services/safeSwapServi
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { DietaryCompatibilityCard } from '@/components/DietaryCompatibilityCard';
 import { DietaryRestrictionVerdictCard } from '@/components/DietaryRestrictionVerdictCard';
+import { ConfidenceScoreBar } from '@/components/ConfidenceScoreBar';
+import { ManufacturerWarningsCard } from '@/components/ManufacturerWarningsCard';
+import { addToAvoidList, isOnAvoidList, removeFromAvoidList } from '@/storage/avoidList';
 
 export default function ProductDetailsScreen() {
   const params = useLocalSearchParams<{ code: string | string[] }>();
@@ -110,6 +113,7 @@ export default function ProductDetailsScreen() {
   const [aiVerdictRecord, setAiVerdictRecord] = useState<AIVerdictRecord | null>(null);
   const [trustedProduct, setTrustedProduct] = useState<TrustedProduct | null>(null);
   const [showMismatchExplainer, setShowMismatchExplainer] = useState(false);
+  const [isAvoided, setIsAvoided] = useState(false);
   const hasLoadedInitially = useRef(false);
 
   useFocusEffect(
@@ -301,8 +305,12 @@ export default function ProductDetailsScreen() {
           );
         }
         
-        const favStatus = await isFavorite(code, activeProfile.id);
+        const [favStatus, avoidStatus] = await Promise.all([
+          isFavorite(code, activeProfile.id),
+          isOnAvoidList(code, activeProfile.id, currentUser?.id),
+        ]);
         setIsFav(favStatus);
+        setIsAvoided(avoidStatus);
 
         const storedAiVerdict = await getAIVerdict(code, activeProfile.id, currentUser?.id);
         if (storedAiVerdict) {
@@ -650,6 +658,65 @@ export default function ProductDetailsScreen() {
     }
   };
 
+  const handleToggleAvoid = async () => {
+    if (!activeProfile || !product) return;
+
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    try {
+      if (isAvoided) {
+        const avoidItems = await import('@/storage/avoidList').then(m => m.getAvoidList(currentUser?.id));
+        const item = avoidItems.find(a => a.product.code === code && a.profileId === activeProfile.id);
+        if (item) {
+          await removeFromAvoidList(item.id, currentUser?.id);
+          setIsAvoided(false);
+          Alert.alert('Removed', 'Product removed from your avoid list');
+        }
+      } else {
+        const reason = verdict?.level === 'danger'
+          ? `Contains allergens: ${verdict.matches.map(m => m.allergen).join(', ')}`
+          : verdict?.level === 'caution'
+            ? `May contain traces of allergens`
+            : undefined;
+        await addToAvoidList({
+          id: `${code}_${activeProfile.id}_${Date.now()}`,
+          product,
+          profileId: activeProfile.id,
+          reason,
+          addedAt: new Date().toISOString(),
+        }, currentUser?.id);
+        setIsAvoided(true);
+        Alert.alert('Added', 'Product added to your avoid list');
+      }
+    } catch (error) {
+      console.error('Error toggling avoid:', error);
+      Alert.alert('Error', 'Failed to update avoid list');
+    }
+  };
+
+  const confidenceScore = (() => {
+    const hasIngredients = !!product?.ingredients_text?.trim();
+    const hasAllergenTags = (product?.allergens_tags?.length || 0) > 0;
+    const hasTracesTags = (product?.traces_tags?.length || 0) > 0;
+    const hasImage = !!product?.image_front_url;
+    const hasName = !!product?.product_name;
+    const hasBrand = !!product?.brands;
+    const hasCategories = (product?.categories_tags?.length || 0) > 0;
+
+    let score = 20;
+    if (hasName) score += 10;
+    if (hasBrand) score += 5;
+    if (hasIngredients) score += 35;
+    if (hasAllergenTags) score += 15;
+    if (hasTracesTags) score += 5;
+    if (hasImage) score += 5;
+    if (hasCategories) score += 5;
+
+    return Math.min(100, score);
+  })();
+
   const handleAddToShoppingList = async () => {
     if (!product) return;
     
@@ -965,6 +1032,20 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
           </View>
         )}
 
+        {product && (
+          <ConfidenceScoreBar
+            score={confidenceScore}
+            testID="confidence-score-bar"
+          />
+        )}
+
+        {product && (
+          <ManufacturerWarningsCard
+            product={product}
+            testID="manufacturer-warnings-card"
+          />
+        )}
+
         {activeProfile && product && (
           <DietaryCompatibilityCard
             product={product}
@@ -979,6 +1060,32 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             profile={activeProfile}
             testID="dietary-restriction-verdict-card"
           />
+        )}
+
+        {activeProfile && product && (
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonShoppingList]}
+              onPress={handleAddToShoppingList}
+              disabled={isAddingToList}
+              activeOpacity={0.7}
+            >
+              <ShoppingCart size={18} color="#0891B2" />
+              <Text style={styles.actionButtonTextShoppingList}>
+                {isAddingToList ? 'Adding...' : 'Shopping List'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, isAvoided ? styles.actionButtonAvoidActive : styles.actionButtonAvoid]}
+              onPress={handleToggleAvoid}
+              activeOpacity={0.7}
+            >
+              <Ban size={18} color={isAvoided ? '#FFFFFF' : '#DC2626'} />
+              <Text style={[styles.actionButtonTextAvoid, isAvoided && styles.actionButtonTextAvoidActive]}>
+                {isAvoided ? 'Avoided' : 'Avoid'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {verdict && verdict.missingData && showNoDataAlternatives && (
@@ -1735,4 +1842,11 @@ const styles = StyleSheet.create({
   productTypeBadge: { flexDirection: 'row' as const, alignItems: 'center' as const, alignSelf: 'flex-start' as const, gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1.5, marginBottom: 12 },
   productTypeEmoji: { fontSize: 16 },
   productTypeLabel: { fontSize: 14, fontWeight: '700' as const },
+  actionButtonsRow: { flexDirection: 'row' as const, gap: 10, marginBottom: 16 },
+  actionButtonShoppingList: { flex: 1, backgroundColor: '#F0FDFA', borderWidth: 1, borderColor: '#0891B2' },
+  actionButtonTextShoppingList: { fontSize: 14, fontWeight: '600' as const, color: '#0891B2' },
+  actionButtonAvoid: { flex: 1, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#DC2626' },
+  actionButtonAvoidActive: { flex: 1, backgroundColor: '#DC2626', borderWidth: 1, borderColor: '#DC2626' },
+  actionButtonTextAvoid: { fontSize: 14, fontWeight: '600' as const, color: '#DC2626' },
+  actionButtonTextAvoidActive: { color: '#FFFFFF' },
 });

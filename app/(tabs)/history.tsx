@@ -11,11 +11,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useFocusEffect, Href } from 'expo-router';
-import { History, Heart, Trash2, Clock, AlertCircle, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { History, Heart, Trash2, Clock, AlertCircle, CheckCircle, AlertTriangle, RefreshCw, Ban } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { getFavorites, removeFromFavorites, addToFavorites, FavoriteItem } from '@/storage/favorites';
+import { getAvoidList, removeFromAvoidList, AvoidListItem } from '@/storage/avoidList';
 import { getVerdictColor } from '@/utils/verdict';
 import { SwipeableListItem } from '@/components/SwipeableListItem';
 import * as Haptics from 'expo-haptics';
@@ -26,7 +27,7 @@ import {
 } from '@/services/supabaseProducts';
 import { arcaneColors, arcaneShadows, arcaneRadius } from '@/constants/theme';
 
-type TabType = 'history' | 'favorites';
+type TabType = 'history' | 'favorites' | 'avoid';
 
 interface SupabaseHistoryItem {
   id: string;
@@ -44,6 +45,7 @@ export default function HistoryScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('history');
   const [history, setHistory] = useState<SupabaseHistoryItem[]>([]);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [avoidItems, setAvoidItems] = useState<AvoidListItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -57,19 +59,22 @@ export default function HistoryScreen() {
 
       const profileId = activeProfile?.id;
 
-      const [historyData, favoritesData] = await Promise.all([
+      const [historyData, favoritesData, avoidData] = await Promise.all([
         userId ? getSupabaseScanHistory(userId, profileId, 50) : Promise.resolve([]),
         getFavorites(userId),
+        getAvoidList(userId),
       ]);
 
-      console.log('[History] Loaded', historyData.length, 'history items and', favoritesData.length, 'favorites');
+      console.log('[History] Loaded', historyData.length, 'history,', favoritesData.length, 'favorites,', avoidData.length, 'avoid items');
 
       setHistory(historyData);
 
       if (activeProfile) {
         setFavorites(favoritesData.filter(item => item.profileId === activeProfile.id));
+        setAvoidItems(avoidData.filter(item => item.profileId === activeProfile.id));
       } else {
         setFavorites(favoritesData);
+        setAvoidItems(avoidData);
       }
     } catch (err) {
       console.error('[History] Error loading data:', err);
@@ -81,7 +86,7 @@ export default function HistoryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      void loadData();
     }, [loadData])
   );
 
@@ -107,13 +112,38 @@ export default function HistoryScreen() {
               if (result.success) {
                 setHistory([]);
                 if (Platform.OS !== 'web') {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 }
               } else {
                 Alert.alert('Error', result.error || 'Failed to clear history');
               }
             } catch {
               Alert.alert('Error', 'Failed to clear history');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRemoveAvoid = (id: string, productName: string) => {
+    Alert.alert(
+      'Remove from Avoid List',
+      `Remove ${productName} from your avoid list?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeFromAvoidList(id, userId);
+              await loadData();
+              if (Platform.OS !== 'web') {
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+            } catch {
+              Alert.alert('Error', 'Failed to remove from avoid list');
             }
           },
         },
@@ -199,9 +229,18 @@ export default function HistoryScreen() {
             style={[styles.tab, activeTab === 'favorites' && styles.tabActive]}
             onPress={() => setActiveTab('favorites')}
           >
-            <Heart size={20} color={activeTab === 'favorites' ? arcaneColors.primary : arcaneColors.textSecondary} />
+            <Heart size={18} color={activeTab === 'favorites' ? arcaneColors.primary : arcaneColors.textSecondary} />
             <Text style={[styles.tabText, activeTab === 'favorites' && styles.tabTextActive]}>
-              Favorites
+              Saved
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'avoid' && styles.tabActive]}
+            onPress={() => setActiveTab('avoid')}
+          >
+            <Ban size={18} color={activeTab === 'avoid' ? '#DC2626' : arcaneColors.textSecondary} />
+            <Text style={[styles.tabText, activeTab === 'avoid' && styles.tabTextAvoid]}>
+              Avoid
             </Text>
           </TouchableOpacity>
         </View>
@@ -267,7 +306,7 @@ export default function HistoryScreen() {
                       addedAt: new Date().toISOString(),
                     }, userId);
                     if (Platform.OS !== 'web') {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     }
                     Alert.alert('Added', 'Product added to favorites');
                   } catch {
@@ -341,7 +380,7 @@ export default function HistoryScreen() {
             {favorites.length === 0 ? (
               <View style={styles.emptyState}>
                 <Heart size={64} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No favorites</Text>
+                <Text style={styles.emptyText}>No saved products</Text>
                 <Text style={styles.emptySubtext}>
                   Tap the heart icon on products to save them here
                 </Text>
@@ -386,6 +425,65 @@ export default function HistoryScreen() {
                   <TouchableOpacity
                     style={styles.removeButton}
                     onPress={() => handleRemoveFavorite(item.id, item.product.product_name || 'this product')}
+                  >
+                    <Trash2 size={20} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </>
+        )}
+
+        {activeTab === 'avoid' && (
+          <>
+            {avoidItems.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ban size={64} color="#D1D5DB" />
+                <Text style={styles.emptyText}>No avoided products</Text>
+                <Text style={styles.emptySubtext}>
+                  Products you mark as "Avoid" will appear here as a reminder not to purchase them
+                </Text>
+              </View>
+            ) : (
+              avoidItems.map((item) => (
+                <View key={item.id} style={[styles.itemCard, styles.avoidItemCard]}>
+                  <TouchableOpacity
+                    style={styles.itemContent}
+                    onPress={() => {
+                      const productCode = item.product?.code;
+                      if (!productCode || productCode === 'undefined' || productCode === 'null' || productCode.trim() === '') {
+                        Alert.alert('Error', 'This product has an invalid code. Please scan it again.');
+                        return;
+                      }
+                      router.push(`/product/${encodeURIComponent(productCode)}` as Href);
+                    }}
+                  >
+                    <View style={styles.avoidIcon}>
+                      <Ban size={20} color="#DC2626" />
+                    </View>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName} numberOfLines={2}>
+                        {item.product.product_name || 'Unknown Product'}
+                      </Text>
+                      {item.product.brands && (
+                        <Text style={styles.itemBrand} numberOfLines={1}>
+                          {item.product.brands}
+                        </Text>
+                      )}
+                      {item.reason && (
+                        <Text style={styles.avoidReason} numberOfLines={2}>
+                          Reason: {item.reason}
+                        </Text>
+                      )}
+                      <View style={styles.itemMeta}>
+                        <Clock size={12} color="#9CA3AF" />
+                        <Text style={styles.itemDate}>{formatDate(item.addedAt)}</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => handleRemoveAvoid(item.id, item.product.product_name || 'this product')}
                   >
                     <Trash2 size={20} color="#DC2626" />
                   </TouchableOpacity>
@@ -456,6 +554,9 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: arcaneColors.primary,
+  },
+  tabTextAvoid: {
+    color: '#DC2626',
   },
   scrollView: {
     flex: 1,
@@ -604,5 +705,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
+  },
+  avoidItemCard: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FFFBFB',
+  },
+  avoidIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  avoidReason: {
+    fontSize: 12,
+    color: '#DC2626',
+    marginBottom: 4,
+    lineHeight: 17,
   },
 });
