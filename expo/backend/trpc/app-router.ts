@@ -16,6 +16,7 @@ import { deleteProfileRoute } from "@/backend/trpc/routes/profiles/delete";
 import { exportDataRoute } from "@/backend/trpc/routes/data/export";
 import { importDataRoute } from "@/backend/trpc/routes/data/import";
 import { scanProductRoute } from "@/backend/trpc/routes/scan";
+import { getSnapshotBuildStatusRoute } from "@/backend/trpc/routes/builds/getSnapshotBuildStatus";
 
 export const appRouter = createTRPCRouter({
   example: createTRPCRouter({
@@ -47,6 +48,9 @@ export const appRouter = createTRPCRouter({
     import: importDataRoute,
   }),
   scan: scanProductRoute,
+  builds: createTRPCRouter({
+    getSnapshotBuildStatus: getSnapshotBuildStatusRoute,
+  }),
 });
 
 export type AppRouter = typeof appRouter;
