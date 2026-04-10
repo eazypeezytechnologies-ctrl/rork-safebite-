@@ -40,6 +40,7 @@ import { addToFavorites, removeFromFavorites, isFavorite, getFavorites } from '@
 import { addToAvoidList, isOnAvoidList, removeFromAvoidList, getAvoidList } from '@/storage/avoidList';
 import { arcaneColors } from '@/constants/theme';
 import { addToScanHistory } from '@/storage/scanHistory';
+import { searchProductByBarcode } from '@/api/products';
 
 type IssueType = 'allergy' | 'sensitivity' | 'eczema';
 
@@ -146,7 +147,6 @@ export default function ResultScreen() {
 
     const loadResult = async () => {
       try {
-        const { searchProductByBarcode } = await import('@/api/products');
         const productData = await searchProductByBarcode(code);
         if (!productData) {
           console.log('[Result] No product data found for code:', code);
@@ -356,7 +356,6 @@ export default function ResultScreen() {
           Alert.alert('Copied!', 'Product information copied to clipboard');
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({ message, title: `${productName} - SafeBite` });
       }
     } catch (error: any) {

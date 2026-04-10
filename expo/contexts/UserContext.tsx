@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { migrateToSupabase, checkMigrationStatus } from '@/utils/supabaseMigration';
 import { withTimeout, withRetry, getAuthErrorMessage } from '@/utils/authTimeout';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { logAuditEvent } from '@/utils/auditLog';
 import { actionRateLimiter } from '@/utils/actionRateLimiter';
 
@@ -733,7 +733,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
     if (!currentUser) return;
     
     try {
-      const { Platform } = await import('react-native');
+      
       
       const sanitizedMetadata = metadata ? JSON.parse(JSON.stringify(metadata)) : undefined;
       
