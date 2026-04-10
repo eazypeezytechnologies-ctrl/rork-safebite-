@@ -33,7 +33,9 @@ import { generateText } from '@rork-ai/toolkit-sdk';
 import { translateMultiple, isTranslationAvailable, TranslationResult } from '@/services/translationService';
 import { TranslationCard } from '@/components/TranslationCard';
 import { getSearchHistory, addToSearchHistory } from '@/storage/searchHistory';
-import { calculateVerdict, getVerdictColor, getVerdictIcon } from '@/utils/verdict';
+import { getVerdictColor, getVerdictIcon } from '@/utils/verdict';
+import { evaluateProduct } from '@/utils/evaluationEngine';
+import { engineToLegacyVerdict } from '@/utils/unifiedEvaluation';
 import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { Product } from '@/types';
 import { getRelationshipIcon } from '@/constants/profileColors';
@@ -374,7 +376,7 @@ IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them.
     }
 
     if (currentUser?.id && activeProfile) {
-      const verdict = calculateVerdict(product, activeProfile);
+      const verdict = engineToLegacyVerdict(evaluateProduct(product, activeProfile));
       recordScanEvent({
         user_id: currentUser.id,
         profile_id: activeProfile.id,
@@ -967,7 +969,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
       });
 
       if (currentUser?.id && activeProfile) {
-        const verdict = calculateVerdict(photoProduct, activeProfile);
+        const verdict = engineToLegacyVerdict(evaluateProduct(photoProduct, activeProfile));
         recordScanEvent({
           user_id: currentUser.id,
           profile_id: activeProfile.id,
@@ -1077,7 +1079,7 @@ Barcode: [barcode numbers if visible or "Not visible"]`,
   const renderVerdictBadge = (product: Product) => {
     if (!activeProfile) return null;
     
-    const verdict = calculateVerdict(product, activeProfile);
+    const verdict = engineToLegacyVerdict(evaluateProduct(product, activeProfile));
     const color = getVerdictColor(verdict.level);
     const iconName = getVerdictIcon(verdict.level);
     

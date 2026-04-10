@@ -13,7 +13,8 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { searchProductByBarcode } from '@/api/products';
 import { Product } from '@/types';
-import { calculateVerdict } from '@/utils/verdict';
+import { evaluateProduct } from '@/utils/evaluationEngine';
+import { engineToLegacyVerdict } from '@/utils/unifiedEvaluation';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { saveAIVerdict, parseAIVerdictFromText, getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
@@ -77,7 +78,9 @@ export default function AIAnalysisScreen() {
   const runAnalysis = async (productData: Product) => {
     if (!activeProfile || !code) return;
 
-    const ruleVerdict = calculateVerdict(productData, activeProfile);
+    const evalResult = evaluateProduct(productData, activeProfile);
+    const ruleVerdict = engineToLegacyVerdict(evalResult);
+    console.log('[AIAnalysis] Engine verdict:', ruleVerdict.level, '| Concerns:', evalResult.matchedConcerns.length);
     
     const prompt = `You are an expert allergist and food safety specialist. Analyze this product for someone with the following allergies: ${activeProfile.allergens.join(', ')}.
 

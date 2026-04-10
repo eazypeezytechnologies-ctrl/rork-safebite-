@@ -18,7 +18,10 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { searchProductByBarcode } from '@/api/products';
 import { searchRecallsByBarcode } from '@/api/recalls';
-import { calculateVerdict, getVerdictColor, getVerdictLabel } from '@/utils/verdict';
+import { getVerdictColor, getVerdictLabel } from '@/utils/verdict';
+import { runUnifiedEvaluation } from '@/utils/unifiedEvaluation';
+import { evaluateProduct, evalVerdictToLegacyLevel } from '@/utils/evaluationEngine';
+import { engineToLegacyVerdict } from '@/utils/unifiedEvaluation';
 import { Product, RecallResult } from '@/types';
 import { addToScanHistory } from '@/storage/scanHistory';
 import { getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
@@ -45,7 +48,6 @@ import { addToAvoidList, isOnAvoidList, removeFromAvoidList, getAvoidList } from
 import { HouseholdVerdictCard } from '@/components/HouseholdVerdictCard';
 import { LegalDisclaimer } from '@/components/LegalDisclaimer';
 import { calculateHouseholdVerdict } from '@/utils/householdVerdict';
-import { calculateConfidence } from '@/utils/confidenceScore';
 
 export default function ProductDetailsScreen() {
   const params = useLocalSearchParams<{ code: string | string[] }>();
@@ -224,7 +226,9 @@ export default function ProductDetailsScreen() {
       setRecalls(recallData.results);
       
       if (activeProfile) {
-        const verdict = calculateVerdict(productData, activeProfile);
+        const evalResult = evaluateProduct(productData, activeProfile);
+        const verdict = engineToLegacyVerdict(evalResult);
+        console.log(`[ProductDetail] Engine verdict: ${verdict.level}, concerns: ${evalResult.matchedConcerns.length}`);
         await addToScanHistory({
           id: `${code}_${activeProfile.id}_${Date.now()}`,
           product: productData,
@@ -461,27 +465,31 @@ export default function ProductDetailsScreen() {
     );
   }
 
-  const getVerdictInfo = () => {
-    if (!activeProfile) return { verdict: null, verdictColor: '#9CA3AF', verdictLabel: 'NO PROFILE', affectedMembers: [] };
+  const getUnifiedVerdictInfo = () => {
+    if (!activeProfile) return { verdict: null, verdictColor: '#9CA3AF', verdictLabel: 'NO PROFILE', affectedMembers: [] as string[], aiAdjusted: false, aiConflict: false };
 
     if (viewMode === 'family' && activeFamilyGroup) {
       const familyMembers = getFamilyMembers(profiles);
       if (familyMembers.length === 0) {
-        const verdict = calculateVerdict(product, activeProfile);
+        const unified = runUnifiedEvaluation(product, activeProfile, aiVerdictRecord, trustedProduct);
+        unified.debugLog.forEach(l => console.log(l));
         return {
-          verdict,
-          verdictColor: getVerdictColor(verdict.level),
-          verdictLabel: getVerdictLabel(verdict.level),
-          affectedMembers: []
+          verdict: unified.verdict,
+          verdictColor: getVerdictColor(unified.verdict.level),
+          verdictLabel: unified.verdictLabel,
+          affectedMembers: [] as string[],
+          aiAdjusted: unified.aiAdjusted,
+          aiConflict: unified.aiConflict,
         };
       }
 
-      let worstLevel: 'safe' | 'caution' | 'danger' = 'safe';
+      let worstLevel: 'safe' | 'caution' | 'danger' | 'unknown' = 'safe';
       const affectedMembers: string[] = [];
       const allMatches: any[] = [];
 
       familyMembers.forEach(member => {
-        const memberVerdict = calculateVerdict(product, member);
+        const evalResult = evaluateProduct(product, member);
+        const memberVerdict = engineToLegacyVerdict(evalResult);
         if (memberVerdict.level === 'danger') {
           worstLevel = 'danger';
           affectedMembers.push(member.name);
@@ -490,145 +498,47 @@ export default function ProductDetailsScreen() {
           worstLevel = 'caution';
           affectedMembers.push(member.name);
           allMatches.push(...memberVerdict.matches);
+        } else if (memberVerdict.level === 'unknown' && worstLevel === 'safe') {
+          worstLevel = 'unknown';
         }
       });
 
-      const uniqueMatches = allMatches.filter((match, index, self) =>
-        index === self.findIndex(m => m.allergen === match.allergen && m.source === match.source)
+      const uniqueMatches = allMatches.filter((match: any, index: number, self: any[]) =>
+        index === self.findIndex((m: any) => m.allergen === match.allergen && m.source === match.source)
       );
 
       const familyVerdict = {
-        level: worstLevel,
+        level: worstLevel as 'safe' | 'caution' | 'danger' | 'unknown',
         matches: uniqueMatches,
         message: worstLevel === 'safe'
-          ? `No allergens detected for any family member`
+          ? 'No allergens detected for any family member'
           : `Allergens detected for: ${affectedMembers.join(', ')}`,
-        missingData: false
+        missingData: false,
       };
 
       return {
         verdict: familyVerdict,
         verdictColor: getVerdictColor(worstLevel),
         verdictLabel: getVerdictLabel(worstLevel),
-        affectedMembers
+        affectedMembers,
+        aiAdjusted: false,
+        aiConflict: false,
       };
     }
 
-    const verdict = calculateVerdict(product, activeProfile);
+    const unified = runUnifiedEvaluation(product, activeProfile, aiVerdictRecord, trustedProduct);
+    unified.debugLog.forEach(l => console.log(l));
     return {
-      verdict,
-      verdictColor: getVerdictColor(verdict.level),
-      verdictLabel: getVerdictLabel(verdict.level),
-      affectedMembers: []
+      verdict: unified.verdict,
+      verdictColor: getVerdictColor(unified.verdict.level),
+      verdictLabel: unified.verdictLabel,
+      affectedMembers: [] as string[],
+      aiAdjusted: unified.aiAdjusted,
+      aiConflict: unified.aiConflict,
     };
   };
 
-  const getAiAdjustedVerdictInfo = () => {
-    const baseInfo = getVerdictInfo();
-
-    if (trustedProduct && baseInfo.verdict) {
-      console.log('[ProductDetail] Product is TRUSTED - overriding verdict to SAFE');
-      return {
-        verdict: {
-          ...baseInfo.verdict,
-          level: 'safe' as const,
-          message: `Trusted product — marked safe for this profile.`,
-        },
-        verdictColor: getVerdictColor('safe'),
-        verdictLabel: 'TRUSTED',
-        affectedMembers: baseInfo.affectedMembers,
-        aiAdjusted: true,
-        aiConflict: false,
-      };
-    }
-
-    if (!aiVerdictRecord || !baseInfo.verdict) return { ...baseInfo, aiAdjusted: false, aiConflict: false };
-
-    const ruleLevel = baseInfo.verdict.level;
-    const aiLevel = aiVerdictRecord.aiVerdict;
-
-    console.log('[ProductDetail] AI verdict adjustment - rule:', ruleLevel, 'ai:', aiLevel, 'conflict:', aiVerdictRecord.hasConflict);
-
-    const hasApiAllergenTagMatch = baseInfo.verdict.matches.some(
-      m => m.source === 'allergens_tags'
-    );
-    const hasOnlyIngredientTextMatch = baseInfo.verdict.matches.length > 0 &&
-      baseInfo.verdict.matches.every(m => m.source === 'ingredients' || m.source === 'traces_tags');
-
-    if (aiLevel === 'safe' && ruleLevel === 'safe') {
-      return {
-        ...baseInfo,
-        verdictLabel: 'AI-VERIFIED SAFE',
-        aiAdjusted: true,
-        aiConflict: false,
-      };
-    }
-
-    if (aiLevel === 'safe' && ruleLevel !== 'safe') {
-      if (hasApiAllergenTagMatch && aiVerdictRecord.aiConfidence !== 'high') {
-        return {
-          ...baseInfo,
-          aiAdjusted: false,
-          aiConflict: true,
-        };
-      }
-
-      return {
-        verdict: {
-          ...baseInfo.verdict,
-          level: 'safe' as const,
-          message: hasOnlyIngredientTextMatch
-            ? `AI analysis confirms safe — preliminary match was a false positive. Original: ${baseInfo.verdict.message}`
-            : baseInfo.verdict.missingData
-              ? 'AI analysis found no allergen risks for your profile.'
-              : `AI analysis confirms this product appears safe. Original: ${baseInfo.verdict.message}`,
-        },
-        verdictColor: getVerdictColor('safe'),
-        verdictLabel: 'AI-VERIFIED SAFE',
-        affectedMembers: baseInfo.affectedMembers,
-        aiAdjusted: true,
-        aiConflict: false,
-      };
-    }
-
-    if (aiLevel === 'danger' && ruleLevel === 'safe') {
-      return {
-        verdict: {
-          ...baseInfo.verdict,
-          level: 'caution' as const,
-          message: `AI analysis detected potential risks not caught by rule-based check. ${baseInfo.verdict.message}`,
-        },
-        verdictColor: getVerdictColor('caution'),
-        verdictLabel: 'AI: CAUTION',
-        affectedMembers: baseInfo.affectedMembers,
-        aiAdjusted: true,
-        aiConflict: false,
-      };
-    }
-
-    if (aiLevel === 'caution' && ruleLevel === 'safe') {
-      return {
-        verdict: {
-          ...baseInfo.verdict,
-          level: 'caution' as const,
-          message: `AI analysis suggests caution. ${baseInfo.verdict.message}`,
-        },
-        verdictColor: getVerdictColor('caution'),
-        verdictLabel: 'AI: CAUTION',
-        affectedMembers: baseInfo.affectedMembers,
-        aiAdjusted: true,
-        aiConflict: false,
-      };
-    }
-
-    if (aiLevel === ruleLevel) {
-      return { ...baseInfo, aiAdjusted: true, aiConflict: false };
-    }
-
-    return { ...baseInfo, aiAdjusted: false, aiConflict: false };
-  };
-
-  const { verdict, verdictColor, verdictLabel, affectedMembers, aiAdjusted, aiConflict } = getAiAdjustedVerdictInfo();
+  const { verdict, verdictColor, verdictLabel, affectedMembers, aiAdjusted, aiConflict } = getUnifiedVerdictInfo();
   
   const VerdictIcon = verdict?.level === 'safe' ? CheckCircle : verdict?.level === 'caution' ? AlertTriangle : verdict?.level === 'unknown' ? HelpCircle : AlertCircle;
 
@@ -636,7 +546,8 @@ export default function ProductDetailsScreen() {
     ? calculateHouseholdVerdict(product, getFamilyMembers(profiles))
     : null;
 
-  const confidence = product ? calculateConfidence(product) : null;
+  const unifiedResult = (activeProfile && product) ? runUnifiedEvaluation(product, activeProfile, aiVerdictRecord, trustedProduct) : null;
+  const confidence = unifiedResult ? unifiedResult.confidence : null;
   
   const handleToggleFavorite = async () => {
     if (!activeProfile) return;
@@ -888,7 +799,8 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
         </View>
 
         {aiVerdictRecord && verdict && (() => {
-          const ruleLevel = getVerdictInfo().verdict?.level;
+          const engineResult = activeProfile ? evaluateProduct(product, activeProfile) : null;
+          const ruleLevel = engineResult ? evalVerdictToLegacyLevel(engineResult.verdict) : null;
           const aiLevel = aiVerdictRecord.aiVerdict;
           const hasMismatch = ruleLevel !== aiLevel;
 

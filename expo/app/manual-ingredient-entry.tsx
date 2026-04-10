@@ -14,7 +14,9 @@ import { useRouter, useLocalSearchParams, Stack, Href } from 'expo-router';
 import { AlertCircle, Save, Upload, Camera } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
-import { calculateVerdict, getVerdictLabel } from '@/utils/verdict';
+import { getVerdictLabel } from '@/utils/verdict';
+import { evaluateProduct } from '@/utils/evaluationEngine';
+import { engineToLegacyVerdict } from '@/utils/unifiedEvaluation';
 import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { ProductType } from '@/types';
@@ -170,7 +172,7 @@ If you cannot read the ingredients, respond with: CANNOT_READ`,
       console.log('[ManualEntry] Save result:', saveResult);
 
       if (currentUser?.id && activeProfile) {
-        const verdict = calculateVerdict(product, activeProfile);
+        const verdict = engineToLegacyVerdict(evaluateProduct(product, activeProfile));
         await recordScanEvent({
           user_id: currentUser.id,
           profile_id: activeProfile.id,
@@ -187,7 +189,7 @@ If you cannot read the ingredients, respond with: CANNOT_READ`,
       }
 
       if (activeProfile && ingredients.trim()) {
-        const verdict = calculateVerdict(product, activeProfile);
+        const verdict = engineToLegacyVerdict(evaluateProduct(product, activeProfile));
 
         Alert.alert(
           'Product Saved!',
@@ -244,7 +246,7 @@ If you cannot read the ingredients, respond with: CANNOT_READ`,
       source: 'manual_entry' as const,
     };
 
-    const verdict = calculateVerdict(mockProduct, activeProfile);
+    const verdict = engineToLegacyVerdict(evaluateProduct(mockProduct, activeProfile));
     const label = getVerdictLabel(verdict.level);
 
     if (Platform.OS !== 'web') {

@@ -20,7 +20,9 @@ import { useFamily } from '@/contexts/FamilyContext';
 import { ViewModeToggle } from '@/components/ViewModeToggle';
 import { getShoppingList, addToShoppingList, updateShoppingListItem, removeFromShoppingList, clearCheckedItems, ShoppingListItem } from '@/storage/shoppingList';
 import { searchProductByBarcode } from '@/api/products';
-import { calculateVerdict, getVerdictColor } from '@/utils/verdict';
+import { getVerdictColor } from '@/utils/verdict';
+import { evaluateProduct } from '@/utils/evaluationEngine';
+import { engineToLegacyVerdict } from '@/utils/unifiedEvaluation';
 import * as Haptics from 'expo-haptics';
 
 export default function ShoppingListScreen() {
@@ -172,7 +174,7 @@ export default function ShoppingListScreen() {
       const affectedMembers: string[] = [];
 
       familyMembers.forEach(member => {
-        const verdict = calculateVerdict(item.product!, member);
+        const verdict = engineToLegacyVerdict(evaluateProduct(item.product!, member));
         if (verdict.level === 'danger') {
           worstLevel = 'danger';
           affectedMembers.push(member.name);
@@ -201,7 +203,7 @@ export default function ShoppingListScreen() {
 
     if (!activeProfile) return null;
 
-    const verdict = calculateVerdict(item.product, activeProfile);
+    const verdict = engineToLegacyVerdict(evaluateProduct(item.product, activeProfile));
     const color = getVerdictColor(verdict.level);
     
     const Icon = verdict.level === 'safe' ? CheckCircle : verdict.level === 'caution' ? AlertTriangle : AlertCircle;

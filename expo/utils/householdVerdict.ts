@@ -1,5 +1,6 @@
 import { Product, Profile, VerdictLevel, HouseholdMemberVerdict, HouseholdVerdict } from '@/types';
-import { calculateVerdict } from './verdict';
+import { evaluateProduct } from './evaluationEngine';
+import { engineToLegacyVerdict } from './unifiedEvaluation';
 
 export function calculateHouseholdVerdict(
   product: Product,
@@ -16,7 +17,9 @@ export function calculateHouseholdVerdict(
   }
 
   const memberVerdicts: HouseholdMemberVerdict[] = members.map(member => {
-    const verdict = calculateVerdict(product, member);
+    const evalResult = evaluateProduct(product, member);
+    const verdict = engineToLegacyVerdict(evalResult);
+    console.log(`[HouseholdVerdict] ${member.name}: ${verdict.level} (${evalResult.matchedConcerns.length} concerns)`);
     return {
       profileId: member.id,
       profileName: member.name,

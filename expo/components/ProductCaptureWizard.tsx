@@ -40,7 +40,8 @@ import { addToShoppingList } from '@/storage/shoppingList';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { useQueryClient } from '@tanstack/react-query';
-import { calculateVerdict } from '@/utils/verdict';
+import { evaluateProduct } from '@/utils/evaluationEngine';
+import { engineToLegacyVerdict } from '@/utils/unifiedEvaluation';
 import { guessProductType, getProductTypeLabel, getProductTypeColor } from '@/utils/productType';
 import { addToScanHistory } from '@/storage/scanHistory';
 import { cacheProduct } from '@/storage/productCache';
@@ -410,7 +411,7 @@ Format response exactly as above, one per line.`;
       resetBarcodeDebounce();
 
       if (currentUser?.id && activeProfile) {
-        const verdict = calculateVerdict(product, activeProfile);
+        const verdict = engineToLegacyVerdict(evaluateProduct(product, activeProfile));
         const [, scanResult] = await Promise.all([
           addToScanHistory({
             id: `${productCode}_${activeProfile.id}_${Date.now()}`,

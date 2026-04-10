@@ -41,11 +41,14 @@ import {
   evalVerdictToLegacyLevel,
   MatchedConcern,
 } from '@/utils/evaluationEngine';
+import { runUnifiedEvaluation } from '@/utils/unifiedEvaluation';
 import { addToFavorites, removeFromFavorites, isFavorite, getFavorites } from '@/storage/favorites';
 import { addToAvoidList, isOnAvoidList, removeFromAvoidList, getAvoidList } from '@/storage/avoidList';
 import { arcaneColors } from '@/constants/theme';
 import { addToScanHistory } from '@/storage/scanHistory';
 import { searchProductByBarcode } from '@/api/products';
+import { getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
+import { getTrustedProduct, TrustedProduct } from '@/storage/trustedProducts';
 
 type IssueType = 'allergy' | 'sensitivity' | 'eczema';
 
@@ -140,6 +143,9 @@ export default function ResultScreen() {
   const [isFav, setIsFav] = useState(false);
   const [isAvoided, setIsAvoided] = useState(false);
   const [showConfidenceDetails, setShowConfidenceDetails] = useState(false);
+  const [aiVerdictRecord, setAiVerdictRecord] = useState<AIVerdictRecord | null>(null);
+  const [trustedProduct, setTrustedProduct] = useState<TrustedProduct | null>(null);
+  const [verdictLabel, setVerdictLabel] = useState<string>('');
 
   const verdictScale = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
@@ -161,64 +167,30 @@ export default function ResultScreen() {
 
         setProduct(productData);
 
-        const result = evaluateProduct(productData, activeProfile);
-        setEvalResult(result);
+        const [storedAiVerdict, storedTrusted] = await Promise.all([
+          getAIVerdict(code, activeProfile.id, currentUser?.id),
+          getTrustedProduct(code, activeProfile.id, currentUser?.id),
+        ]);
 
-        const legacyLevel = evalVerdictToLegacyLevel(result.verdict);
-        const v: Verdict = {
-          level: legacyLevel,
-          matches: result.matchedConcerns
-            .filter(c => c.concernType === 'allergy')
-            .map(c => ({
-              allergen: c.profileAllergen,
-              source: c.source === 'allergen_tag' ? 'allergens_tags' as const
-                : c.source === 'traces_tag' ? 'traces_tags' as const
-                : c.source === 'ingredient_text' ? 'ingredients' as const
-                : 'custom_keyword' as const,
-              matchedText: c.matchedText,
-            })),
-          eczemaTriggers: result.matchedConcerns
-            .filter(c => c.concernType === 'eczema')
-            .map(c => ({
-              triggerName: c.ingredient,
-              triggerGroup: c.profileAllergen,
-              matchedText: c.matchedText,
-              severityHint: c.severityHint === 'critical' ? 'high' as const
-                : c.severityHint === 'low' ? 'low' as const
-                : c.severityHint === 'high' ? 'high' as const
-                : 'medium' as const,
-            })),
-          message: result.explanationSummary,
-          missingData: result.verdict === 'Unknown',
-          explanation: result.explanationSummary,
-        };
-        setVerdict(v);
+        if (storedAiVerdict) {
+          console.log('[Result] Found stored AI verdict:', storedAiVerdict.aiVerdict);
+          setAiVerdictRecord(storedAiVerdict);
+        }
+        if (storedTrusted) {
+          console.log('[Result] Product is trusted for this profile');
+          setTrustedProduct(storedTrusted);
+        }
 
-        const confidenceColor = result.confidenceScore >= 65 ? '#059669'
-          : result.confidenceScore >= 50 ? '#10B981'
-          : result.confidenceScore >= 35 ? '#D97706'
-          : result.confidenceScore >= 20 ? '#F59E0B'
-          : '#DC2626';
-        const confidenceLabel: ConfidenceBreakdown['label'] = result.confidenceScore >= 85 ? 'Very High'
-          : result.confidenceScore >= 70 ? 'High'
-          : result.confidenceScore >= 50 ? 'Moderate'
-          : result.confidenceScore >= 30 ? 'Low'
-          : 'Very Low';
-        const c: ConfidenceBreakdown = {
-          score: result.confidenceScore,
-          label: confidenceLabel,
-          color: confidenceColor,
-          factors: result.confidenceReasons.map(r => ({
-            name: r.factor,
-            present: r.impact === 'positive',
-            weight: 10,
-            description: r.detail,
-          })),
-        };
-        setConfidence(c);
+        const unified = runUnifiedEvaluation(productData, activeProfile, storedAiVerdict, storedTrusted);
+        unified.debugLog.forEach(l => console.log(l));
 
-        console.log('[Result] EvalEngine verdict:', result.verdict, '| Confidence:', result.confidence, result.confidenceScore);
-        console.log('[Result] Concerns:', result.matchedConcerns.length, '| Advisories:', result.advisoryMatches.length);
+        setEvalResult(unified.evalResult);
+        setVerdict(unified.verdict);
+        setVerdictLabel(unified.verdictLabel);
+        setConfidence(unified.confidence);
+
+        console.log('[Result] Unified verdict:', unified.verdict.level, '| Source:', unified.verdictSource);
+        console.log('[Result] Confidence:', unified.confidence.score, unified.confidence.label);
 
         const [favStatus, avoidStatus] = await Promise.all([
           isFavorite(code, activeProfile.id, currentUser?.id),
@@ -230,15 +202,15 @@ export default function ResultScreen() {
         await addToScanHistory({
           id: `${code}_${activeProfile.id}_${Date.now()}`,
           product: productData,
-          verdict: v,
+          verdict: unified.verdict,
           profileId: activeProfile.id,
           profileName: activeProfile.name,
           scannedAt: new Date().toISOString(),
         }, currentUser?.id);
 
-        if (v.level === 'danger' && Platform.OS !== 'web') {
+        if (unified.verdict.level === 'danger' && Platform.OS !== 'web') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        } else if (v.level === 'caution' && Platform.OS !== 'web') {
+        } else if (unified.verdict.level === 'caution' && Platform.OS !== 'web') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
         }
 
