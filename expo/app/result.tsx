@@ -34,8 +34,13 @@ import * as Haptics from 'expo-haptics';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { Product, Verdict, VerdictLevel, ConfidenceBreakdown } from '@/types';
-import { calculateVerdict, getVerdictColor } from '@/utils/verdict';
-import { calculateConfidence } from '@/utils/confidenceScore';
+import { getVerdictColor } from '@/utils/verdict';
+import {
+  evaluateProduct,
+  EvaluationResult,
+  evalVerdictToLegacyLevel,
+  MatchedConcern,
+} from '@/utils/evaluationEngine';
 import { addToFavorites, removeFromFavorites, isFavorite, getFavorites } from '@/storage/favorites';
 import { addToAvoidList, isOnAvoidList, removeFromAvoidList, getAvoidList } from '@/storage/avoidList';
 import { arcaneColors } from '@/constants/theme';
@@ -130,6 +135,7 @@ export default function ResultScreen() {
 
   const [product, setProduct] = useState<Product | null>(null);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [evalResult, setEvalResult] = useState<EvaluationResult | null>(null);
   const [confidence, setConfidence] = useState<ConfidenceBreakdown | null>(null);
   const [isFav, setIsFav] = useState(false);
   const [isAvoided, setIsAvoided] = useState(false);
@@ -155,11 +161,64 @@ export default function ResultScreen() {
 
         setProduct(productData);
 
-        const v = calculateVerdict(productData, activeProfile);
+        const result = evaluateProduct(productData, activeProfile);
+        setEvalResult(result);
+
+        const legacyLevel = evalVerdictToLegacyLevel(result.verdict);
+        const v: Verdict = {
+          level: legacyLevel,
+          matches: result.matchedConcerns
+            .filter(c => c.concernType === 'allergy')
+            .map(c => ({
+              allergen: c.profileAllergen,
+              source: c.source === 'allergen_tag' ? 'allergens_tags' as const
+                : c.source === 'traces_tag' ? 'traces_tags' as const
+                : c.source === 'ingredient_text' ? 'ingredients' as const
+                : 'custom_keyword' as const,
+              matchedText: c.matchedText,
+            })),
+          eczemaTriggers: result.matchedConcerns
+            .filter(c => c.concernType === 'eczema')
+            .map(c => ({
+              triggerName: c.ingredient,
+              triggerGroup: c.profileAllergen,
+              matchedText: c.matchedText,
+              severityHint: c.severityHint === 'critical' ? 'high' as const
+                : c.severityHint === 'low' ? 'low' as const
+                : c.severityHint === 'high' ? 'high' as const
+                : 'medium' as const,
+            })),
+          message: result.explanationSummary,
+          missingData: result.verdict === 'Unknown',
+          explanation: result.explanationSummary,
+        };
         setVerdict(v);
 
-        const c = calculateConfidence(productData);
+        const confidenceColor = result.confidenceScore >= 65 ? '#059669'
+          : result.confidenceScore >= 50 ? '#10B981'
+          : result.confidenceScore >= 35 ? '#D97706'
+          : result.confidenceScore >= 20 ? '#F59E0B'
+          : '#DC2626';
+        const confidenceLabel: ConfidenceBreakdown['label'] = result.confidenceScore >= 85 ? 'Very High'
+          : result.confidenceScore >= 70 ? 'High'
+          : result.confidenceScore >= 50 ? 'Moderate'
+          : result.confidenceScore >= 30 ? 'Low'
+          : 'Very Low';
+        const c: ConfidenceBreakdown = {
+          score: result.confidenceScore,
+          label: confidenceLabel,
+          color: confidenceColor,
+          factors: result.confidenceReasons.map(r => ({
+            name: r.factor,
+            present: r.impact === 'positive',
+            weight: 10,
+            description: r.detail,
+          })),
+        };
         setConfidence(c);
+
+        console.log('[Result] EvalEngine verdict:', result.verdict, '| Confidence:', result.confidence, result.confidenceScore);
+        console.log('[Result] Concerns:', result.matchedConcerns.length, '| Advisories:', result.advisoryMatches.length);
 
         const [favStatus, avoidStatus] = await Promise.all([
           isFavorite(code, activeProfile.id, currentUser?.id),
@@ -212,10 +271,55 @@ export default function ResultScreen() {
   }, [code, activeProfile, currentUser?.id, verdictScale, fadeIn, slideUp]);
 
   const triggers = useMemo<TriggerDetail[]>(() => {
-    if (!verdict || !activeProfile) return [];
+    if (!activeProfile) return [];
+
+    if (evalResult) {
+      const details: TriggerDetail[] = [];
+      for (const concern of evalResult.matchedConcerns) {
+        let issueType: IssueType;
+        let source: string;
+        switch (concern.concernType) {
+          case 'allergy':
+            issueType = 'allergy';
+            source = concern.source === 'allergen_tag' ? 'Listed allergen'
+              : concern.source === 'traces_tag' ? 'Trace warning'
+              : concern.source === 'ingredient_text' ? 'Found in ingredients'
+              : concern.source === 'custom_keyword' ? 'Custom keyword'
+              : 'Detected';
+            break;
+          case 'sensitivity':
+            issueType = 'sensitivity';
+            source = concern.source === 'food_sensitivity' ? 'Food sensitivity'
+              : concern.notes || 'Sensitivity concern';
+            break;
+          case 'eczema':
+            issueType = 'eczema';
+            source = `Eczema trigger (${concern.profileAllergen})`;
+            break;
+        }
+        details.push({
+          ingredient: concern.matchedText || concern.ingredient,
+          issueType,
+          source,
+          profileName: activeProfile.name,
+        });
+      }
+
+      for (const advisory of evalResult.advisoryMatches) {
+        details.push({
+          ingredient: advisory.allergen,
+          issueType: advisory.affectsSevereAllergen ? 'allergy' : 'sensitivity',
+          source: advisory.type === 'facility_warning' ? 'Facility risk' : 'May contain warning',
+          profileName: activeProfile.name,
+        });
+      }
+
+      return details;
+    }
+
+    if (!verdict) return [];
 
     const details: TriggerDetail[] = [];
-
     for (const match of verdict.matches) {
       let issueType: IssueType = 'allergy';
       if (match.source === 'traces_tags') {
@@ -244,14 +348,19 @@ export default function ResultScreen() {
     }
 
     return details;
-  }, [verdict, activeProfile]);
+  }, [evalResult, verdict, activeProfile]);
 
   const confidenceReasons = useMemo<string[]>(() => {
+    if (evalResult) {
+      return evalResult.confidenceReasons
+        .filter(r => r.impact === 'negative')
+        .map(r => r.detail);
+    }
     if (!confidence) return [];
     return confidence.factors
       .filter(f => !f.present)
       .map(f => f.description);
-  }, [confidence]);
+  }, [evalResult, confidence]);
 
   const handleToggleFavorite = useCallback(async () => {
     if (!activeProfile || !product) return;
