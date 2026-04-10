@@ -11,6 +11,9 @@ import {
   getActiveEczemaTriggerGroups,
   getActiveSensitivities,
   getHealthItemForName,
+  clearSkippedResolved,
+  getLastSkippedResolved,
+  ResolvedSkipInfo,
 } from '@/utils/profileHealthItems';
 
 export type EvalVerdict = 'Safe' | 'Caution' | 'Avoid' | 'Unknown';
@@ -496,16 +499,22 @@ export function generateExplanation(
   confidence: EvalConfidence,
   confidenceReasons: ConfidenceReason[],
   profileName: string,
+  skippedResolved?: ResolvedSkipInfo[],
 ): { summary: string; details: string[] } {
   const details: string[] = [];
+  const resolved = skippedResolved ?? [];
 
   if (verdict === 'Unknown') {
+    const resolvedNotes = resolved.length > 0
+      ? [`Note: ${resolved.length} resolved item(s) were excluded from evaluation: ${resolved.map(r => `${r.name} (${r.category === 'allergy' ? 'allergy' : r.category === 'eczema_trigger' ? 'eczema trigger' : 'sensitivity'})`).join(', ')}.`]
+      : [];
     return {
       summary: `Cannot determine safety for ${profileName}. Ingredient data is missing or too incomplete to evaluate.`,
       details: [
         'This product has no ingredient information in any database.',
         'Read the physical label or contact the manufacturer for ingredient details.',
         ...confidenceReasons.filter(r => r.impact === 'negative').map(r => r.detail),
+        ...resolvedNotes,
       ],
     };
   }
@@ -515,12 +524,19 @@ export function generateExplanation(
     const caveat = negativeFactors.length > 0
       ? ` However, confidence is ${confidence} due to: ${negativeFactors.map(r => r.detail.toLowerCase()).join('; ')}.`
       : '';
+    const resolvedNote = resolved.length > 0
+      ? ` (${resolved.length} resolved item(s) excluded from check)`
+      : '';
     return {
-      summary: `No known concerns found for ${profileName}.${caveat}`,
+      summary: `No known concerns found for ${profileName}.${caveat}${resolvedNote}`,
       details: [
-        'All available ingredient data was checked against the profile.',
-        'No allergen, sensitivity, or eczema trigger matches found.',
+        'All available ingredient data was checked against active profile items only.',
+        'No active allergen, sensitivity, or eczema trigger matches found.',
         ...negativeFactors.map(r => `Note: ${r.detail}`),
+        ...resolved.map(r => {
+          const catLabel = r.category === 'allergy' ? 'Allergy' : r.category === 'eczema_trigger' ? 'Eczema trigger' : 'Sensitivity';
+          return `Resolved: "${r.name}" (${catLabel}) — excluded from active evaluation`;
+        }),
       ],
     };
   }
@@ -533,10 +549,10 @@ export function generateExplanation(
 
   if (allergyConcerns.length > 0) {
     const allergenNames = Array.from(new Set(allergyConcerns.map(c => c.profileAllergen)));
-    parts.push(`Contains ${allergenNames.join(', ')}`);
+    parts.push(`Allergy concern: contains ${allergenNames.join(', ')}`);
 
     for (const c of allergyConcerns) {
-      let detail = `"${c.matchedText}" matched your "${c.profileAllergen}" allergen`;
+      let detail = `[Allergy] "${c.matchedText}" matched your "${c.profileAllergen}" allergen`;
       if (c.source === 'allergen_tag') {
         detail += ' (listed allergen)';
       } else if (c.source === 'ingredient_text') {
@@ -553,10 +569,10 @@ export function generateExplanation(
 
   if (eczemaConcerns.length > 0) {
     const triggerNames = Array.from(new Set(eczemaConcerns.map(c => c.ingredient)));
-    parts.push(`Contains eczema triggers: ${triggerNames.join(', ')}`);
+    parts.push(`Eczema-trigger concern: ${triggerNames.join(', ')}`);
 
     for (const c of eczemaConcerns) {
-      let detail = `Eczema trigger "${c.ingredient}" detected (${c.profileAllergen} group)`;
+      let detail = `[Eczema trigger] "${c.ingredient}" detected (${c.profileAllergen} group) — may irritate skin, not a food allergy`;
       if (c.notes) {
         detail += `. ${c.notes}`;
       }
@@ -566,10 +582,10 @@ export function generateExplanation(
 
   if (sensitivityConcerns.length > 0) {
     const sensitivityNames = Array.from(new Set(sensitivityConcerns.map(c => c.ingredient)));
-    parts.push(`Contains sensitivities: ${sensitivityNames.join(', ')}`);
+    parts.push(`Sensitivity concern: ${sensitivityNames.join(', ')}`);
 
     for (const c of sensitivityConcerns) {
-      details.push(`Sensitivity concern: "${c.matchedText}" (${c.profileAllergen})`);
+      details.push(`[Sensitivity] "${c.matchedText}" (${c.profileAllergen}) — may cause discomfort, not a direct allergy`);
     }
   }
 
@@ -580,6 +596,13 @@ export function generateExplanation(
     for (const a of advisories) {
       const label = a.type === 'facility_warning' ? 'Facility risk' : 'May contain';
       details.push(`${label}: ${a.rawText}${a.affectsSevereAllergen ? ' (severe allergen — extra caution)' : ''}`);
+    }
+  }
+
+  if (resolved.length > 0) {
+    for (const r of resolved) {
+      const catLabel = r.category === 'allergy' ? 'Allergy' : r.category === 'eczema_trigger' ? 'Eczema trigger' : 'Sensitivity';
+      details.push(`Resolved: "${r.name}" (${catLabel}) — not checked, marked as resolved/outgrown`);
     }
   }
 
@@ -594,6 +617,7 @@ function evaluateForProfile(
 ): ProfileImpact {
   console.log(`\n[EvalEngine] ===== Evaluating for profile: ${profile.name} =====`);
 
+  clearSkippedResolved();
   const activeAllergens = getActiveAllergens(profile);
   console.log(`[EvalEngine] Active allergens (after filtering resolved): ${activeAllergens.join(', ')}`);
 
@@ -605,6 +629,7 @@ function evaluateForProfile(
   );
 
   const sensitivityConcerns = detectEczemaAndSensitivityConcerns(product, profile);
+  const skippedResolved = [...getLastSkippedResolved()];
 
   const allConcerns = [...allergyConcerns, ...sensitivityConcerns];
 
@@ -631,7 +656,12 @@ function evaluateForProfile(
     confidence,
     reasons,
     profile.name,
+    skippedResolved,
   );
+
+  if (skippedResolved.length > 0) {
+    console.log(`[EvalEngine] Skipped ${skippedResolved.length} resolved item(s): ${skippedResolved.map(r => r.name).join(', ')}`);
+  }
 
   return {
     profileId: profile.id,
@@ -658,11 +688,12 @@ export function evaluateProduct(
   profile: Profile,
 ): EvaluationResult {
   console.log('\n╔══════════════════════════════════════════════════╗');
-  console.log('║       SAFEBITE EVALUATION ENGINE v3             ║');
+  console.log('║       SAFEBITE EVALUATION ENGINE v4             ║');
   console.log('╚══════════════════════════════════════════════════╝');
   console.log(`Product: ${product.product_name ?? product.code}`);
   console.log(`Profile: ${profile.name}`);
 
+  clearSkippedResolved();
   const activeAllergens = getActiveAllergens(profile);
   console.log(`[EvalEngine] Active allergens (after filtering resolved): ${activeAllergens.join(', ')}`);
 
@@ -674,6 +705,7 @@ export function evaluateProduct(
   );
 
   const sensitivityConcerns = detectEczemaAndSensitivityConcerns(product, profile);
+  const skippedResolved = [...getLastSkippedResolved()];
   const allConcerns = [...allergyConcerns, ...sensitivityConcerns];
 
   const hasAnyData = !!(
@@ -699,7 +731,12 @@ export function evaluateProduct(
     confidence,
     reasons,
     profile.name,
+    skippedResolved,
   );
+
+  if (skippedResolved.length > 0) {
+    console.log(`[EvalEngine] Skipped ${skippedResolved.length} resolved item(s): ${skippedResolved.map(r => r.name).join(', ')}`);
+  }
 
   console.log(`[EvalEngine] FINAL VERDICT: ${verdict} | Confidence: ${confidence} (${score}/100)`);
   console.log(`[EvalEngine] Concerns: ${allConcerns.length} | Advisories: ${advisories.length}`);

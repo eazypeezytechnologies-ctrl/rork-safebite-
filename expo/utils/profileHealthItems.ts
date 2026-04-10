@@ -1,5 +1,21 @@
 import { Profile, ProfileHealthItem, HealthItemStatus, HealthItemCategory, SuggestedProfileChange } from '@/types';
 
+export interface ResolvedSkipInfo {
+  name: string;
+  category: HealthItemCategory;
+  resolvedAt?: string;
+}
+
+let _lastSkippedResolved: ResolvedSkipInfo[] = [];
+
+export function getLastSkippedResolved(): ResolvedSkipInfo[] {
+  return _lastSkippedResolved;
+}
+
+export function clearSkippedResolved(): void {
+  _lastSkippedResolved = [];
+}
+
 export function getActiveAllergens(profile: Profile): string[] {
   const healthItems = profile.healthItems ?? [];
   const allergenItems = healthItems.filter(
@@ -10,16 +26,18 @@ export function getActiveAllergens(profile: Profile): string[] {
     return profile.allergens;
   }
 
-  const activeNames = new Set(allergenItems.map(h => h.name));
-  const resolvedNames = new Set(
-    healthItems
-      .filter(h => h.category === 'allergy' && h.status === 'resolved')
-      .map(h => h.name),
-  );
+  const resolvedItems = healthItems.filter(h => h.category === 'allergy' && h.status === 'resolved');
+  const resolvedNames = new Set(resolvedItems.map(h => h.name));
 
   const result = profile.allergens.filter(a => {
     if (resolvedNames.has(a)) {
+      const item = resolvedItems.find(h => h.name === a);
       console.log(`[ProfileHealth] Skipping resolved allergen: ${a}`);
+      _lastSkippedResolved.push({
+        name: a,
+        category: 'allergy',
+        resolvedAt: item?.lastReviewedAt,
+      });
       return false;
     }
     return true;
@@ -44,13 +62,22 @@ export function getActiveEczemaTriggerGroups(profile: Profile): string[] {
     return profile.eczemaTriggerGroups ?? [];
   }
 
-  const resolvedNames = new Set(
-    healthItems
-      .filter(h => h.category === 'eczema_trigger' && h.status === 'resolved')
-      .map(h => h.name),
-  );
+  const resolvedItems = healthItems.filter(h => h.category === 'eczema_trigger' && h.status === 'resolved');
+  const resolvedNames = new Set(resolvedItems.map(h => h.name));
 
-  const groups = (profile.eczemaTriggerGroups ?? []).filter(g => !resolvedNames.has(g));
+  const groups = (profile.eczemaTriggerGroups ?? []).filter(g => {
+    if (resolvedNames.has(g)) {
+      const item = resolvedItems.find(h => h.name === g);
+      console.log(`[ProfileHealth] Skipping resolved eczema trigger: ${g}`);
+      _lastSkippedResolved.push({
+        name: g,
+        category: 'eczema_trigger',
+        resolvedAt: item?.lastReviewedAt,
+      });
+      return false;
+    }
+    return true;
+  });
 
   for (const item of eczemaItems) {
     if (!groups.includes(item.name)) {
@@ -71,13 +98,22 @@ export function getActiveSensitivities(profile: Profile): string[] {
     return profile.avoidIngredients ?? [];
   }
 
-  const resolvedNames = new Set(
-    healthItems
-      .filter(h => h.category === 'sensitivity' && h.status === 'resolved')
-      .map(h => h.name),
-  );
+  const resolvedItems = healthItems.filter(h => h.category === 'sensitivity' && h.status === 'resolved');
+  const resolvedNames = new Set(resolvedItems.map(h => h.name));
 
-  const result = (profile.avoidIngredients ?? []).filter(i => !resolvedNames.has(i));
+  const result = (profile.avoidIngredients ?? []).filter(i => {
+    if (resolvedNames.has(i)) {
+      const item = resolvedItems.find(h => h.name === i);
+      console.log(`[ProfileHealth] Skipping resolved sensitivity: ${i}`);
+      _lastSkippedResolved.push({
+        name: i,
+        category: 'sensitivity',
+        resolvedAt: item?.lastReviewedAt,
+      });
+      return false;
+    }
+    return true;
+  });
 
   for (const item of sensitivityItems) {
     if (!result.includes(item.name)) {

@@ -62,9 +62,17 @@ interface TriggerDetail {
 
 function getIssueTypeLabel(type: IssueType): string {
   switch (type) {
-    case 'allergy': return 'Allergy';
+    case 'allergy': return 'Allergy Concern';
     case 'sensitivity': return 'Sensitivity';
     case 'eczema': return 'Eczema Trigger';
+  }
+}
+
+function getIssueTypeDescription(type: IssueType): string {
+  switch (type) {
+    case 'allergy': return 'Direct allergen match — may cause allergic reaction';
+    case 'sensitivity': return 'Sensitivity concern — may cause discomfort';
+    case 'eczema': return 'Eczema trigger — may irritate skin, not a food allergy';
   }
 }
 
@@ -560,6 +568,7 @@ export default function ResultScreen() {
                           </View>
                           <Text style={styles.triggerSource}>{trigger.source}</Text>
                         </View>
+                        <Text style={styles.triggerDescription}>{getIssueTypeDescription(trigger.issueType)}</Text>
                         <Text style={styles.triggerProfile}>Affects: {trigger.profileName}</Text>
                       </View>
                     </View>
@@ -862,6 +871,13 @@ const styles = StyleSheet.create({
   triggerSource: {
     fontSize: 12,
     color: arcaneColors.textMuted,
+  },
+  triggerDescription: {
+    fontSize: 12,
+    color: arcaneColors.textSecondary,
+    fontStyle: 'italic' as const,
+    marginTop: 2,
+    lineHeight: 17,
   },
   triggerProfile: {
     fontSize: 12,
