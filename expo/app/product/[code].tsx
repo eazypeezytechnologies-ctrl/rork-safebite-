@@ -25,7 +25,7 @@ import { getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
 import { useUser } from '@/contexts/UserContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
-import { addToFavorites, removeFromFavorites, isFavorite } from '@/storage/favorites';
+import { addToFavorites, removeFromFavorites, isFavorite, getFavorites } from '@/storage/favorites';
 import { getTrustedProduct, markProductTrusted, removeTrustedProduct, TrustedProduct } from '@/storage/trustedProducts';
 import { resetBarcodeDebounce } from '@/api/products';
 import * as Haptics from 'expo-haptics';
@@ -41,7 +41,7 @@ import { DietaryCompatibilityCard } from '@/components/DietaryCompatibilityCard'
 import { DietaryRestrictionVerdictCard } from '@/components/DietaryRestrictionVerdictCard';
 import { ConfidenceScoreBar } from '@/components/ConfidenceScoreBar';
 import { ManufacturerWarningsCard } from '@/components/ManufacturerWarningsCard';
-import { addToAvoidList, isOnAvoidList, removeFromAvoidList } from '@/storage/avoidList';
+import { addToAvoidList, isOnAvoidList, removeFromAvoidList, getAvoidList } from '@/storage/avoidList';
 import { HouseholdVerdictCard } from '@/components/HouseholdVerdictCard';
 import { LegalDisclaimer } from '@/components/LegalDisclaimer';
 import { calculateHouseholdVerdict } from '@/utils/householdVerdict';
@@ -647,7 +647,7 @@ export default function ProductDetailsScreen() {
     
     try {
       if (isFav) {
-        const favorites = await import('@/storage/favorites').then(m => m.getFavorites());
+        const favorites = await getFavorites();
         const fav = favorites.find(f => f.product.code === code && f.profileId === activeProfile.id);
         if (fav) {
           await removeFromFavorites(fav.id);
@@ -677,7 +677,7 @@ export default function ProductDetailsScreen() {
 
     try {
       if (isAvoided) {
-        const avoidItems = await import('@/storage/avoidList').then(m => m.getAvoidList(currentUser?.id));
+        const avoidItems = await getAvoidList(currentUser?.id);
         const item = avoidItems.find(a => a.product.code === code && a.profileId === activeProfile.id);
         if (item) {
           await removeFromAvoidList(item.id, currentUser?.id);
