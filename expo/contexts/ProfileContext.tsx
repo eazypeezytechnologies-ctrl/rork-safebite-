@@ -30,6 +30,7 @@ const convertSupabaseProfileToProfile = (sp: SupabaseProfile): Profile => ({
   avoidIngredients: sp.avoid_ingredients || [],
   dietaryRestrictions: (sp.dietary_restrictions as Record<string, boolean> | undefined) || {},
   dietaryStrictness: (sp.dietary_strictness as Record<string, 'relaxed' | 'standard' | 'strict'> | undefined) || {},
+  healthItems: (sp.health_items as Profile['healthItems']) || [],
   createdAt: sp.created_at,
   updatedAt: sp.updated_at,
 });
@@ -50,6 +51,7 @@ const convertProfileToSupabaseProfile = (p: Partial<Profile>): Partial<Omit<Supa
   avoid_ingredients: p.avoidIngredients || [],
   dietary_restrictions: p.dietaryRestrictions || {},
   dietary_strictness: p.dietaryStrictness || {},
+  health_items: p.healthItems || [],
 });
 
 export const [ProfileProvider, useProfiles] = createContextHook(() => {

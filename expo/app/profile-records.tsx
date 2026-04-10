@@ -10,11 +10,11 @@ import {
   Image,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import { FileText, Upload, Trash2, Clock, Eye, ImageIcon } from 'lucide-react-native';
+import { FileText, Upload, Trash2, Clock, Eye, ImageIcon, ShieldAlert, Droplets, StickyNote } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useProfiles } from '@/contexts/ProfileContext';
-import { ProfileDocument } from '@/types';
+import { ProfileDocument, DocumentCategory } from '@/types';
 import { arcaneColors, arcaneRadius, arcaneShadows } from '@/constants/theme';
 import { RuneCard } from '@/components/RuneCard';
 
@@ -24,9 +24,29 @@ export default function ProfileRecordsScreen() {
   const profile = profiles.find(p => p.id === id);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
 
+  const [selectedCategory, setSelectedCategory] = useState<DocumentCategory>('general');
+
   const handleUpload = useCallback(async () => {
     const docs = profile?.profileDocuments || [];
+
+    const pickCategory = (): Promise<DocumentCategory> => {
+      return new Promise((resolve) => {
+        Alert.alert(
+          'Document Type',
+          'What kind of record is this?',
+          [
+            { text: 'Allergy Record', onPress: () => resolve('allergy') },
+            { text: 'Eczema Record', onPress: () => resolve('eczema') },
+            { text: 'General Notes', onPress: () => resolve('general') },
+          ],
+          { cancelable: false },
+        );
+      });
+    };
+
     try {
+      const category = await pickCategory();
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: false,
@@ -42,6 +62,8 @@ export default function ProfileRecordsScreen() {
           fileType: asset.mimeType || 'image/jpeg',
           fileUri: asset.uri,
           uploadedAt: new Date().toISOString(),
+          category,
+          pendingConfirmation: false,
         };
 
         const updatedDocs = [...docs, newDoc];
@@ -94,6 +116,9 @@ export default function ProfileRecordsScreen() {
   }, [profile, updateProfile]);
 
   const documents = profile?.profileDocuments || [];
+  const allergyDocs = documents.filter(d => d.category === 'allergy');
+  const eczemaDocs = documents.filter(d => d.category === 'eczema');
+  const generalDocs = documents.filter(d => !d.category || d.category === 'general');
 
   if (!profile) {
     return (
@@ -155,7 +180,11 @@ export default function ProfileRecordsScreen() {
                 <View key={doc.id} style={styles.recordCard}>
                   <View style={styles.recordContent}>
                     <View style={[styles.recordIconBg, isImage && styles.recordIconBgImage]}>
-                      {isImage ? (
+                      {doc.category === 'allergy' ? (
+                        <ShieldAlert size={20} color={arcaneColors.danger} />
+                      ) : doc.category === 'eczema' ? (
+                        <Droplets size={20} color={arcaneColors.caution} />
+                      ) : isImage ? (
                         <ImageIcon size={20} color={arcaneColors.accent} />
                       ) : (
                         <FileText size={20} color={arcaneColors.primary} />
@@ -163,13 +192,30 @@ export default function ProfileRecordsScreen() {
                     </View>
                     <View style={styles.recordInfo}>
                       <Text style={styles.recordName} numberOfLines={1}>{doc.fileName}</Text>
-                      <Text style={styles.recordDate}>
-                        {new Date(doc.uploadedAt).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </Text>
+                      <View style={styles.recordMeta}>
+                        <Text style={styles.recordDate}>
+                          {new Date(doc.uploadedAt).toLocaleDateString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </Text>
+                        {doc.category && (
+                          <View style={[
+                            styles.categoryBadge,
+                            doc.category === 'allergy' && styles.categoryBadgeAllergy,
+                            doc.category === 'eczema' && styles.categoryBadgeEczema,
+                          ]}>
+                            <Text style={[
+                              styles.categoryBadgeText,
+                              doc.category === 'allergy' && { color: arcaneColors.danger },
+                              doc.category === 'eczema' && { color: arcaneColors.caution },
+                            ]}>
+                              {doc.category === 'allergy' ? 'Allergy' : doc.category === 'eczema' ? 'Eczema' : 'General'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
                   </View>
 
@@ -446,5 +492,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: arcaneColors.text,
+  },
+  recordMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 3,
+  },
+  categoryBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: arcaneColors.bgMist,
+  },
+  categoryBadgeAllergy: {
+    backgroundColor: arcaneColors.dangerMuted,
+  },
+  categoryBadgeEczema: {
+    backgroundColor: arcaneColors.cautionMuted,
+  },
+  categoryBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: arcaneColors.textMuted,
+    textTransform: 'uppercase' as const,
   },
 });

@@ -4,6 +4,7 @@ import { useRouter, Href } from 'expo-router';
 import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus, AlertTriangle, Sparkles, FileText, Leaf } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
+import { getHealthItemSummary } from '@/utils/profileHealthItems';
 import { getRelationshipLabel, getRelationshipIcon } from '@/constants/profileColors';
 import { BUILD_ID } from '@/constants/appVersion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -226,7 +227,14 @@ export default function ProfilesScreen() {
                       )}
                     </View>
                     <Text style={styles.profileAllergens}>
-                      {profile.allergens.length} allergen{profile.allergens.length !== 1 ? 's' : ''}
+                      {(() => {
+                        const summary = getHealthItemSummary(profile);
+                        const parts: string[] = [];
+                        if (summary.activeAllergens > 0) parts.push(`${summary.activeAllergens} active allergen${summary.activeAllergens !== 1 ? 's' : ''}`);
+                        else parts.push(`${profile.allergens.length} allergen${profile.allergens.length !== 1 ? 's' : ''}`);
+                        if (summary.resolvedAllergens > 0) parts.push(`${summary.resolvedAllergens} resolved`);
+                        return parts.join(' · ');
+                      })()}
                     </Text>
                     {profile.hasAnaphylaxis && (
                       <View style={styles.anaphylaxisBadge}>

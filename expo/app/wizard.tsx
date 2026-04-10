@@ -17,6 +17,7 @@ import * as Crypto from 'expo-crypto';
 import { PROFILE_RELATIONSHIPS, getRandomAvatarColor } from '@/constants/profileColors';
 import { RestrictionsSetup } from '@/components/RestrictionsSetup';
 import { DietaryRestrictionsSetup } from '@/components/DietaryRestrictionsSetup';
+import { buildHealthItemsFromProfile } from '@/utils/profileHealthItems';
 import { arcaneColors, arcaneRadius } from '@/constants/theme';
 
 
@@ -118,7 +119,7 @@ export default function ProfileWizard() {
     setIsSubmitting(true);
     
     try {
-      const profile: Profile = {
+      const baseProfile: Profile = {
         id: Crypto.randomUUID(),
         name: name.trim(),
         relationship,
@@ -139,9 +140,14 @@ export default function ProfileWizard() {
         profileDocuments,
       };
 
+      const profile: Profile = {
+        ...baseProfile,
+        healthItems: buildHealthItemsFromProfile(baseProfile),
+      };
+
       if (__DEV__) console.log('[Wizard] Creating profile:', profile.name);
       
-      await addProfile(profile);
+      await addProfile(profile as Profile);
       
       if (__DEV__) console.log('[Wizard] Profile created, navigating to home screen');
       router.replace('/(tabs)/(scan)' as Href);

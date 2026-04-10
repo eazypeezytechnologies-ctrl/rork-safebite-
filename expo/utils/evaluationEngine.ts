@@ -6,6 +6,12 @@ import {
   isIngredientAllergen,
   getAllSynonymsForAllergen,
 } from '@/constants/scientificAllergenDatabase';
+import {
+  getActiveAllergens,
+  getActiveEczemaTriggerGroups,
+  getActiveSensitivities,
+  getHealthItemForName,
+} from '@/utils/profileHealthItems';
 
 export type EvalVerdict = 'Safe' | 'Caution' | 'Avoid' | 'Unknown';
 export type EvalConfidence = 'High' | 'Medium' | 'Low';
@@ -275,33 +281,38 @@ function detectEczemaAndSensitivityConcerns(
   const concerns: MatchedConcern[] = [];
 
   if (!product.ingredients_text) return concerns;
-  if (!profile.trackEczemaTriggers || !profile.eczemaTriggerGroups || profile.eczemaTriggerGroups.length === 0) {
+
+  const activeEczemaGroups = getActiveEczemaTriggerGroups(profile);
+
+  if (!profile.trackEczemaTriggers || activeEczemaGroups.length === 0) {
     return concerns;
   }
 
-  console.log('[EvalEngine] Checking eczema triggers for groups:', profile.eczemaTriggerGroups.join(', '));
+  console.log('[EvalEngine] Checking eczema triggers for active groups:', activeEczemaGroups.join(', '));
 
   const skincareTriggers = findEczemaTriggerMatches(
     product.ingredients_text,
-    profile.eczemaTriggerGroups,
+    activeEczemaGroups,
   );
 
   for (const match of skincareTriggers) {
+    const healthItem = getHealthItemForName(profile, match.trigger.triggerGroup);
+    const effectiveSeverity = healthItem?.status === 'suspected' ? 'low' : match.trigger.severityHint;
     concerns.push({
       ingredient: match.trigger.name,
       matchedText: match.matchedText,
       profileAllergen: match.trigger.triggerGroup,
       concernType: 'eczema',
       source: 'eczema_trigger',
-      severityHint: match.trigger.severityHint,
+      severityHint: effectiveSeverity,
       notes: match.trigger.notes,
     });
-    console.log(`[EvalEngine] ECZEMA TRIGGER: ${match.trigger.name} (${match.trigger.triggerGroup})`);
+    console.log(`[EvalEngine] ECZEMA TRIGGER: ${match.trigger.name} (${match.trigger.triggerGroup}) severity=${effectiveSeverity}`);
   }
 
   const foodSensitivities = findFoodSensitivityMatches(
     product.ingredients_text,
-    profile.eczemaTriggerGroups,
+    activeEczemaGroups,
   );
 
   const foundSensitivities = new Set(concerns.map(c => c.ingredient));
@@ -319,9 +330,10 @@ function detectEczemaAndSensitivityConcerns(
     }
   }
 
-  if (profile.avoidIngredients && profile.avoidIngredients.length > 0 && product.ingredients_text) {
+  const activeSensitivities = getActiveSensitivities(profile);
+  if (activeSensitivities.length > 0 && product.ingredients_text) {
     const normalizedText = normalizeText(product.ingredients_text);
-    for (const avoid of profile.avoidIngredients) {
+    for (const avoid of activeSensitivities) {
       const normalizedAvoid = normalizeText(avoid);
       if (normalizedText.includes(normalizedAvoid)) {
         concerns.push({
@@ -582,9 +594,12 @@ function evaluateForProfile(
 ): ProfileImpact {
   console.log(`\n[EvalEngine] ===== Evaluating for profile: ${profile.name} =====`);
 
+  const activeAllergens = getActiveAllergens(profile);
+  console.log(`[EvalEngine] Active allergens (after filtering resolved): ${activeAllergens.join(', ')}`);
+
   const { concerns: allergyConcerns, advisories } = detectAllergenMatches(
     product,
-    profile.allergens,
+    activeAllergens,
     profile.customKeywords,
     profile.hasAnaphylaxis,
   );
@@ -643,14 +658,17 @@ export function evaluateProduct(
   profile: Profile,
 ): EvaluationResult {
   console.log('\n╔══════════════════════════════════════════════════╗');
-  console.log('║       SAFEBITE EVALUATION ENGINE v2             ║');
+  console.log('║       SAFEBITE EVALUATION ENGINE v3             ║');
   console.log('╚══════════════════════════════════════════════════╝');
   console.log(`Product: ${product.product_name ?? product.code}`);
   console.log(`Profile: ${profile.name}`);
 
+  const activeAllergens = getActiveAllergens(profile);
+  console.log(`[EvalEngine] Active allergens (after filtering resolved): ${activeAllergens.join(', ')}`);
+
   const { concerns: allergyConcerns, advisories } = detectAllergenMatches(
     product,
-    profile.allergens,
+    activeAllergens,
     profile.customKeywords,
     profile.hasAnaphylaxis,
   );

@@ -12,10 +12,38 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
-import { EmergencyContact, ProfileDocument } from '@/types';
+import { EmergencyContact, ProfileDocument, ProfileHealthItem } from '@/types';
 import { RestrictionsSetup } from '@/components/RestrictionsSetup';
 import { DietaryRestrictionsSetup } from '@/components/DietaryRestrictionsSetup';
+import { HealthItemManager } from '@/components/HealthItemManager';
+import { buildHealthItemsFromProfile, upsertHealthItem } from '@/utils/profileHealthItems';
+import { ProfileHealthItem as PHI, HealthItemCategory } from '@/types';
 import { arcaneColors, arcaneRadius } from '@/constants/theme';
+
+function syncHealthItemsWithSelections(
+  currentItems: PHI[],
+  allergens: string[],
+  eczemaGroups: string[],
+  avoidIngredients: string[],
+): PHI[] {
+  let items = [...currentItems];
+  const now = new Date().toISOString();
+
+  const ensureItem = (name: string, category: HealthItemCategory) => {
+    const existing = items.find(h => h.name === name && h.category === category);
+    if (!existing) {
+      items = upsertHealthItem(items, name, category, 'confirmed', 'moderate');
+    } else if (existing.status === 'resolved') {
+      // don't auto-reactivate resolved items
+    }
+  };
+
+  for (const a of allergens) ensureItem(a, 'allergy');
+  for (const g of eczemaGroups) ensureItem(g, 'eczema_trigger');
+  for (const i of avoidIngredients) ensureItem(i, 'sensitivity');
+
+  return items;
+}
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -39,6 +67,7 @@ export default function EditProfileScreen() {
   const [dietaryRestrictions, setDietaryRestrictions] = useState<Record<string, boolean>>({});
   const [dietaryStrictness, setDietaryStrictness] = useState<Record<string, 'relaxed' | 'standard' | 'strict'>>({});
   const [profileDocuments, setProfileDocuments] = useState<ProfileDocument[]>([]);
+  const [healthItems, setHealthItems] = useState<ProfileHealthItem[]>([]);
 
   useEffect(() => {
     if (profile) {
@@ -55,6 +84,10 @@ export default function EditProfileScreen() {
       setDietaryRestrictions(profile.dietaryRestrictions || {});
       setDietaryStrictness(profile.dietaryStrictness || {});
       setProfileDocuments(profile.profileDocuments || []);
+      const items = (profile.healthItems && profile.healthItems.length > 0)
+        ? profile.healthItems
+        : buildHealthItemsFromProfile(profile);
+      setHealthItems(items);
     }
   }, [profile]);
 
@@ -90,6 +123,13 @@ export default function EditProfileScreen() {
     }
 
     try {
+      const syncedHealthItems = syncHealthItemsWithSelections(
+        healthItems,
+        selectedAllergens,
+        trackEczemaTriggers ? eczemaTriggerGroups : [],
+        avoidIngredients,
+      );
+
       await updateProfile({
         ...profile,
         name: name.trim(),
@@ -105,6 +145,7 @@ export default function EditProfileScreen() {
         dietaryRestrictions,
         dietaryStrictness,
         profileDocuments,
+        healthItems: syncedHealthItems,
         updatedAt: new Date().toISOString(),
       });
       router.back();
@@ -154,6 +195,31 @@ export default function EditProfileScreen() {
             showUploadRecords
           />
         </View>
+
+        {healthItems.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Health Timeline</Text>
+            <Text style={styles.sectionSubtitle}>Track status changes over time — mark items as resolved when outgrown</Text>
+            <HealthItemManager
+              healthItems={healthItems}
+              onHealthItemsChange={setHealthItems}
+              category="allergy"
+              title="Allergies"
+            />
+            <HealthItemManager
+              healthItems={healthItems}
+              onHealthItemsChange={setHealthItems}
+              category="eczema_trigger"
+              title="Eczema Triggers"
+            />
+            <HealthItemManager
+              healthItems={healthItems}
+              onHealthItemsChange={setHealthItems}
+              category="sensitivity"
+              title="Sensitivities"
+            />
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Dietary Restrictions</Text>

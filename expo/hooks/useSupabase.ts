@@ -24,6 +24,7 @@ export interface SupabaseProfile {
   avoid_ingredients?: string[];
   dietary_restrictions?: Record<string, boolean>;
   dietary_strictness?: Record<string, string>;
+  health_items?: any[];
   created_at: string;
   updated_at: string;
 }

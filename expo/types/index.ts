@@ -1,5 +1,18 @@
 export type VerdictLevel = 'safe' | 'caution' | 'danger' | 'unknown';
 
+export type HealthItemStatus = 'confirmed' | 'suspected' | 'resolved';
+export type HealthItemCategory = 'allergy' | 'eczema_trigger' | 'sensitivity';
+export type DocumentCategory = 'allergy' | 'eczema' | 'general';
+
+export interface ProfileHealthItem {
+  name: string;
+  category: HealthItemCategory;
+  status: HealthItemStatus;
+  severity: 'mild' | 'moderate' | 'severe';
+  lastReviewedAt: string;
+  notes?: string;
+}
+
 export interface AllergenMatch {
   allergen: string;
   source: 'allergens_tags' | 'traces_tags' | 'ingredients' | 'custom_keyword';
@@ -52,6 +65,7 @@ export interface Profile {
   dietaryRestrictions?: Record<string, boolean>;
   dietaryStrictness?: Record<string, 'relaxed' | 'standard' | 'strict'>;
   profileDocuments?: ProfileDocument[];
+  healthItems?: ProfileHealthItem[];
 }
 
 export interface ProfileDocument {
@@ -61,6 +75,20 @@ export interface ProfileDocument {
   fileType: string;
   fileUri: string;
   uploadedAt: string;
+  category?: DocumentCategory;
+  pendingConfirmation?: boolean;
+  suggestedChanges?: SuggestedProfileChange[];
+}
+
+export interface SuggestedProfileChange {
+  id: string;
+  itemName: string;
+  category: HealthItemCategory;
+  action: 'add' | 'resolve' | 'update_severity';
+  newStatus?: HealthItemStatus;
+  newSeverity?: 'mild' | 'moderate' | 'severe';
+  reason: string;
+  confirmed: boolean;
 }
 
 export interface User {
