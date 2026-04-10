@@ -132,23 +132,43 @@ export default function ProductDetailsScreen() {
         console.log('[ProductDetail] Screen focused, refreshing AI verdict + trusted status...');
         resetBarcodeDebounce();
         void getAIVerdict(code, activeProfile.id, currentUser.id).then((stored) => {
-          if (stored) {
-            console.log('[ProductDetail] Refreshed AI verdict:', stored.aiVerdict);
-            setAiVerdictRecord(stored);
-          }
+          console.log('[ProductDetail] Refreshed AI verdict:', stored ? stored.aiVerdict : 'none');
+          setAiVerdictRecord(stored);
         }).catch((err) => console.log('[ProductDetail] AI verdict refresh error:', err));
 
         void getTrustedProduct(code, activeProfile.id, currentUser.id).then((trusted) => {
-          if (trusted) {
-            console.log('[ProductDetail] Refreshed trusted status: trusted');
-            setTrustedProduct(trusted);
-          }
+          console.log('[ProductDetail] Refreshed trusted status:', trusted ? 'trusted' : 'not trusted');
+          setTrustedProduct(trusted);
         }).catch((err) => console.log('[ProductDetail] Trusted status refresh error:', err));
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [code, activeProfile?.id, currentUser?.id])
   );
   const scrollViewRef = useRef<ScrollView>(null);
+
+  const prevProfileIdRef = useRef<string | undefined>(activeProfile?.id);
+
+  useEffect(() => {
+    if (activeProfile?.id && activeProfile.id !== prevProfileIdRef.current && product && code) {
+      console.log('[ProductDetail] Profile changed from', prevProfileIdRef.current, 'to', activeProfile.id, '— refreshing AI/trusted state');
+      prevProfileIdRef.current = activeProfile.id;
+      setAiVerdictRecord(null);
+      setTrustedProduct(null);
+      if (currentUser) {
+        void getAIVerdict(code, activeProfile.id, currentUser.id).then((stored) => {
+          console.log('[ProductDetail] Profile-switch AI verdict:', stored ? stored.aiVerdict : 'none');
+          setAiVerdictRecord(stored);
+        }).catch(() => {});
+        void getTrustedProduct(code, activeProfile.id, currentUser.id).then((trusted) => {
+          console.log('[ProductDetail] Profile-switch trusted:', trusted ? 'yes' : 'no');
+          setTrustedProduct(trusted);
+        }).catch(() => {});
+      }
+    } else {
+      prevProfileIdRef.current = activeProfile?.id;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id]);
 
   useEffect(() => {
     console.log('=== useEffect triggered ===');
@@ -226,9 +246,26 @@ export default function ProductDetailsScreen() {
       setRecalls(recallData.results);
       
       if (activeProfile) {
-        const evalResult = evaluateProduct(productData, activeProfile);
-        const verdict = engineToLegacyVerdict(evalResult);
-        console.log(`[ProductDetail] Engine verdict: ${verdict.level}, concerns: ${evalResult.matchedConcerns.length}`);
+        const storedAiVerdict = await getAIVerdict(code, activeProfile.id, currentUser?.id);
+        if (storedAiVerdict) {
+          console.log('[ProductDetail] Found stored AI verdict:', storedAiVerdict.aiVerdict);
+          setAiVerdictRecord(storedAiVerdict);
+        } else {
+          setAiVerdictRecord(null);
+        }
+
+        const trusted = await getTrustedProduct(code, activeProfile.id, currentUser?.id);
+        if (trusted) {
+          console.log('[ProductDetail] Product is trusted for this profile');
+          setTrustedProduct(trusted);
+        } else {
+          setTrustedProduct(null);
+        }
+
+        const unified = runUnifiedEvaluation(productData, activeProfile, storedAiVerdict, trusted);
+        unified.debugLog.forEach(l => console.log(l));
+        const verdict = unified.verdict;
+        console.log(`[ProductDetail] Unified verdict: ${verdict.level}, source: ${unified.verdictSource}, concerns: ${unified.evalResult.matchedConcerns.length}`);
         await addToScanHistory({
           id: `${code}_${activeProfile.id}_${Date.now()}`,
           product: productData,
@@ -319,18 +356,6 @@ export default function ProductDetailsScreen() {
         ]);
         setIsFav(favStatus);
         setIsAvoided(avoidStatus);
-
-        const storedAiVerdict = await getAIVerdict(code, activeProfile.id, currentUser?.id);
-        if (storedAiVerdict) {
-          console.log('[ProductDetail] Found stored AI verdict:', storedAiVerdict.aiVerdict);
-          setAiVerdictRecord(storedAiVerdict);
-        }
-
-        const trusted = await getTrustedProduct(code, activeProfile.id, currentUser?.id);
-        if (trusted) {
-          console.log('[ProductDetail] Product is trusted for this profile');
-          setTrustedProduct(trusted);
-        }
       }
     } catch (err) {
       console.error('=== Error loading product ===');

@@ -9,6 +9,7 @@ import {
   Platform,
   Animated,
   Easing,
+  Share,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
@@ -172,14 +173,10 @@ export default function ResultScreen() {
           getTrustedProduct(code, activeProfile.id, currentUser?.id),
         ]);
 
-        if (storedAiVerdict) {
-          console.log('[Result] Found stored AI verdict:', storedAiVerdict.aiVerdict);
-          setAiVerdictRecord(storedAiVerdict);
-        }
-        if (storedTrusted) {
-          console.log('[Result] Product is trusted for this profile');
-          setTrustedProduct(storedTrusted);
-        }
+        console.log('[Result] AI verdict:', storedAiVerdict ? storedAiVerdict.aiVerdict : 'none');
+        setAiVerdictRecord(storedAiVerdict);
+        console.log('[Result] Trusted:', storedTrusted ? 'yes' : 'no');
+        setTrustedProduct(storedTrusted);
 
         const unified = runUnifiedEvaluation(productData, activeProfile, storedAiVerdict, storedTrusted);
         unified.debugLog.forEach(l => console.log(l));
@@ -239,8 +236,17 @@ export default function ResultScreen() {
       }
     };
 
+    setAiVerdictRecord(null);
+    setTrustedProduct(null);
+    setVerdict(null);
+    setEvalResult(null);
+    setConfidence(null);
+    verdictScale.setValue(0);
+    fadeIn.setValue(0);
+    slideUp.setValue(30);
+
     void loadResult();
-  }, [code, activeProfile, currentUser?.id, verdictScale, fadeIn, slideUp]);
+  }, [code, activeProfile?.id, currentUser?.id, verdictScale, fadeIn, slideUp]);
 
   const triggers = useMemo<TriggerDetail[]>(() => {
     if (!activeProfile) return [];
