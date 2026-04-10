@@ -59,6 +59,7 @@ interface SmartScanResult {
 
 const SMART_CAPTURE_COOLDOWN_MS = 2000;
 const SMART_CAPTURE_AUTO_INTERVAL_MS = 8000;
+const BARCODE_SCAN_COOLDOWN_MS = 4000;
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -94,6 +95,10 @@ export default function ScanScreen() {
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   const lastSmartCaptureRef = useRef<number>(0);
   const smartCaptureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const barcodeScanLockRef = useRef<boolean>(false);
+  const lastBarcodeScanTimeRef = useRef<number>(0);
+  const lastBarcodeScanCodeRef = useRef<string | null>(null);
+  const wizardLaunchedForCodeRef = useRef<string | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const detectedBannerAnim = useRef(new Animated.Value(0)).current;
   const lockPulseAnim = useRef(new Animated.Value(0)).current;
@@ -172,6 +177,7 @@ export default function ScanScreen() {
       setCameraFacing('back');
       setSmartScanActive(false);
       setSmartScanProcessing(false);
+      barcodeScanLockRef.current = false;
       if (smartCaptureTimerRef.current) {
         clearTimeout(smartCaptureTimerRef.current);
         smartCaptureTimerRef.current = null;
@@ -400,11 +406,27 @@ IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them.
     console.log('Scanned state:', scanned);
     console.log('Last scanned code:', lastScannedCode);
     console.log('Camera active:', cameraActive);
+    console.log('Scan lock:', barcodeScanLockRef.current);
+    
+    if (barcodeScanLockRef.current) {
+      console.log('Barcode scan ignored - scan lock active');
+      return;
+    }
     
     if (scanned || !data || data === lastScannedCode) {
       console.log('Barcode scan ignored - duplicate or already processing');
       return;
     }
+    
+    const now = Date.now();
+    if (data === lastBarcodeScanCodeRef.current && (now - lastBarcodeScanTimeRef.current) < BARCODE_SCAN_COOLDOWN_MS) {
+      console.log('Barcode scan ignored - cooldown active for same code');
+      return;
+    }
+    
+    barcodeScanLockRef.current = true;
+    lastBarcodeScanTimeRef.current = now;
+    lastBarcodeScanCodeRef.current = data;
     
     console.log('Processing barcode scan...');
     
@@ -414,6 +436,7 @@ IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them.
     
     if (barcode.startsWith('http://') || barcode.startsWith('https://') || barcode.includes('://')) {
       console.log('❌ SCAN ERROR: URL detected instead of barcode');
+      barcodeScanLockRef.current = false;
       setScanned(false);
       setLastScannedCode(null);
       
@@ -437,6 +460,7 @@ IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them.
       console.log('❌ SCAN ERROR: Invalid barcode format');
       console.log('Is numeric:', /^[0-9]+$/.test(barcode));
       console.log('Length valid:', barcode.length >= 8 && barcode.length <= 14);
+      barcodeScanLockRef.current = false;
       setScanned(false);
       setLastScannedCode(null);
       
@@ -510,6 +534,10 @@ IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them.
         Alert.alert('Navigation Error', 'Failed to open product details. Please try again.');
         setScanned(false);
         setLastScannedCode(null);
+      } finally {
+        setTimeout(() => {
+          barcodeScanLockRef.current = false;
+        }, BARCODE_SCAN_COOLDOWN_MS);
       }
     }, 300);
   };

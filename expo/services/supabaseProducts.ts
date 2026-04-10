@@ -196,9 +196,30 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
   }
 }
 
+const SCAN_EVENT_DEDUPE_WINDOW_MS = 5000;
+const recentScanEvents = new Map<string, number>();
+
 export async function recordScanEvent(event: SupabaseScanEvent): Promise<{ success: boolean; error?: string }> {
   try {
     const productCode = event.product_barcode || `manual_${Date.now()}`;
+    const dedupeKey = `${event.user_id}_${event.profile_id}_${productCode}`;
+    const now = Date.now();
+    const lastScan = recentScanEvents.get(dedupeKey);
+    
+    if (lastScan && (now - lastScan) < SCAN_EVENT_DEDUPE_WINDOW_MS) {
+      console.log('[SupabaseProducts] recordScanEvent skipped — dedupe window active for:', productCode);
+      return { success: true };
+    }
+    
+    recentScanEvents.set(dedupeKey, now);
+    
+    if (recentScanEvents.size > 50) {
+      const cutoff = now - 60000;
+      for (const [key, ts] of recentScanEvents) {
+        if (ts < cutoff) recentScanEvents.delete(key);
+      }
+    }
+
     console.log('[SupabaseProducts] Recording scan event:', {
       user: event.user_id?.substring(0, 8),
       type: event.scan_type,

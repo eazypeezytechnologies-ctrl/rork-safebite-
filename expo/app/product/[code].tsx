@@ -121,6 +121,8 @@ export default function ProductDetailsScreen() {
   const [showMismatchExplainer, setShowMismatchExplainer] = useState(false);
   const [isAvoided, setIsAvoided] = useState(false);
   const hasLoadedInitially = useRef(false);
+  const wizardShownForCodeRef = useRef<string | null>(null);
+  const loadProductLockRef = useRef<boolean>(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -182,8 +184,12 @@ export default function ProductDetailsScreen() {
     });
     
     if (code && code !== 'undefined' && code !== 'null' && code.trim() !== '' && !/^https?:\/\//.test(code)) {
-      console.log('Code is valid, loading product...');
-      void loadProduct();
+      if (loadProductLockRef.current) {
+        console.log('[ProductDetail] loadProduct already in progress, skipping duplicate call');
+      } else {
+        console.log('Code is valid, loading product...');
+        void loadProduct();
+      }
     } else {
       console.error('Invalid code detected:', code);
       if (code && /^https?:\/\//.test(code)) {
@@ -197,6 +203,11 @@ export default function ProductDetailsScreen() {
   }, [code]);
 
   const loadProduct = async () => {
+    if (loadProductLockRef.current) {
+      console.log('[ProductDetail] loadProduct skipped — already running');
+      return;
+    }
+    loadProductLockRef.current = true;
     console.log('=== loadProduct started ===');
     console.log('Code value:', code);
     console.log('Code validation:', {
@@ -226,7 +237,13 @@ export default function ProductDetailsScreen() {
       console.log('API response received:', productData ? 'Product found' : 'No product');
       
       if (!productData) {
+        if (wizardShownForCodeRef.current === code) {
+          console.log('[ProductDetail] Wizard already shown for code:', code, '— skipping duplicate launch');
+          setIsLoading(false);
+          return;
+        }
         console.log('[ProductDetail] Product not found, showing capture wizard for code:', code);
+        wizardShownForCodeRef.current = code;
         setShowCaptureWizard(true);
         setIsLoading(false);
         return;
@@ -365,6 +382,7 @@ export default function ProductDetailsScreen() {
       setError(`Failed to load product: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       console.log('loadProduct finished, isLoading set to false');
+      loadProductLockRef.current = false;
       setIsLoading(false);
     }
   };

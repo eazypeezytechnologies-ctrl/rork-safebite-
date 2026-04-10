@@ -13,6 +13,8 @@ export interface ScanHistoryItem {
 
 const SCAN_HISTORY_KEY = '@allergy_guardian_scan_history';
 const MAX_HISTORY_ITEMS = 100;
+const DEDUPE_WINDOW_MS = 5000;
+const recentHistoryAdds = new Map<string, number>();
 
 function getUserHistoryKey(userId?: string): string {
   return userId ? `${SCAN_HISTORY_KEY}_${userId}` : SCAN_HISTORY_KEY;
@@ -105,6 +107,22 @@ export async function addToScanHistory(item: ScanHistoryItem, userId?: string): 
       throw new Error('Cannot save history item: product code is missing or invalid');
     }
     
+    const dedupeKey = `${item.product.code}_${item.profileId}_${userId || 'anon'}`;
+    const now = Date.now();
+    const lastAdd = recentHistoryAdds.get(dedupeKey);
+    if (lastAdd && (now - lastAdd) < DEDUPE_WINDOW_MS) {
+      console.log('[ScanHistory] Dedupe: skipping duplicate add for', item.product.code, 'within', DEDUPE_WINDOW_MS, 'ms');
+      return;
+    }
+    recentHistoryAdds.set(dedupeKey, now);
+    
+    if (recentHistoryAdds.size > 50) {
+      const cutoff = now - 60000;
+      for (const [key, ts] of recentHistoryAdds) {
+        if (ts < cutoff) recentHistoryAdds.delete(key);
+      }
+    }
+    
     console.log('Adding to scan history:', {
       productCode: item.product.code,
       productName: item.product.product_name,
@@ -113,7 +131,6 @@ export async function addToScanHistory(item: ScanHistoryItem, userId?: string): 
       userId: userId
     });
     
-    // Add userId to the item
     const itemWithUser = { ...item, userId };
     
     const history = await getScanHistory(userId);
