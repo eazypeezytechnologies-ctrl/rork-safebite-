@@ -508,29 +508,21 @@ IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them.
       setCameraActive(false);
       setDetectedBannerData({ code: '', show: false });
       detectedBannerAnim.setValue(0);
-      console.log('=== Initiating Navigation ===');
-      console.log('Barcode:', barcode);
-      console.log('Barcode type:', typeof barcode);
-      console.log('Barcode length:', barcode.length);
-      console.log('Is valid:', barcode && barcode !== 'undefined' && barcode !== 'null' && barcode.trim() !== '');
       
       if (!barcode || barcode === 'undefined' || barcode === 'null' || barcode.trim() === '') {
-        console.error('❌ Invalid barcode detected before navigation:', barcode);
+        console.error('[ScanScreen] Invalid barcode before navigation:', barcode);
         Alert.alert('Error', 'Invalid barcode. Please try scanning again.');
         setScanned(false);
         setLastScannedCode(null);
         return;
       }
       
-      console.log('Encoded barcode:', encodeURIComponent(barcode));
-      console.log('Full path:', `/product/${encodeURIComponent(barcode)}`);
-      console.log('Active profile:', activeProfile?.name || 'none');
+      console.log('[ScanScreen] Navigating to product:', barcode);
       
       try {
         router.push(`/product/${encodeURIComponent(barcode)}` as Href);
-        console.log('✅ Navigation initiated successfully');
       } catch (error) {
-        console.error('❌ Navigation error:', error);
+        console.error('[ScanScreen] Navigation error:', error);
         Alert.alert('Navigation Error', 'Failed to open product details. Please try again.');
         setScanned(false);
         setLastScannedCode(null);
@@ -539,7 +531,7 @@ IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them.
           barcodeScanLockRef.current = false;
         }, BARCODE_SCAN_COOLDOWN_MS);
       }
-    }, 300);
+    }, 150);
   };
 
   const handleSearch = async () => {

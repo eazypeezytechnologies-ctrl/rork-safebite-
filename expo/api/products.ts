@@ -64,17 +64,10 @@ async function getFromOfflineCache(barcode: string): Promise<Product | null> {
 }
 
 const OFF_API = 'https://world.openfoodfacts.org/api/v2';
-const OBF_API = 'https://world.openbeautyfacts.org/api/v2';
-const OPF_API = 'https://world.openproductsfacts.org/api/v2';
-const UPC_DATABASE_API = 'https://api.upcdatabase.org/product';
-const BARCODE_LOOKUP_API = 'https://api.barcodelookup.com/v3/products';
-const EAN_SEARCH_API = 'https://ean-search.org/api';
 const USDA_API = 'https://api.nal.usda.gov/fdc/v1';
-const NUTRITIONIX_API = 'https://trackapi.nutritionix.com/v2';
-const EDAMAM_API = 'https://api.edamam.com/api/food-database/v2';
-const UPC_ITEM_DB_API = 'https://api.upcitemdb.com/prod/trial/lookup';
-const WORLD_UPC_API = 'https://api.worldupc.com/api/v2';
 const DATAKICK_API = 'https://www.datakick.org/api/items';
+
+const FAST_TIMEOUT_MS = 8000;
 
 export async function searchProductByBarcode(barcode: string, useCache: boolean = true): Promise<Product | null> {
   const normalizedBarcode = barcode.trim();
@@ -86,264 +79,204 @@ export async function searchProductByBarcode(barcode: string, useCache: boolean 
   lastBarcode = normalizedBarcode;
   lastBarcodeTime = now;
 
+  const lookupStart = Date.now();
   if (__DEV__) console.log('[Products] Searching for barcode:', normalizedBarcode);
 
-  try {
-    const supabaseProduct = await getProductByCode(normalizedBarcode);
-    if (supabaseProduct && supabaseProduct.product_name && supabaseProduct.product_name !== 'Unknown Product') {
-      console.log('[Products] ✅ Found in Supabase products table:', supabaseProduct.product_name);
-      await cacheProduct(supabaseProduct);
-      return supabaseProduct;
-    }
-  } catch (err) {
-    console.log('[Products] Supabase lookup failed (non-critical):', err);
-  }
-
-  const manualStored = await AsyncStorage.getItem(MANUAL_ENTRIES_KEY);
-  if (manualStored) {
-    try {
-      const manualEntries = JSON.parse(manualStored);
-      const manualEntry = manualEntries.find((e: any) => e.barcode === barcode);
-      if (manualEntry) {
-        console.log('Found manual entry for barcode:', barcode);
-        return {
-          code: manualEntry.barcode,
-          product_name: manualEntry.productName,
-          brands: manualEntry.brand,
-          ingredients_text: manualEntry.ingredients,
-          allergens_tags: [],
-          traces_tags: [],
-          source: 'manual_entry' as const,
-        };
-      }
-    } catch (error) {
-      console.error('Error reading manual entries:', error);
-    }
-  }
-  
   if (useCache) {
-    const cached = await getCachedProduct(barcode);
+    const cached = await getCachedProduct(normalizedBarcode);
     if (cached) {
-      console.log('Returning cached product');
+      console.log('[Products] ✅ Returning local cached product (' + (Date.now() - lookupStart) + 'ms)');
       return cached;
     }
   }
-  
+
+  const [supabaseResult, manualResult, offlineResult] = await Promise.all([
+    getProductByCode(normalizedBarcode).catch((err) => {
+      console.log('[Products] Supabase lookup failed (non-critical):', err);
+      return null;
+    }),
+    AsyncStorage.getItem(MANUAL_ENTRIES_KEY).then((stored) => {
+      if (!stored) return null;
+      try {
+        const entries = JSON.parse(stored);
+        const entry = entries.find((e: any) => e.barcode === normalizedBarcode);
+        if (entry) {
+          return {
+            code: entry.barcode,
+            product_name: entry.productName,
+            brands: entry.brand,
+            ingredients_text: entry.ingredients,
+            allergens_tags: [],
+            traces_tags: [],
+            source: 'manual_entry' as const,
+          } as Product;
+        }
+      } catch (error) {
+        console.error('Error reading manual entries:', error);
+      }
+      return null;
+    }).catch(() => null),
+    getFromOfflineCache(normalizedBarcode).catch(() => null),
+  ]);
+
+  if (supabaseResult && supabaseResult.product_name && supabaseResult.product_name !== 'Unknown Product') {
+    console.log('[Products] ✅ Found in Supabase (' + (Date.now() - lookupStart) + 'ms):', supabaseResult.product_name);
+    cacheProduct(supabaseResult).catch(() => {});
+    return supabaseResult;
+  }
+
+  if (manualResult) {
+    console.log('[Products] ✅ Found manual entry (' + (Date.now() - lookupStart) + 'ms)');
+    return manualResult;
+  }
+
   const isNumericBarcode = /^\d{8,14}$/.test(normalizedBarcode);
 
   if (!isNumericBarcode) {
-    console.log('[Products] Non-numeric barcode (photo_/manual_), skipping external API lookups:', normalizedBarcode.substring(0, 30));
+    console.log('[Products] Non-numeric barcode, skipping external APIs:', normalizedBarcode.substring(0, 30));
+    if (offlineResult) return offlineResult;
     return null;
   }
 
-  const sources = [
-    { api: OFF_API, source: 'openfoodfacts' as const, type: 'openx' },
-    { api: OBF_API, source: 'openbeautyfacts' as const, type: 'openx' },
-    { api: OPF_API, source: 'openproductsfacts' as const, type: 'openx' },
-    { api: UPC_DATABASE_API, source: 'upcdatabase' as const, type: 'upc' },
-    { api: UPC_ITEM_DB_API, source: 'upcitemdb' as const, type: 'upcitemdb' },
-    { api: BARCODE_LOOKUP_API, source: 'barcodelookup' as const, type: 'barcodelookup' },
-    { api: WORLD_UPC_API, source: 'worldupc' as const, type: 'worldupc' },
-    { api: EAN_SEARCH_API, source: 'eansearch' as const, type: 'eansearch' },
-    { api: DATAKICK_API, source: 'datakick' as const, type: 'datakick' },
-    { api: USDA_API, source: 'usda' as const, type: 'usda' },
-    { api: NUTRITIONIX_API, source: 'nutritionix' as const, type: 'nutritionix' },
-    { api: EDAMAM_API, source: 'edamam' as const, type: 'edamam' },
-  ];
+  const externalResult = await fetchFromExternalSourcesParallel(normalizedBarcode);
 
-  for (const { api, source, type } of sources) {
-    try {
-      let data: any = null;
-      let productData: any = null;
-
-      switch (type) {
-        case 'openx':
-          data = await safeFetch(`${api}/product/${barcode}.json`);
-          if (data.status === 1 && data.product) {
-            productData = { ...data.product, source };
-          }
-          break;
-
-        case 'upc':
-          data = await safeFetch(`${api}/${barcode}`, {
-            headers: { 'Accept': 'application/json' }
-          });
-          if (data.success && data.product) {
-            productData = {
-              code: barcode,
-              product_name: data.product.title || data.product.description,
-              brands: data.product.brand,
-              image_url: data.product.image,
-              image_front_url: data.product.image,
-              ingredients_text: data.product.ingredients || '',
-              allergens: data.product.allergens || '',
-              allergens_tags: [],
-              traces: '',
-              traces_tags: [],
-              categories: data.product.category,
-              categories_tags: data.product.category ? [data.product.category] : [],
-              source,
-            };
-          }
-          break;
-
-        case 'barcodelookup':
-          console.log('Skipping barcodelookup: API key required');
-          continue;
-
-        case 'eansearch':
-          try {
-            const eanResponse = await safeFetch(`${api}?op=barcode-lookup&barcode=${barcode}&format=json`);
-            if (!eanResponse) {
-              console.log('eansearch returned empty response');
-              continue;
-            }
-            if (typeof eanResponse === 'string') {
-              if (eanResponse.trim().length === 0 || eanResponse.startsWith('<')) {
-                console.log('eansearch returned invalid string response');
-                continue;
-              }
-              try {
-                data = JSON.parse(eanResponse);
-              } catch {
-                console.log('eansearch returned unparseable JSON string');
-                continue;
-              }
-            } else {
-              data = eanResponse;
-            }
-          } catch {
-            console.log('eansearch request failed');
-            continue;
-          }
-          if (Array.isArray(data) && data.length > 0 && data[0].name) {
-            productData = {
-              code: barcode,
-              product_name: data[0].name,
-              brands: data[0].company || '',
-              image_url: '',
-              image_front_url: '',
-              ingredients_text: '',
-              allergens: '',
-              allergens_tags: [],
-              traces: '',
-              traces_tags: [],
-              categories: data[0].category || '',
-              categories_tags: data[0].category ? [data[0].category] : [],
-              source,
-            };
-          }
-          break;
-
-        case 'usda':
-          data = await safeFetch(`${api}/foods/search?query=${barcode}&api_key=DEMO_KEY`);
-          if (data.foods && data.foods.length > 0) {
-            const food = data.foods[0];
-            productData = {
-              code: barcode,
-              product_name: food.description,
-              brands: food.brandOwner || '',
-              image_url: '',
-              image_front_url: '',
-              ingredients_text: food.ingredients || '',
-              allergens: '',
-              allergens_tags: [],
-              traces: '',
-              traces_tags: [],
-              categories: food.foodCategory || '',
-              categories_tags: food.foodCategory ? [food.foodCategory] : [],
-              source,
-            };
-          }
-          break;
-
-        case 'nutritionix':
-          console.log('Skipping nutritionix: API credentials required');
-          continue;
-
-        case 'edamam':
-          console.log('Skipping edamam: API credentials required');
-          continue;
-
-        case 'worldupc':
-          console.log('Skipping worldupc: API key required');
-          continue;
-
-        case 'upcitemdb':
-          try {
-            data = await safeFetch(`${api}?upc=${barcode}`);
-          } catch {
-            console.log(`upcitemdb request failed`);
-            continue;
-          }
-          if (data.items && data.items.length > 0) {
-            const item = data.items[0];
-            productData = {
-              code: barcode,
-              product_name: item.title || item.description,
-              brands: item.brand || '',
-              image_url: item.images?.[0] || '',
-              image_front_url: item.images?.[0] || '',
-              ingredients_text: '',
-              allergens: '',
-              allergens_tags: [],
-              traces: '',
-              traces_tags: [],
-              categories: item.category || '',
-              categories_tags: item.category ? [item.category] : [],
-              source,
-            };
-          }
-          break;
-
-        case 'datakick':
-          try {
-            data = await safeFetch(`${api}/${barcode}`);
-          } catch {
-            console.log(`datakick request failed`);
-            continue;
-          }
-          if (data.name) {
-            productData = {
-              code: barcode,
-              product_name: data.name,
-              brands: data.brand_name || '',
-              image_url: data.images?.[0]?.url || '',
-              image_front_url: data.images?.[0]?.url || '',
-              ingredients_text: data.ingredients || '',
-              allergens: data.allergens || '',
-              allergens_tags: [],
-              traces: '',
-              traces_tags: [],
-              categories: data.category || '',
-              categories_tags: data.category ? [data.category] : [],
-              source,
-            };
-          }
-          break;
-      }
-
-      if (productData) {
-        if (__DEV__) console.log(`[Products] Found in ${source}:`, productData.product_name);
-        await cacheProduct(productData);
-        addToOfflineCache(productData).catch(() => {});
-        upsertProduct(productData).catch((err) => {
-          console.log('[Products] Non-critical: failed to persist to Supabase:', err);
-        });
-        return productData;
-      }
-    } catch (error) {
-      console.error(`Error searching ${source}:`, error);
-    }
+  if (externalResult) {
+    console.log('[Products] ✅ Found externally (' + (Date.now() - lookupStart) + 'ms):', externalResult.product_name);
+    cacheProduct(externalResult).catch(() => {});
+    addToOfflineCache(externalResult).catch(() => {});
+    upsertProduct(externalResult).catch((err) => {
+      console.log('[Products] Non-critical: failed to persist to Supabase:', err);
+    });
+    return externalResult;
   }
 
-  const offlineProduct = await getFromOfflineCache(barcode);
-  if (offlineProduct) {
-    if (__DEV__) console.log('[Products] Found in offline cache:', offlineProduct.product_name);
-    return offlineProduct;
+  if (offlineResult) {
+    if (__DEV__) console.log('[Products] Found in offline cache (' + (Date.now() - lookupStart) + 'ms)');
+    return offlineResult;
   }
 
-  if (__DEV__) console.log('[Products] Product not found in any database');
+  if (__DEV__) console.log('[Products] Product not found in any database (' + (Date.now() - lookupStart) + 'ms)');
+  return null;
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number, options?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+async function fetchOpenFoodFacts(barcode: string): Promise<Product | null> {
+  try {
+    const response = await fetchWithTimeout(`${OFF_API}/product/${barcode}.json`, FAST_TIMEOUT_MS);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.status !== 1 || !data.product) return null;
+    const p = data.product;
+    return {
+      code: p.code || barcode,
+      product_name: p.product_name || '',
+      brands: p.brands,
+      image_url: p.image_url,
+      image_front_url: p.image_front_url,
+      ingredients_text: p.ingredients_text,
+      allergens: p.allergens,
+      allergens_tags: p.allergens_tags || [],
+      traces: p.traces,
+      traces_tags: p.traces_tags || [],
+      categories: p.categories,
+      categories_tags: p.categories_tags || [],
+      source: 'openfoodfacts' as const,
+    };
+  } catch (error) {
+    console.log('[Products] OpenFoodFacts fetch error:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+async function fetchUsda(barcode: string): Promise<Product | null> {
+  try {
+    const response = await fetchWithTimeout(`${USDA_API}/foods/search?query=${barcode}&api_key=DEMO_KEY`, FAST_TIMEOUT_MS);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data.foods || data.foods.length === 0) return null;
+    const food = data.foods[0];
+    return {
+      code: barcode,
+      product_name: food.description || '',
+      brands: food.brandOwner || '',
+      ingredients_text: food.ingredients || '',
+      allergens_tags: [],
+      traces_tags: [],
+      categories: food.foodCategory || '',
+      categories_tags: food.foodCategory ? [food.foodCategory] : [],
+      source: 'usda' as const,
+    };
+  } catch (error) {
+    console.log('[Products] USDA fetch error:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+async function fetchDatakick(barcode: string): Promise<Product | null> {
+  try {
+    const response = await fetchWithTimeout(`${DATAKICK_API}/${barcode}`, FAST_TIMEOUT_MS);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data.name) return null;
+    return {
+      code: barcode,
+      product_name: data.name,
+      brands: data.brand_name || '',
+      image_url: data.images?.[0]?.url || '',
+      image_front_url: data.images?.[0]?.url || '',
+      ingredients_text: data.ingredients || '',
+      allergens: data.allergens || '',
+      allergens_tags: [],
+      traces_tags: [],
+      categories: data.category || '',
+      categories_tags: data.category ? [data.category] : [],
+      source: 'datakick' as const,
+    };
+  } catch (error) {
+    console.log('[Products] Datakick fetch error:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+async function fetchFromExternalSourcesParallel(barcode: string): Promise<Product | null> {
+  console.log('[Products] Fetching from external sources (parallel primary)...');
+  const primaryStart = Date.now();
+
+  const [offResult, usdaResult] = await Promise.all([
+    fetchOpenFoodFacts(barcode),
+    fetchUsda(barcode),
+  ]);
+
+  if (offResult && offResult.product_name) {
+    console.log('[Products] Primary hit: OpenFoodFacts (' + (Date.now() - primaryStart) + 'ms)');
+    return offResult;
+  }
+
+  if (usdaResult && usdaResult.product_name) {
+    console.log('[Products] Primary hit: USDA (' + (Date.now() - primaryStart) + 'ms)');
+    return usdaResult;
+  }
+
+  console.log('[Products] Primary sources empty, trying Datakick...');
+  const datakickResult = await fetchDatakick(barcode);
+  if (datakickResult && datakickResult.product_name) {
+    console.log('[Products] Secondary hit: Datakick (' + (Date.now() - primaryStart) + 'ms)');
+    return datakickResult;
+  }
+
+  console.log('[Products] All external sources exhausted (' + (Date.now() - primaryStart) + 'ms)');
   return null;
 }
 

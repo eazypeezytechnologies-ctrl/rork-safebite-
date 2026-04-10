@@ -87,16 +87,7 @@ export default function ProductDetailsScreen() {
     }
   }
   
-  console.log('=== ProductDetailsScreen Mounted ===');
-  console.log('Raw params:', JSON.stringify(params));
-  console.log('Raw code:', rawCode);
-  console.log('Decoded code:', code);
-  console.log('Code type:', typeof code);
-  console.log('Code is valid:', !!code && code !== 'undefined' && code !== 'null');
-  console.log('Active profile:', activeProfile?.name);
-  console.log('Params object keys:', Object.keys(params));
-  console.log('Params.code value:', params.code);
-  console.log('Is array?', Array.isArray(params.code));
+  if (__DEV__) console.log('[ProductDetail] Mounted, code:', code, 'profile:', activeProfile?.name);
   
   const [product, setProduct] = useState<Product | null>(null);
   const [recalls, setRecalls] = useState<RecallResult[]>([]);
@@ -173,15 +164,7 @@ export default function ProductDetailsScreen() {
   }, [activeProfile?.id]);
 
   useEffect(() => {
-    console.log('=== useEffect triggered ===');
-    console.log('Code value:', code);
-    console.log('Code validation:', {
-      exists: !!code,
-      notUndefined: code !== 'undefined',
-      notNull: code !== 'null',
-      notEmpty: code !== '',
-      length: code?.length
-    });
+    if (__DEV__) console.log('[ProductDetail] useEffect code:', code);
     
     if (code && code !== 'undefined' && code !== 'null' && code.trim() !== '' && !/^https?:\/\//.test(code)) {
       if (loadProductLockRef.current) {
@@ -208,16 +191,7 @@ export default function ProductDetailsScreen() {
       return;
     }
     loadProductLockRef.current = true;
-    console.log('=== loadProduct started ===');
-    console.log('Code value:', code);
-    console.log('Code validation:', {
-      truthy: !!code,
-      isUndefined: code === undefined,
-      isNull: code === null,
-      isEmpty: code === '',
-      isStringUndefined: code === 'undefined',
-      isStringNull: code === 'null'
-    });
+    if (__DEV__) console.log('[ProductDetail] loadProduct started for:', code);
     
     if (!code || code === 'undefined' || code === 'null' || code.trim() === '') {
       console.error('Invalid code provided to loadProduct:', code);
@@ -252,6 +226,7 @@ export default function ProductDetailsScreen() {
       console.log('Product loaded successfully:', productData.product_name);
       
       setProduct(productData);
+      setIsLoading(false);
       
       if (productData.ingredients_text) {
         const ingredientNames = parseIngredients(productData.ingredients_text);
@@ -259,11 +234,19 @@ export default function ProductDetailsScreen() {
         setAnalyzedIngredients(analyzed);
       }
       
-      const recallData = await searchRecallsByBarcode(code);
+      const [recallData, storedAiVerdict, trusted, favStatus, avoidStatus] = await Promise.all([
+        searchRecallsByBarcode(code).catch(() => ({ results: [] as RecallResult[] })),
+        activeProfile ? getAIVerdict(code, activeProfile.id, currentUser?.id).catch(() => null) : Promise.resolve(null),
+        activeProfile ? getTrustedProduct(code, activeProfile.id, currentUser?.id).catch(() => null) : Promise.resolve(null),
+        activeProfile ? isFavorite(code, activeProfile.id).catch(() => false) : Promise.resolve(false),
+        activeProfile ? isOnAvoidList(code, activeProfile.id, currentUser?.id).catch(() => false) : Promise.resolve(false),
+      ]);
+
       setRecalls(recallData.results);
+      setIsFav(favStatus);
+      setIsAvoided(avoidStatus);
       
       if (activeProfile) {
-        const storedAiVerdict = await getAIVerdict(code, activeProfile.id, currentUser?.id);
         if (storedAiVerdict) {
           console.log('[ProductDetail] Found stored AI verdict:', storedAiVerdict.aiVerdict);
           setAiVerdictRecord(storedAiVerdict);
@@ -271,7 +254,6 @@ export default function ProductDetailsScreen() {
           setAiVerdictRecord(null);
         }
 
-        const trusted = await getTrustedProduct(code, activeProfile.id, currentUser?.id);
         if (trusted) {
           console.log('[ProductDetail] Product is trusted for this profile');
           setTrustedProduct(trusted);
@@ -316,17 +298,9 @@ export default function ProductDetailsScreen() {
         
         if (verdict.level === 'danger') {
           if (Platform.OS !== 'web') {
-            try {
-              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              setTimeout(async () => {
-                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              }, 300);
-              setTimeout(async () => {
-                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              }, 600);
-            } catch (error) {
-              console.log('Haptics error:', error);
-            }
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+            setTimeout(() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {}); }, 300);
+            setTimeout(() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {}); }, 600);
           }
           
           Alert.alert(
@@ -367,12 +341,6 @@ export default function ProductDetailsScreen() {
           );
         }
         
-        const [favStatus, avoidStatus] = await Promise.all([
-          isFavorite(code, activeProfile.id),
-          isOnAvoidList(code, activeProfile.id, currentUser?.id),
-        ]);
-        setIsFav(favStatus);
-        setIsAvoided(avoidStatus);
       }
     } catch (err) {
       console.error('=== Error loading product ===');
@@ -427,23 +395,7 @@ export default function ProductDetailsScreen() {
     }
   };
 
-  console.log('===========================');
-  console.log('=== Render State Check ===');
-  console.log('===========================');
-  console.log('isLoading:', isLoading);
-  console.log('error:', error);
-  console.log('product:', product ? product.product_name : 'null');
-  console.log('code:', code);
-  console.log('Will render:', isLoading ? 'LOADING SKELETON' : error || !product ? 'ERROR SCREEN' : 'FULL PRODUCT DETAILS');
-  if (product) {
-    console.log('✓ Product data exists:', product.product_name || 'NO NAME');
-    console.log('✓ Has image:', !!product.image_front_url);
-    console.log('✓ Has ingredients:', !!product.ingredients_text);
-    console.log('✓ Has allergens_tags:', (product.allergens_tags?.length || 0) + ' items');
-    console.log('✓ Has traces_tags:', (product.traces_tags?.length || 0) + ' items');
-  }
-  console.log('Active profile:', activeProfile?.name || 'NONE');
-  console.log('===========================');
+  if (__DEV__) console.log('[ProductDetail] Render:', isLoading ? 'LOADING' : error ? 'ERROR' : product ? product.product_name : 'NO_PRODUCT');
 
   if (isLoading) {
     console.log('Rendering loading state');
@@ -773,18 +725,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
     }
   };
 
-  console.log('=== Rendering Product Details ===');
-  console.log('Product name:', product.product_name);
-  console.log('Product brand:', product.brands);
-  console.log('Product code:', product.code);
-  console.log('Verdict level:', verdict?.level);
-  console.log('Verdict message:', verdict?.message);
-  console.log('Active profile:', activeProfile?.name);
-  console.log('Has image:', !!product.image_front_url);
-  console.log('Has ingredients:', !!product.ingredients_text);
-  console.log('Has allergens_tags:', product.allergens_tags?.length || 0);
-  console.log('Has traces_tags:', product.traces_tags?.length || 0);
-  console.log('Analyzed ingredients count:', analyzedIngredients.length);
+  if (__DEV__) console.log('[ProductDetail] Rendering:', product.product_name, 'verdict:', verdict?.level);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F9FAFB' }}>

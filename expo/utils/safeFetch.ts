@@ -164,9 +164,9 @@ class CircuitBreaker {
 }
 
 const defaultRetryConfig: RetryConfig = {
-  maxRetries: 3,
-  initialDelay: 1000,
-  maxDelay: 10000,
+  maxRetries: 1,
+  initialDelay: 500,
+  maxDelay: 3000,
   backoffFactor: 2,
 };
 
@@ -188,7 +188,7 @@ export async function safeFetch<T = any>(
   options: SafeFetchOptions = {}
 ): Promise<T> {
   const {
-    timeout = 30000,
+    timeout = 10000,
     retryConfig = {},
     skipCircuitBreaker = false,
     ...fetchOptions
