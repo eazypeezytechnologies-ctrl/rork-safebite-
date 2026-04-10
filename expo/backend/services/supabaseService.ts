@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseServiceKey) {
   console.warn('[SupabaseService] CRITICAL: Missing Supabase configuration. Backend services will not function.');
-  console.warn('[SupabaseService] Please set SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.');
+  console.warn('[SupabaseService] Please set SUPABASE_URL and SUPABASE_SERVICE_KEY (or EXPO_PUBLIC_SUPABASE_ANON_KEY) environment variables.');
 }
 
 export const supabaseAdmin = supabaseUrl && supabaseServiceKey 
