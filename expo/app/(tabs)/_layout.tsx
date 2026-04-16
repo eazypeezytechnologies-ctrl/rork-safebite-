@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { ScanBarcode, Users, AlertCircle, History, LayoutDashboard, Settings, Database, ShoppingCart, Activity } from "lucide-react-native";
+import { ScanBarcode, Users, AlertCircle, History, LayoutDashboard, Settings, Database, ShoppingCart, Activity, Headphones } from "lucide-react-native";
 import React, { useMemo, useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useUser } from "@/contexts/UserContext";
@@ -76,6 +76,13 @@ export default function TabLayout() {
           options={{
             title: "Monitor",
             tabBarIcon: ({ color }) => <Activity size={24} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="admin-support"
+          options={{
+            title: "Support",
+            tabBarIcon: ({ color }) => <Headphones size={24} color={color} />,
           }}
         />
         <Tabs.Screen
@@ -176,6 +183,10 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="admin-system-health"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="admin-support"
         options={{ href: null }}
       />
     </Tabs>

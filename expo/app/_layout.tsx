@@ -173,7 +173,11 @@ function RootLayoutNav() {
                           currentPath === 'exposure-guidance' ||
                           currentPath === 'epipen-demo' ||
                           currentPath === 'manual-ingredient-entry' ||
-                          currentPath === 'profile-records';
+                          currentPath === 'profile-records' ||
+                          currentPath === 'issues-queue' ||
+                          currentPath === 'issue-detail' ||
+                          currentPath === 'user-lookup' ||
+                          currentPath === 'report-issue';
     
     if (!hasCompletedOnboarding || !currentUser) {
       if (!isInAuthFlow) {
@@ -424,6 +428,10 @@ function RootLayoutNav() {
       <Stack.Screen name="result" options={{ title: "Result" }} />
       <Stack.Screen name="accept-invite" options={{ title: "Family Invitation" }} />
         <Stack.Screen name="security-checklist" options={{ title: "Security Checklist" }} />
+        <Stack.Screen name="issues-queue" options={{ title: "Issues Queue" }} />
+        <Stack.Screen name="issue-detail" options={{ title: "Issue Detail" }} />
+        <Stack.Screen name="user-lookup" options={{ title: "User Lookup" }} />
+        <Stack.Screen name="report-issue" options={{ title: "Report Issue" }} />
       </Stack>
     </View>
   );
