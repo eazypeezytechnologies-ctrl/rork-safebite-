@@ -127,20 +127,74 @@ export function useCreateProfile(userId: string) {
   });
 }
 
+const CORE_PROFILE_COLUMNS = new Set([
+  'name', 'relationship', 'date_of_birth', 'allergens', 'custom_keywords',
+  'has_anaphylaxis', 'emergency_contacts', 'medications', 'avatar_color',
+  'track_eczema_triggers', 'eczema_trigger_groups', 'dietary_rules',
+  'avoid_ingredients', 'dietary_restrictions', 'dietary_strictness', 'health_items',
+]);
+
 export function useUpdateProfile(userId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<SupabaseProfile> }) => {
+      const sanitized: Record<string, any> = {};
+      for (const [key, value] of Object.entries(updates)) {
+        if (CORE_PROFILE_COLUMNS.has(key) && value !== undefined) {
+          sanitized[key] = value;
+        }
+      }
+
+      if (Object.keys(sanitized).length === 0) {
+        console.warn('[useUpdateProfile] No valid fields to update');
+        const { data: existing } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', id)
+          .single();
+        return existing as SupabaseProfile;
+      }
+
+      console.log('[useUpdateProfile] Updating profile', id, 'with fields:', Object.keys(sanitized).join(', '));
+
       const { data, error } = await supabase
         .from('profiles')
-        .update(updates)
+        .update(sanitized)
         .eq('id', id)
         .select()
         .single();
 
       if (error) {
-        console.error('[useUpdateProfile] Error:', error);
+        console.error('[useUpdateProfile] Error:', error.message || error.code || JSON.stringify(error));
+
+        if (error.message?.includes('column') || error.code === 'PGRST204' || error.code === '42703') {
+          console.log('[useUpdateProfile] Retrying with core-only fields...');
+          const coreOnly: Record<string, any> = {};
+          const safeCols = ['name', 'relationship', 'date_of_birth', 'allergens', 'custom_keywords',
+            'has_anaphylaxis', 'emergency_contacts', 'medications', 'avatar_color'];
+          for (const col of safeCols) {
+            if (sanitized[col] !== undefined) {
+              coreOnly[col] = sanitized[col];
+            }
+          }
+
+          if (Object.keys(coreOnly).length > 0) {
+            const { data: retryData, error: retryError } = await supabase
+              .from('profiles')
+              .update(coreOnly)
+              .eq('id', id)
+              .select()
+              .single();
+
+            if (retryError) {
+              console.error('[useUpdateProfile] Retry also failed:', retryError);
+              throw retryError;
+            }
+            return retryData as SupabaseProfile;
+          }
+        }
+
         throw error;
       }
 

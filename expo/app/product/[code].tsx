@@ -18,7 +18,7 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { searchProductByBarcode } from '@/api/products';
 import { searchRecallsByBarcode } from '@/api/recalls';
-import { getVerdictColor, getVerdictLabel } from '@/utils/verdict';
+import { getVerdictColor, getVerdictLabel, getVerdictMessage } from '@/utils/verdict';
 import { runUnifiedEvaluation } from '@/utils/unifiedEvaluation';
 import { evaluateProduct, evalVerdictToLegacyLevel } from '@/utils/evaluationEngine';
 import { engineToLegacyVerdict } from '@/utils/unifiedEvaluation';

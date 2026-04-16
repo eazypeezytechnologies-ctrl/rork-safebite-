@@ -35,24 +35,28 @@ const convertSupabaseProfileToProfile = (sp: SupabaseProfile): Profile => ({
   updatedAt: sp.updated_at,
 });
 
-const convertProfileToSupabaseProfile = (p: Partial<Profile>): Partial<Omit<SupabaseProfile, 'id' | 'created_at' | 'updated_at' | 'user_id'>> => ({
-  name: p.name,
-  relationship: p.relationship,
-  date_of_birth: p.dateOfBirth,
-  allergens: p.allergens || [],
-  custom_keywords: p.customKeywords || [],
-  has_anaphylaxis: p.hasAnaphylaxis || false,
-  emergency_contacts: p.emergencyContacts || [],
-  medications: p.medications || [],
-  avatar_color: p.avatarColor,
-  track_eczema_triggers: p.trackEczemaTriggers || false,
-  eczema_trigger_groups: p.eczemaTriggerGroups || [],
-  dietary_rules: p.dietaryRules || [],
-  avoid_ingredients: p.avoidIngredients || [],
-  dietary_restrictions: p.dietaryRestrictions || {},
-  dietary_strictness: p.dietaryStrictness || {},
-  health_items: p.healthItems || [],
-});
+const convertProfileToSupabaseProfile = (p: Partial<Profile>): Partial<Omit<SupabaseProfile, 'id' | 'created_at' | 'updated_at' | 'user_id'>> => {
+  const result: Record<string, any> = {};
+
+  if (p.name !== undefined) result.name = p.name;
+  if (p.relationship !== undefined) result.relationship = p.relationship;
+  if (p.dateOfBirth !== undefined) result.date_of_birth = p.dateOfBirth;
+  result.allergens = p.allergens || [];
+  result.custom_keywords = p.customKeywords || [];
+  result.has_anaphylaxis = p.hasAnaphylaxis || false;
+  result.emergency_contacts = p.emergencyContacts || [];
+  result.medications = p.medications || [];
+  if (p.avatarColor !== undefined) result.avatar_color = p.avatarColor;
+  if (p.trackEczemaTriggers !== undefined) result.track_eczema_triggers = p.trackEczemaTriggers;
+  if (p.eczemaTriggerGroups !== undefined) result.eczema_trigger_groups = p.eczemaTriggerGroups;
+  if (p.dietaryRules !== undefined) result.dietary_rules = p.dietaryRules;
+  if (p.avoidIngredients !== undefined) result.avoid_ingredients = p.avoidIngredients;
+  if (p.dietaryRestrictions !== undefined) result.dietary_restrictions = p.dietaryRestrictions;
+  if (p.dietaryStrictness !== undefined) result.dietary_strictness = p.dietaryStrictness;
+  if (p.healthItems !== undefined) result.health_items = p.healthItems;
+
+  return result as Partial<Omit<SupabaseProfile, 'id' | 'created_at' | 'updated_at' | 'user_id'>>;
+};
 
 export const [ProfileProvider, useProfiles] = createContextHook(() => {
   const { currentUser, isLoading: userLoading } = useUser();
