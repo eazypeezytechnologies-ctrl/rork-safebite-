@@ -19,8 +19,9 @@ import { generateText } from '@rork-ai/toolkit-sdk';
 import { saveAIVerdict, parseAIVerdictFromText, getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
 import { updateProductAIVerdict } from '@/services/supabaseProducts';
-import { removeCachedProduct } from '@/storage/productCache';
+import { removeCachedProduct, getUserCategoryOverride } from '@/storage/productCache';
 import { resetBarcodeDebounce } from '@/api/products';
+import { getProductTypeWithOverride } from '@/utils/productType';
 import * as Haptics from 'expo-haptics';
 
 export default function AIAnalysisScreen() {
@@ -82,13 +83,34 @@ export default function AIAnalysisScreen() {
     const ruleVerdict = engineToLegacyVerdict(evalResult);
     console.log('[AIAnalysis] Engine verdict:', ruleVerdict.level, '| Concerns:', evalResult.matchedConcerns.length);
     
-    const prompt = `You are an expert allergist and food safety specialist. Analyze this product for someone with the following allergies: ${activeProfile.allergens.join(', ')}.
+    const resolvedCategory = await getProductTypeWithOverride(
+      code,
+      productData.ingredients_text,
+      productData.product_name,
+      productData.categories,
+      productData.product_type,
+    );
+    const categoryLabel = resolvedCategory === 'food' ? 'FOOD' : resolvedCategory === 'skin' ? 'SKINCARE/BEAUTY' : resolvedCategory === 'hair' ? 'HAIR CARE' : 'GENERAL';
+    console.log('[AIAnalysis] Resolved product category:', categoryLabel);
+
+    const categoryInstruction = resolvedCategory === 'skin'
+      ? 'This is a SKINCARE product. Evaluate for skin contact allergens and irritants, NOT food allergy ingestion risks. Focus on contact dermatitis, eczema triggers, and topical sensitivity.'
+      : resolvedCategory === 'hair'
+        ? 'This is a HAIR CARE product. Evaluate for scalp/skin contact allergens and irritants, NOT food allergy ingestion risks.'
+        : resolvedCategory === 'food'
+          ? 'This is a FOOD product. Evaluate for food allergen ingestion risks, cross-contamination, and hidden allergen sources.'
+          : 'Evaluate this product for both contact and ingestion allergen risks as appropriate.';
+
+    const prompt = `You are an expert allergist and product safety specialist. Analyze this product for someone with the following allergies: ${activeProfile.allergens.join(', ')}.
 
 Product: ${productData.product_name || 'Unknown'}
 Brand: ${productData.brands || 'Unknown'}
+Product Category: ${categoryLabel}
 Ingredients: ${productData.ingredients_text || 'Not available'}
 Listed Allergens: ${productData.allergens || 'None listed'}
 May Contain Traces: ${productData.traces || 'None listed'}
+
+${categoryInstruction}
 
 Our rule-based system currently shows: ${ruleVerdict.level.toUpperCase()} — ${ruleVerdict.message}
 ${ruleVerdict.matches.length > 0 ? `Rule-based allergen matches: ${ruleVerdict.matches.map(m => `${m.allergen} (${m.source}: ${m.matchedText})`).join(', ')}` : 'No rule-based allergen matches found.'}
@@ -96,7 +118,7 @@ ${ruleVerdict.matches.length > 0 ? `Rule-based allergen matches: ${ruleVerdict.m
 Please provide:
 1. A clear safety assessment (SAFE, CAUTION, or DANGER) — state this clearly at the start
 2. Whether you agree or disagree with the rule-based verdict above, and why
-3. Explanation of any allergen risks found
+3. Explanation of any allergen risks found (appropriate to product category)
 4. Analysis of cross-contamination risks
 5. Specific ingredients of concern
 6. Recommendations for this person

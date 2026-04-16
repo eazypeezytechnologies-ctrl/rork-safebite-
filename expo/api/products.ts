@@ -119,7 +119,18 @@ export async function searchProductByBarcode(barcode: string, useCache: boolean 
     getFromOfflineCache(normalizedBarcode).catch(() => null),
   ]);
 
+  if (manualResult && manualResult.ingredients_text) {
+    console.log('[Products] ✅ User-corrected manual entry takes priority (' + (Date.now() - lookupStart) + 'ms)');
+    return manualResult;
+  }
+
   if (supabaseResult && supabaseResult.product_name && supabaseResult.product_name !== 'Unknown Product') {
+    const isCorrected = supabaseResult.source === 'manual_entry' && supabaseResult.ingredients_text;
+    if (isCorrected) {
+      console.log('[Products] ✅ User-corrected Supabase data takes priority (' + (Date.now() - lookupStart) + 'ms):', supabaseResult.product_name);
+      cacheProduct(supabaseResult).catch(() => {});
+      return supabaseResult;
+    }
     console.log('[Products] ✅ Found in Supabase (' + (Date.now() - lookupStart) + 'ms):', supabaseResult.product_name);
     cacheProduct(supabaseResult).catch(() => {});
     return supabaseResult;
@@ -141,6 +152,11 @@ export async function searchProductByBarcode(barcode: string, useCache: boolean 
   const externalResult = await fetchFromExternalSourcesParallel(normalizedBarcode);
 
   if (externalResult) {
+    if (supabaseResult && supabaseResult.ingredients_text && !externalResult.ingredients_text) {
+      console.log('[Products] ✅ Supabase has better data than external, using Supabase (' + (Date.now() - lookupStart) + 'ms)');
+      cacheProduct(supabaseResult).catch(() => {});
+      return supabaseResult;
+    }
     console.log('[Products] ✅ Found externally (' + (Date.now() - lookupStart) + 'ms):', externalResult.product_name);
     cacheProduct(externalResult).catch(() => {});
     addToOfflineCache(externalResult).catch(() => {});

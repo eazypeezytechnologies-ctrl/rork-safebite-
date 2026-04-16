@@ -10,6 +10,7 @@ import {
   Animated,
   Easing,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
@@ -30,6 +31,7 @@ import {
   Flame,
   Wheat,
   ShieldOff,
+  Lightbulb,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useProfiles } from '@/contexts/ProfileContext';
@@ -50,6 +52,7 @@ import { addToScanHistory } from '@/storage/scanHistory';
 import { searchProductByBarcode } from '@/api/products';
 import { getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
 import { getTrustedProduct, TrustedProduct } from '@/storage/trustedProducts';
+import { generateSafeSwaps } from '@/services/safeSwapService';
 
 type IssueType = 'allergy' | 'sensitivity' | 'eczema';
 
@@ -138,6 +141,38 @@ function VerdictIcon({ level, size }: { level: VerdictLevel; size: number }) {
   }
 }
 
+function getKeyReason(verdict: Verdict, triggers: TriggerDetail[], profileName: string): string {
+  if (verdict.missingData) {
+    return 'Ingredient data is missing — we can\'t fully verify safety.';
+  }
+  if (verdict.level === 'safe') {
+    return `No allergen matches found for ${profileName}.`;
+  }
+  if (verdict.level === 'danger' && triggers.length > 0) {
+    const allergyTriggers = triggers.filter(t => t.issueType === 'allergy');
+    if (allergyTriggers.length > 0) {
+      return `Contains ${allergyTriggers.map(t => t.ingredient).join(', ')}`;
+    }
+    return triggers[0].ingredient + ' detected';
+  }
+  if (verdict.level === 'caution') {
+    if (triggers.length > 0) {
+      return triggers.map(t => t.ingredient).join(', ') + ' — needs review';
+    }
+    return 'Some details are unclear. Verify the label.';
+  }
+  return 'Could not fully verify this product.';
+}
+
+function getActionText(verdict: Verdict): string {
+  switch (verdict.level) {
+    case 'safe': return 'No action needed. Always double-check physical label.';
+    case 'danger': return 'Avoid this product. Consider safer alternatives.';
+    case 'caution': return 'Check the physical label before using.';
+    case 'unknown': return 'Scan the ingredient label or add details.';
+  }
+}
+
 export default function ResultScreen() {
   const params = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
@@ -152,10 +187,14 @@ export default function ResultScreen() {
   const [confidence, setConfidence] = useState<ConfidenceBreakdown | null>(null);
   const [isFav, setIsFav] = useState(false);
   const [isAvoided, setIsAvoided] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [showConfidenceDetails, setShowConfidenceDetails] = useState(false);
   const [aiVerdictRecord, setAiVerdictRecord] = useState<AIVerdictRecord | null>(null);
   const [trustedProduct, setTrustedProduct] = useState<TrustedProduct | null>(null);
   const [verdictLabel, setVerdictLabel] = useState<string>('');
+  const [alternativeRecommendations, setAlternativeRecommendations] = useState<string>('');
+  const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false);
+  const [showAlternatives, setShowAlternatives] = useState(false);
 
   const verdictScale = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
@@ -177,17 +216,7 @@ export default function ResultScreen() {
 
         setProduct(productData);
 
-        const [storedAiVerdict, storedTrusted] = await Promise.all([
-          getAIVerdict(code, activeProfile.id, currentUser?.id),
-          getTrustedProduct(code, activeProfile.id, currentUser?.id),
-        ]);
-
-        console.log('[Result] AI verdict:', storedAiVerdict ? storedAiVerdict.aiVerdict : 'none');
-        setAiVerdictRecord(storedAiVerdict);
-        console.log('[Result] Trusted:', storedTrusted ? 'yes' : 'no');
-        setTrustedProduct(storedTrusted);
-
-        const unified = runUnifiedEvaluation(productData, activeProfile, storedAiVerdict, storedTrusted);
+        const unified = runUnifiedEvaluation(productData, activeProfile, null, null);
         unified.debugLog.forEach(l => console.log(l));
 
         setEvalResult(unified.evalResult);
@@ -195,30 +224,7 @@ export default function ResultScreen() {
         setVerdictLabel(unified.verdictLabel);
         setConfidence(unified.confidence);
 
-        console.log('[Result] Unified verdict:', unified.verdict.level, '| Source:', unified.verdictSource);
-        console.log('[Result] Confidence:', unified.confidence.score, unified.confidence.label);
-
-        const [favStatus, avoidStatus] = await Promise.all([
-          isFavorite(code, activeProfile.id, currentUser?.id),
-          isOnAvoidList(code, activeProfile.id, currentUser?.id),
-        ]);
-        setIsFav(favStatus);
-        setIsAvoided(avoidStatus);
-
-        await addToScanHistory({
-          id: `${code}_${activeProfile.id}_${Date.now()}`,
-          product: productData,
-          verdict: unified.verdict,
-          profileId: activeProfile.id,
-          profileName: activeProfile.name,
-          scannedAt: new Date().toISOString(),
-        }, currentUser?.id);
-
-        if (unified.verdict.level === 'danger' && Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        } else if (unified.verdict.level === 'caution' && Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-        }
+        console.log('[Result] Quick verdict:', unified.verdict.level, '| Source:', unified.verdictSource);
 
         Animated.parallel([
           Animated.spring(verdictScale, {
@@ -240,6 +246,53 @@ export default function ResultScreen() {
             useNativeDriver: true,
           }),
         ]).start();
+
+        if (unified.verdict.level === 'danger' && Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        } else if (unified.verdict.level === 'caution' && Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        }
+
+        const [storedAiVerdict, storedTrusted, favStatus, avoidStatus] = await Promise.all([
+          getAIVerdict(code, activeProfile.id, currentUser?.id).catch(() => null),
+          getTrustedProduct(code, activeProfile.id, currentUser?.id).catch(() => null),
+          isFavorite(code, activeProfile.id, currentUser?.id).catch(() => false),
+          isOnAvoidList(code, activeProfile.id, currentUser?.id).catch(() => false),
+        ]);
+
+        setIsFav(favStatus);
+        setIsAvoided(avoidStatus);
+
+        if (storedAiVerdict || storedTrusted) {
+          console.log('[Result] AI verdict:', storedAiVerdict ? storedAiVerdict.aiVerdict : 'none');
+          console.log('[Result] Trusted:', storedTrusted ? 'yes' : 'no');
+          setAiVerdictRecord(storedAiVerdict);
+          setTrustedProduct(storedTrusted);
+
+          const refinedUnified = runUnifiedEvaluation(productData, activeProfile, storedAiVerdict, storedTrusted);
+          refinedUnified.debugLog.forEach(l => console.log(l));
+
+          if (refinedUnified.verdict.level !== unified.verdict.level) {
+            console.log('[Result] Verdict refined from', unified.verdict.level, 'to', refinedUnified.verdict.level);
+            setEvalResult(refinedUnified.evalResult);
+            setVerdict(refinedUnified.verdict);
+            setVerdictLabel(refinedUnified.verdictLabel);
+            setConfidence(refinedUnified.confidence);
+          }
+        }
+
+        addToScanHistory({
+          id: `${code}_${activeProfile.id}_${Date.now()}`,
+          product: productData,
+          verdict: unified.verdict,
+          profileId: activeProfile.id,
+          profileName: activeProfile.name,
+          scannedAt: new Date().toISOString(),
+        }, currentUser?.id).catch(err => console.log('[Result] Scan history error:', err));
+
+        if (unified.verdict.level === 'danger' || unified.verdict.level === 'caution') {
+          loadAlternatives(productData, unified.verdict);
+        }
       } catch (err) {
         console.error('[Result] Error loading result:', err);
         setProduct(null);
@@ -251,12 +304,35 @@ export default function ResultScreen() {
     setVerdict(null);
     setEvalResult(null);
     setConfidence(null);
+    setAlternativeRecommendations('');
+    setShowAlternatives(false);
     verdictScale.setValue(0);
     fadeIn.setValue(0);
     slideUp.setValue(30);
 
     void loadResult();
   }, [code, activeProfile?.id, currentUser?.id, verdictScale, fadeIn, slideUp]);
+
+  const loadAlternatives = useCallback(async (productData: Product, productVerdict: Verdict) => {
+    if (!activeProfile || productVerdict.level === 'safe' || productVerdict.level === 'unknown') return;
+
+    setIsLoadingAlternatives(true);
+    setShowAlternatives(true);
+
+    try {
+      console.log('[Result] Loading AI alternative recommendations...');
+      const recommendations = await generateSafeSwaps(productData, productVerdict, activeProfile);
+      setAlternativeRecommendations(recommendations);
+    } catch (error) {
+      console.error('[Result] Error generating alternatives:', error);
+      const allergenList = activeProfile.allergens.join(', ');
+      setAlternativeRecommendations(
+        `Look for products labeled "${allergenList}-free" at your local store. Consider brands like Enjoy Life, Free2b, or check the allergen-free section.`
+      );
+    } finally {
+      setIsLoadingAlternatives(false);
+    }
+  }, [activeProfile]);
 
   const triggers = useMemo<TriggerDetail[]>(() => {
     if (!activeProfile) return [];
@@ -482,9 +558,10 @@ export default function ResultScreen() {
 
   const verdictColor = getVerdictColor(verdict.level);
   const verdictBg = getVerdictBg(verdict.level);
-  const _verdictBorder = getVerdictBorder(verdict.level);
   const confidenceScore = confidence?.score ?? 50;
   const confidenceLabel = confidence?.label ?? 'Moderate';
+  const keyReason = getKeyReason(verdict, triggers, activeProfile.name);
+  const actionText = getActionText(verdict);
 
   return (
     <View style={styles.screen} testID="result-screen">
@@ -526,22 +603,16 @@ export default function ResultScreen() {
 
         <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: slideUp }] }}>
           <View style={styles.mainContent}>
-            <View style={[styles.card, styles.explanationCard]}>
-              <View style={styles.cardHeader}>
-                <Info size={18} color={arcaneColors.text} />
-                <Text style={styles.cardTitle}>
-                  {verdict.level === 'safe' ? 'Why it looks safe' : verdict.level === 'danger' ? 'What we found' : verdict.level === 'unknown' || verdict.missingData ? 'What\'s missing' : 'What to know'}
-                </Text>
+            <View style={[styles.card, styles.summaryCard]}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Key reason</Text>
+                <Text style={styles.summaryValue} testID="verdict-explanation">{keyReason}</Text>
               </View>
-              <Text style={styles.explanationText} testID="verdict-explanation">
-                {getVerdictMessage(verdict.level, activeProfile?.name || 'you', verdict.missingData)}
-              </Text>
-              {verdict.level === 'safe' && triggers.length === 0 && (
-                <View style={styles.safeBullets}>
-                  <Text style={styles.safeBulletItem}>No allergen matches found</Text>
-                  <Text style={styles.safeBulletItem}>No known risks detected for this profile</Text>
-                </View>
-              )}
+              <View style={[styles.summaryDivider, { backgroundColor: verdictColor + '20' }]} />
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Action</Text>
+                <Text style={styles.summaryValue}>{actionText}</Text>
+              </View>
               <View style={styles.profileChip}>
                 <Text style={styles.profileChipLabel}>Checked for</Text>
                 <View style={[styles.profileBadge, { backgroundColor: activeProfile.avatarColor || arcaneColors.primary + '18' }]}>
@@ -552,7 +623,27 @@ export default function ResultScreen() {
               </View>
             </View>
 
-            {triggers.length > 0 && (
+            {(triggers.length > 0 || confidenceReasons.length > 0) && (
+              <TouchableOpacity
+                style={[styles.card, styles.expandableCard]}
+                onPress={() => setShowDetails(!showDetails)}
+                activeOpacity={0.7}
+                testID="toggle-details"
+              >
+                <View style={styles.expandableHeader}>
+                  <Info size={18} color={arcaneColors.text} />
+                  <Text style={styles.cardTitle}>
+                    {showDetails ? 'Hide Details' : 'View Detailed Breakdown'}
+                  </Text>
+                  {showDetails
+                    ? <ChevronUp size={18} color={arcaneColors.textMuted} />
+                    : <ChevronDown size={18} color={arcaneColors.textMuted} />
+                  }
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {showDetails && triggers.length > 0 && (
               <View style={[styles.card, styles.triggersCard]}>
                 <View style={styles.cardHeader}>
                   <AlertTriangle size={18} color="#92400E" />
@@ -579,7 +670,6 @@ export default function ResultScreen() {
                           <Text style={styles.triggerSource}>{trigger.source}</Text>
                         </View>
                         <Text style={styles.triggerDescription}>{getIssueTypeDescription(trigger.issueType)}</Text>
-                        <Text style={styles.triggerProfile}>Affects: {trigger.profileName}</Text>
                       </View>
                     </View>
                   );
@@ -587,54 +677,73 @@ export default function ResultScreen() {
               </View>
             )}
 
-            <View style={[styles.card, styles.confidenceCard]}>
-              <TouchableOpacity
-                style={styles.confidenceHeader}
-                onPress={() => setShowConfidenceDetails(!showConfidenceDetails)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={[styles.confidenceDot, { backgroundColor: confidence?.color || '#D97706' }]} />
-                  <Text style={styles.cardTitle}>Confidence: {confidenceLabel}</Text>
-                </View>
-                <View style={styles.confidenceScoreRow}>
-                  <View style={styles.confidenceTrack}>
-                    <View
-                      style={[
-                        styles.confidenceFill,
-                        {
-                          width: `${confidenceScore}%`,
-                          backgroundColor: confidence?.color || '#D97706',
-                        },
-                      ]}
-                    />
+            {showDetails && (
+              <View style={[styles.card, styles.confidenceCard]}>
+                <TouchableOpacity
+                  style={styles.confidenceHeader}
+                  onPress={() => setShowConfidenceDetails(!showConfidenceDetails)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.cardHeader}>
+                    <View style={[styles.confidenceDot, { backgroundColor: confidence?.color || '#D97706' }]} />
+                    <Text style={styles.cardTitle}>Confidence: {confidenceLabel}</Text>
                   </View>
-                  <Text style={[styles.confidencePercent, { color: confidence?.color || '#D97706' }]}>
-                    {confidenceScore}%
-                  </Text>
-                  {showConfidenceDetails
-                    ? <ChevronUp size={16} color={arcaneColors.textMuted} />
-                    : <ChevronDown size={16} color={arcaneColors.textMuted} />
-                  }
-                </View>
-              </TouchableOpacity>
-
-              {showConfidenceDetails && confidenceReasons.length > 0 && (
-                <View style={styles.confidenceReasons}>
-                  <Text style={styles.confidenceReasonsTitle}>Why confidence is reduced:</Text>
-                  {confidenceReasons.map((reason, i) => (
-                    <View key={i} style={styles.confidenceReasonRow}>
-                      <ShieldOff size={12} color="#9CA3AF" />
-                      <Text style={styles.confidenceReasonText}>{reason}</Text>
+                  <View style={styles.confidenceScoreRow}>
+                    <View style={styles.confidenceTrack}>
+                      <View
+                        style={[
+                          styles.confidenceFill,
+                          {
+                            width: `${confidenceScore}%`,
+                            backgroundColor: confidence?.color || '#D97706',
+                          },
+                        ]}
+                      />
                     </View>
-                  ))}
+                    <Text style={[styles.confidencePercent, { color: confidence?.color || '#D97706' }]}>
+                      {confidenceScore}%
+                    </Text>
+                    {showConfidenceDetails
+                      ? <ChevronUp size={16} color={arcaneColors.textMuted} />
+                      : <ChevronDown size={16} color={arcaneColors.textMuted} />
+                    }
+                  </View>
+                </TouchableOpacity>
+
+                {showConfidenceDetails && confidenceReasons.length > 0 && (
+                  <View style={styles.confidenceReasons}>
+                    <Text style={styles.confidenceReasonsTitle}>Why confidence is reduced:</Text>
+                    {confidenceReasons.map((reason, i) => (
+                      <View key={i} style={styles.confidenceReasonRow}>
+                        <ShieldOff size={12} color="#9CA3AF" />
+                        <Text style={styles.confidenceReasonText}>{reason}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {showAlternatives && (verdict.level === 'danger' || verdict.level === 'caution') && (
+              <View style={[styles.card, styles.alternativesCard]}>
+                <View style={styles.cardHeader}>
+                  <Lightbulb size={18} color="#059669" />
+                  <Text style={styles.cardTitle}>
+                    {verdict.level === 'danger' ? 'Safe Alternatives' : 'Safer Options'}
+                  </Text>
                 </View>
-              )}
-            </View>
+                {isLoadingAlternatives ? (
+                  <View style={styles.alternativesLoading}>
+                    <ActivityIndicator size="small" color="#059669" />
+                    <Text style={styles.alternativesLoadingText}>Finding alternatives...</Text>
+                  </View>
+                ) : alternativeRecommendations ? (
+                  <Text style={styles.alternativesText}>{alternativeRecommendations}</Text>
+                ) : null}
+              </View>
+            )}
 
             <View style={styles.actionsSection}>
-              <Text style={styles.actionsSectionTitle}>Actions</Text>
-
               <View style={styles.actionsGrid}>
                 {verdict.level === 'safe' && (
                   <TouchableOpacity
@@ -656,7 +765,7 @@ export default function ResultScreen() {
                 >
                   <Ban size={20} color={isAvoided ? '#FFFFFF' : '#DC2626'} />
                   <Text style={[styles.actionBtnText, { color: isAvoided ? '#FFFFFF' : '#DC2626' }]}>
-                    {isAvoided ? 'On Avoid List' : 'Add to Avoid List'}
+                    {isAvoided ? 'On Avoid List' : 'Avoid'}
                   </Text>
                 </TouchableOpacity>
 
@@ -691,9 +800,9 @@ export default function ResultScreen() {
                   testID="find-alternatives"
                 >
                   <View style={styles.findAlternativesContent}>
-                    <Text style={styles.findAlternativesTitle}>Find Alternatives</Text>
+                    <Text style={styles.findAlternativesTitle}>View Full Product Details</Text>
                     <Text style={styles.findAlternativesSubtitle}>
-                      Get AI-powered safe product suggestions
+                      Detailed ingredients, AI analysis & more
                     </Text>
                   </View>
                   <ArrowRight size={20} color="#FFFFFF" />
@@ -824,17 +933,35 @@ const styles = StyleSheet.create({
     color: arcaneColors.text,
     flex: 1,
   },
-  explanationCard: {},
-  explanationText: {
+  summaryCard: {
+    paddingVertical: 20,
+  },
+  summaryRow: {
+    marginBottom: 12,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: arcaneColors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  summaryValue: {
     fontSize: 15,
-    color: arcaneColors.textSecondary,
-    lineHeight: 23,
-    marginBottom: 14,
+    color: arcaneColors.text,
+    lineHeight: 22,
+    fontWeight: '500' as const,
+  },
+  summaryDivider: {
+    height: 1,
+    marginBottom: 12,
   },
   profileChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginTop: 4,
   },
   profileChipLabel: {
     fontSize: 13,
@@ -849,6 +976,15 @@ const styles = StyleSheet.create({
   profileBadgeText: {
     fontSize: 13,
     fontWeight: '600' as const,
+  },
+  expandableCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+  },
+  expandableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   triggersCard: {},
   triggerRow: {
@@ -906,11 +1042,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 17,
   },
-  triggerProfile: {
-    fontSize: 12,
-    color: arcaneColors.textSecondary,
-    marginTop: 2,
-  },
   confidenceCard: {
     paddingBottom: 14,
   },
@@ -966,16 +1097,26 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 17,
   },
+  alternativesCard: {},
+  alternativesLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  alternativesLoadingText: {
+    fontSize: 14,
+    color: arcaneColors.textMuted,
+    fontStyle: 'italic' as const,
+  },
+  alternativesText: {
+    fontSize: 14,
+    color: arcaneColors.text,
+    lineHeight: 22,
+  },
   actionsSection: {
     marginTop: 4,
     marginBottom: 16,
-  },
-  actionsSectionTitle: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: arcaneColors.text,
-    marginBottom: 12,
-    marginLeft: 2,
   },
   actionsGrid: {
     flexDirection: 'row',
@@ -1062,16 +1203,6 @@ const styles = StyleSheet.create({
     color: '#92400E',
     lineHeight: 19,
     fontWeight: '500' as const,
-  },
-  safeBullets: {
-    marginTop: 8,
-    gap: 4,
-  },
-  safeBulletItem: {
-    fontSize: 14,
-    color: '#059669',
-    fontWeight: '500' as const,
-    paddingLeft: 8,
   },
   contributeBtn: {
     flexDirection: 'row' as const,

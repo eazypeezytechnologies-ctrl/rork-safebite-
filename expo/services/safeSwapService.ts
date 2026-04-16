@@ -1,6 +1,7 @@
-import { Product, Profile, Verdict } from '@/types';
+import { Product, Profile, Verdict, ProductType } from '@/types';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import Constants from 'expo-constants';
+import { getUserCategoryOverride } from '@/storage/productCache';
 
 export interface SafeSwap {
   productName: string;
@@ -20,7 +21,35 @@ export interface SafeSwapRecommendation {
   error?: string;
 }
 
-function detectProductType(product: Product): { type: string; isFood: boolean; isSkincare: boolean; isBeauty: boolean; category: string } {
+function detectProductType(product: Product, overrideType?: ProductType | null): { type: string; isFood: boolean; isSkincare: boolean; isBeauty: boolean; category: string } {
+  if (overrideType) {
+    console.log('[SafeSwap] Using persisted category override:', overrideType);
+    const isFood = overrideType === 'food';
+    const isSkincare = overrideType === 'skin';
+    const isHair = overrideType === 'hair';
+    return {
+      type: isFood ? 'food product' : isSkincare ? 'skincare/beauty product' : isHair ? 'hair product' : 'general product',
+      isFood,
+      isSkincare: isSkincare || isHair,
+      isBeauty: isSkincare || isHair,
+      category: product.categories || (isFood ? 'food product' : isSkincare ? 'skincare product' : isHair ? 'hair product' : 'product'),
+    };
+  }
+
+  if (product.product_type) {
+    console.log('[SafeSwap] Using product.product_type:', product.product_type);
+    const isFood = product.product_type === 'food';
+    const isSkincare = product.product_type === 'skin';
+    const isHair = product.product_type === 'hair';
+    return {
+      type: isFood ? 'food product' : isSkincare ? 'skincare/beauty product' : isHair ? 'hair product' : 'general product',
+      isFood,
+      isSkincare: isSkincare || isHair,
+      isBeauty: isSkincare || isHair,
+      category: product.categories || (isFood ? 'food product' : isSkincare ? 'skincare product' : isHair ? 'hair product' : 'product'),
+    };
+  }
+
   const productName = (product.product_name || '').toLowerCase();
   const categories = (product.categories || '').toLowerCase();
   const source = product.source;
@@ -67,7 +96,8 @@ export async function generateSafeSwaps(
     const toolkitUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_TOOLKIT_URL || 'https://toolkit.rork.com';
     console.log('Using Toolkit URL:', toolkitUrl);
     
-    const productInfo = detectProductType(product);
+    const categoryOverride = await getUserCategoryOverride(product.code).catch(() => null);
+    const productInfo = detectProductType(product, categoryOverride);
     const allergenList = verdict.matches.map((m: any) => m.allergen).join(', ');
     
     const productContext = `
@@ -142,7 +172,8 @@ export async function generateNoDataSwaps(
   console.log('Generating safe swaps for product with no ingredient data...');
   
   try {
-    const productInfo = detectProductType(product);
+    const categoryOverride = await getUserCategoryOverride(product.code).catch(() => null);
+    const productInfo = detectProductType(product, categoryOverride);
     
     const productContext = `
 Product: ${product.product_name || 'Unknown Product'}
