@@ -35,7 +35,7 @@ import * as Haptics from 'expo-haptics';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { Product, Verdict, VerdictLevel, ConfidenceBreakdown } from '@/types';
-import { getVerdictColor } from '@/utils/verdict';
+import { getVerdictColor, getVerdictMessage } from '@/utils/verdict';
 import {
   evaluateProduct,
   EvaluationResult,
@@ -118,12 +118,13 @@ function getVerdictBorder(level: VerdictLevel): string {
   }
 }
 
-function getVerdictDisplayLabel(level: VerdictLevel): string {
+function getVerdictDisplayLabel(level: VerdictLevel, missingData?: boolean): string {
+  if (missingData) return 'We Need More Info';
   switch (level) {
-    case 'safe': return 'Safe';
-    case 'caution': return 'Caution';
-    case 'danger': return 'Avoid';
-    case 'unknown': return 'Unknown';
+    case 'safe': return 'Safe to Use';
+    case 'caution': return 'Partially Verified';
+    case 'danger': return 'Not Safe';
+    case 'unknown': return 'We Need More Info';
   }
 }
 
@@ -241,6 +242,7 @@ export default function ResultScreen() {
         ]).start();
       } catch (err) {
         console.error('[Result] Error loading result:', err);
+        setProduct(null);
       }
     };
 
@@ -472,7 +474,7 @@ export default function ResultScreen() {
         <Stack.Screen options={{ title: 'Result', headerStyle: { backgroundColor: '#FFFFFF' }, headerTintColor: arcaneColors.primary }} />
         <View style={styles.loadingContainer}>
           <ShieldQuestion size={48} color={arcaneColors.textMuted} />
-          <Text style={styles.loadingText}>Loading result...</Text>
+          <Text style={styles.loadingText}>Checking product safety...</Text>
         </View>
       </>
     );
@@ -512,7 +514,7 @@ export default function ResultScreen() {
             <VerdictIcon level={verdict.level} size={36} />
           </View>
           <Text style={[styles.verdictTitle, { color: verdictColor }]} testID="verdict-label">
-            {getVerdictDisplayLabel(verdict.level)}
+            {getVerdictDisplayLabel(verdict.level, verdict.missingData)}
           </Text>
           <Text style={styles.verdictProductName} numberOfLines={2}>
             {product.product_name || 'Unknown Product'}
@@ -527,11 +529,19 @@ export default function ResultScreen() {
             <View style={[styles.card, styles.explanationCard]}>
               <View style={styles.cardHeader}>
                 <Info size={18} color={arcaneColors.text} />
-                <Text style={styles.cardTitle}>Why this result</Text>
+                <Text style={styles.cardTitle}>
+                  {verdict.level === 'safe' ? 'Why it looks safe' : verdict.level === 'danger' ? 'What we found' : verdict.level === 'unknown' || verdict.missingData ? 'What\'s missing' : 'What to know'}
+                </Text>
               </View>
               <Text style={styles.explanationText} testID="verdict-explanation">
-                {verdict.explanation || verdict.message}
+                {getVerdictMessage(verdict.level, activeProfile?.name || 'you', verdict.missingData)}
               </Text>
+              {verdict.level === 'safe' && triggers.length === 0 && (
+                <View style={styles.safeBullets}>
+                  <Text style={styles.safeBulletItem}>No allergen matches found</Text>
+                  <Text style={styles.safeBulletItem}>No known risks detected for this profile</Text>
+                </View>
+              )}
               <View style={styles.profileChip}>
                 <Text style={styles.profileChipLabel}>Checked for</Text>
                 <View style={[styles.profileBadge, { backgroundColor: activeProfile.avatarColor || arcaneColors.primary + '18' }]}>
@@ -687,6 +697,23 @@ export default function ResultScreen() {
                     </Text>
                   </View>
                   <ArrowRight size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+
+              {(verdict.level === 'unknown' || verdict.missingData) && (
+                <TouchableOpacity
+                  style={styles.contributeBtn}
+                  onPress={handleFindAlternatives}
+                  activeOpacity={0.7}
+                  testID="contribute-data"
+                >
+                  <View style={styles.findAlternativesContent}>
+                    <Text style={styles.contributeBtnTitle}>Help Improve This Product</Text>
+                    <Text style={styles.contributeBtnSubtitle}>
+                      Scan the ingredient label or add details manually
+                    </Text>
+                  </View>
+                  <ArrowRight size={20} color={arcaneColors.primary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1035,5 +1062,35 @@ const styles = StyleSheet.create({
     color: '#92400E',
     lineHeight: 19,
     fontWeight: '500' as const,
+  },
+  safeBullets: {
+    marginTop: 8,
+    gap: 4,
+  },
+  safeBulletItem: {
+    fontSize: 14,
+    color: '#059669',
+    fontWeight: '500' as const,
+    paddingLeft: 8,
+  },
+  contributeBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: arcaneColors.primaryMuted,
+    borderRadius: 14,
+    padding: 18,
+    marginTop: 12,
+    borderWidth: 1.5,
+    borderColor: arcaneColors.borderRune,
+  },
+  contributeBtnTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: arcaneColors.primary,
+    marginBottom: 2,
+  },
+  contributeBtnSubtitle: {
+    fontSize: 13,
+    color: arcaneColors.textSecondary,
   },
 });

@@ -509,10 +509,10 @@ export function generateExplanation(
       ? [`Note: ${resolved.length} resolved item(s) were excluded from evaluation: ${resolved.map(r => `${r.name} (${r.category === 'allergy' ? 'allergy' : r.category === 'eczema_trigger' ? 'eczema trigger' : 'sensitivity'})`).join(', ')}.`]
       : [];
     return {
-      summary: `Cannot determine safety for ${profileName}. Ingredient data is missing or too incomplete to evaluate.`,
+      summary: `We couldn't fully verify this product for ${profileName}. Ingredient data is missing.`,
       details: [
-        'This product has no ingredient information in any database.',
-        'Read the physical label or contact the manufacturer for ingredient details.',
+        'This product doesn\'t have ingredient information in our databases yet.',
+        'Check the physical label or help by adding ingredient details.',
         ...confidenceReasons.filter(r => r.impact === 'negative').map(r => r.detail),
         ...resolvedNotes,
       ],
@@ -528,7 +528,7 @@ export function generateExplanation(
       ? ` (${resolved.length} resolved item(s) excluded from check)`
       : '';
     return {
-      summary: `No known concerns found for ${profileName}.${caveat}${resolvedNote}`,
+      summary: `This product looks safe for ${profileName}.${caveat}${resolvedNote}`,
       details: [
         'All available ingredient data was checked against active profile items only.',
         'No active allergen, sensitivity, or eczema trigger matches found.',

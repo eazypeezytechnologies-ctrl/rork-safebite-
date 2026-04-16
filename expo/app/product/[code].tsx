@@ -220,6 +220,7 @@ export default function ProductDetailsScreen() {
         wizardShownForCodeRef.current = code;
         setShowCaptureWizard(true);
         setIsLoading(false);
+        logProductNotFound(code, currentUser?.id);
         return;
       }
       
@@ -304,8 +305,8 @@ export default function ProductDetailsScreen() {
           }
           
           Alert.alert(
-            '🚨 DANGER - UNSAFE SCAN DETECTED',
-            `THIS PRODUCT CONTAINS ALLERGENS YOU ARE ALLERGIC TO!\n\nDETECTED: ${verdict.matches.map(m => m.allergen).join(', ').toUpperCase()}\n\nDO NOT CONSUME OR USE THIS PRODUCT.${activeProfile.hasAnaphylaxis ? '\n\nIF EXPOSED: USE EPINEPHRINE AUTO-INJECTOR IMMEDIATELY AND CALL 911.' : ''}`,
+            'Not Safe for ' + activeProfile.name,
+            `This product contains ingredients that may affect ${activeProfile.name}.\n\nDetected: ${verdict.matches.map(m => m.allergen).join(', ')}${activeProfile.hasAnaphylaxis ? '\n\nIf exposed, use your epinephrine auto-injector and call 911.' : ''}`,
             [
               { text: 'Understood', style: 'default' },
               { text: 'Exposure Help', onPress: () => {
@@ -321,6 +322,7 @@ export default function ProductDetailsScreen() {
         
         if (verdict.missingData) {
           void loadNoDataAlternativeRecommendations(productData);
+          logMissingData(code, productData.product_name, currentUser?.id, activeProfile?.id, activeProfile?.name);
         }
         
         if (verdict.level === 'caution') {
@@ -333,10 +335,10 @@ export default function ProductDetailsScreen() {
           }
           
           Alert.alert(
-            '⚡ CAUTION - Use With Care',
-            `This product may contain traces of your allergens due to cross-contamination.\n\nPossible traces: ${verdict.matches.map(m => m.allergen).join(', ')}`,
+            'Use With Care',
+            `Some details are unclear. This product may contain traces of allergens relevant to your profile.`,
             [
-              { text: 'Understood', style: 'default' }
+              { text: 'Got It', style: 'default' }
             ]
           );
         }
@@ -347,7 +349,9 @@ export default function ProductDetailsScreen() {
       console.error('Error details:', err);
       console.error('Error message:', err instanceof Error ? err.message : String(err));
       console.error('Code that caused error:', code);
-      setError(`Failed to load product: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      const friendly = mapErrorToFriendly(err);
+      console.error('[ProductDetail] Raw error:', err instanceof Error ? err.message : err);
+      setError(friendly.message);
     } finally {
       console.log('loadProduct finished, isLoading set to false');
       loadProductLockRef.current = false;
@@ -441,13 +445,13 @@ export default function ProductDetailsScreen() {
     console.log('Rendering error state:', { error, hasProduct: !!product });
     return (
       <>
-        <Stack.Screen options={{ title: 'Error' }} />
+        <Stack.Screen options={{ title: 'Product' }} />
         <ScrollView style={styles.container} contentContainerStyle={styles.centerContainer}>
-          <AlertCircle size={64} color="#DC2626" />
-          <Text style={styles.errorText}>{error || 'Product not found'}</Text>
-          <Text style={styles.errorSubtext}>Something went wrong loading this product</Text>
+          <HelpCircle size={56} color="#6B7280" />
+          <Text style={styles.errorText}>{error || 'We couldn\'t find this product'}</Text>
+          <Text style={styles.errorSubtext}>Try scanning again or search by name</Text>
           <TouchableOpacity style={styles.retryButton} onPress={loadProduct}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: '#0891B2', marginTop: 12 }]}
@@ -769,10 +773,12 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
           </View>
           <View style={styles.verdictContent}>
             <Text style={[styles.verdictLabel, { color: verdict?.missingData ? '#F59E0B' : verdictColor }]}>
-              {verdict?.missingData ? 'CANNOT VERIFY' : verdictLabel}
+              {verdict?.missingData ? 'We Need More Info' : verdictLabel}
             </Text>
             {verdict && (
-              <Text style={styles.verdictMessage}>{verdict.message}</Text>
+              <Text style={styles.verdictMessage}>
+                {getVerdictMessage(verdict.level, activeProfile?.name || 'you', verdict.missingData)}
+              </Text>
             )}
             {viewMode === 'family' && activeFamilyGroup && affectedMembers.length > 0 ? (
               <Text style={styles.verdictProfile}>Family View: {activeFamilyGroup.name}</Text>
@@ -1025,14 +1031,26 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
         {verdict && verdict.missingData && !showNoDataAlternatives && (
           <View style={[styles.recommendationCard, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
             <Text style={styles.recommendationTitle}>
-              ⚠️ Missing Ingredient Information
+              We Need More Info
             </Text>
             <Text style={styles.recommendationText}>
-              This product has no ingredient data in the database. We cannot verify if it contains allergens from your profile.
-              {activeProfile && activeProfile.allergens.length > 0 && `\n\nYour allergens: ${activeProfile.allergens.join(', ')}`}
-              {activeProfile && activeProfile.hasAnaphylaxis && `\n\n⚡ IMPORTANT: You have marked anaphylaxis. DO NOT consume or use products without verified ingredients.`}
-              \n\nWhat you can do:\n• Read the physical product label carefully\n• Contact the manufacturer to verify ingredients\n• Consult your allergist before using\n• Look for an alternative product with clear labeling
+              {`We couldn't fully verify this product yet. Ingredient data is missing from our databases.`}
+              {activeProfile && activeProfile.hasAnaphylaxis && `\n\nGiven your sensitivity level, please verify the physical label before using.`}
             </Text>
+            <TouchableOpacity
+              style={styles.contributeProductBtn}
+              onPress={() => router.push(`/manual-ingredient-entry?code=${code}&productName=${encodeURIComponent(product.product_name || '')}` as Href)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.contributeProductBtnText}>Scan Ingredients Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.contributeProductBtn, { backgroundColor: '#F3F4F6', marginTop: 8 }]}
+              onPress={() => router.push(`/manual-ingredient-entry?code=${code}&productName=${encodeURIComponent(product.product_name || '')}` as Href)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.contributeProductBtnText, { color: '#374151' }]}>Add Product Details</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1195,22 +1213,28 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
         {!product.ingredients_text && !product.allergens_tags && !product.traces_tags && (
           <View style={styles.section}>
             <View style={styles.missingDataWarning}>
-              <AlertCircle size={48} color="#F59E0B" />
-              <Text style={styles.missingDataTitle}>No Ingredient Data Available</Text>
+              <HelpCircle size={40} color="#F59E0B" />
+              <Text style={styles.missingDataTitle}>Help Improve This Product</Text>
               <Text style={styles.missingDataText}>
-                This product does not have ingredient information in our databases. This is common with:
-                {`\n\n`}• Beauty and personal care products
-                {`\n`}• Regional or local products
-                {`\n`}• Newly released products
-                {`\n`}• Non-food items
+                {`This product doesn't have ingredient info in our databases yet. You can help by adding it!`}
               </Text>
-              <View style={styles.missingDataActions}>
-                <Text style={styles.missingDataActionsTitle}>What to do:</Text>
-                <Text style={styles.missingDataActionItem}>✅ Read the physical product label</Text>
-                <Text style={styles.missingDataActionItem}>📞 Contact the manufacturer</Text>
-                <Text style={styles.missingDataActionItem}>👨‍⚕️ Consult your allergist</Text>
-                <Text style={styles.missingDataActionItem}>🛑 Never assume a product is safe</Text>
-              </View>
+              <TouchableOpacity
+                style={styles.contributeProductBtn}
+                onPress={() => router.push(`/manual-ingredient-entry?code=${code}&productName=${encodeURIComponent(product.product_name || '')}` as Href)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.contributeProductBtnText}>Scan Ingredients Label</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.contributeProductBtn, { backgroundColor: '#F3F4F6', marginTop: 8 }]}
+                onPress={() => router.push(`/manual-ingredient-entry?code=${code}&productName=${encodeURIComponent(product.product_name || '')}` as Href)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.contributeProductBtnText, { color: '#374151' }]}>Add Details Manually</Text>
+              </TouchableOpacity>
+              <Text style={styles.contributeHelpText}>
+                Your contribution helps everyone who scans this product in the future.
+              </Text>
             </View>
           </View>
         )}
@@ -1510,35 +1534,36 @@ function getSourceBadgeStyle(source: string) {
 function getRecommendationTitle(level: string): string {
   switch (level) {
     case 'danger':
-      return '⚠️ DO NOT USE - Allergen Detected';
+      return 'Not Safe — Allergen Detected';
     case 'caution':
-      return '⚡ USE WITH CAUTION - Possible Cross-Contamination';
+      return 'Partially Verified — Review Recommended';
     case 'safe':
-      return '✓ No Known Allergens Detected';
+      return 'Safe to Use — No Issues Found';
     default:
-      return 'Unknown Status';
+      return 'Needs Review';
   }
 }
 
 function getRecommendationMessage(level: string, profile: any): string {
   const hasAnaphylaxis = profile?.hasAnaphylaxis;
+  const name = profile?.name || 'you';
   
   switch (level) {
     case 'danger':
       return hasAnaphylaxis
-        ? 'This product contains allergens you are severely allergic to. DO NOT consume or use this product. If accidentally exposed, use your epinephrine auto-injector immediately and call 911.'
-        : 'This product contains allergens from your profile. We strongly advise NOT using this product. If you choose to proceed, do so at your own risk and consult your physician first.';
+        ? `This product contains ingredients that may affect ${name}. Avoid this product. If accidentally exposed, use your epinephrine auto-injector and call 911.`
+        : `This product contains ingredients that may affect ${name}. We recommend choosing a different product. Always verify with the physical label.`;
     
     case 'caution':
       return hasAnaphylaxis
-        ? 'This product may contain traces of your allergens due to cross-contamination during manufacturing. Given your anaphylaxis risk, we recommend avoiding this product. If you choose to use it, have your epinephrine auto-injector ready and inform someone nearby.'
-        : 'This product may contain traces of allergens from your profile due to manufacturing processes. Use at your own risk. Consider consulting your physician if you have concerns about cross-contamination.';
+        ? `We checked what we could, but some details are unclear. Given ${name}'s sensitivity level, we recommend choosing a verified alternative.`
+        : `We checked what we could, but some details are unclear for ${name}. Consider verifying the label or choosing a product with clearer ingredient data.`;
     
     case 'safe':
-      return 'Based on available data, this product does not list any of your known allergens. However, databases may be incomplete or outdated. ALWAYS read the product label yourself and verify ingredients. When in doubt, consult your physician before use.';
+      return `This product looks safe for ${name} based on available data. No allergen matches found. Always double-check the physical label as formulations can change.`;
     
     default:
-      return 'Unable to determine safety. Please read the label carefully and consult your physician.';
+      return `We couldn't fully verify this product. Please check the label directly.`;
   }
 }
 
@@ -1579,7 +1604,7 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16 },
   loadingText: { marginTop: 16, fontSize: 16, color: '#6B7280' },
   errorSubtext: { marginTop: 8, fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 8 },
-  errorText: { marginTop: 16, fontSize: 18, fontWeight: '600' as const, color: '#DC2626', textAlign: 'center' },
+  errorText: { marginTop: 16, fontSize: 18, fontWeight: '600' as const, color: '#374151', textAlign: 'center' },
   retryButton: { marginTop: 24, backgroundColor: '#0891B2', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
   retryButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#FFF' },
   productImage: { width: '100%', height: 250, borderRadius: 16, backgroundColor: '#FFF', marginBottom: 16 },
@@ -1753,4 +1778,7 @@ const styles = StyleSheet.create({
   actionButtonAvoidActive: { flex: 1, backgroundColor: '#DC2626', borderWidth: 1, borderColor: '#DC2626' },
   actionButtonTextAvoid: { fontSize: 14, fontWeight: '600' as const, color: '#DC2626' },
   actionButtonTextAvoidActive: { color: '#FFFFFF' },
+  contributeProductBtn: { backgroundColor: '#0B6E7A', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center' as const, marginTop: 16 },
+  contributeProductBtnText: { fontSize: 15, fontWeight: '600' as const, color: '#FFFFFF' },
+  contributeHelpText: { fontSize: 12, color: '#6B7280', textAlign: 'center' as const, marginTop: 12, lineHeight: 18 },
 });

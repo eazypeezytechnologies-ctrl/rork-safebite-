@@ -164,16 +164,16 @@ class CircuitBreaker {
 }
 
 const defaultRetryConfig: RetryConfig = {
-  maxRetries: 1,
-  initialDelay: 500,
-  maxDelay: 3000,
-  backoffFactor: 2,
+  maxRetries: 2,
+  initialDelay: 400,
+  maxDelay: 2500,
+  backoffFactor: 1.5,
 };
 
 const defaultCircuitConfig: CircuitBreakerConfig = {
-  failureThreshold: 3,
-  resetTimeout: 60000,
-  monitorWindow: 10 * 60 * 1000,
+  failureThreshold: 8,
+  resetTimeout: 15000,
+  monitorWindow: 5 * 60 * 1000,
 };
 
 export const globalErrorCounter = new ErrorCounter(defaultCircuitConfig.monitorWindow);

@@ -2,37 +2,59 @@ export interface FriendlyError {
   title: string;
   message: string;
   recoverable: boolean;
+  silent?: boolean;
 }
 
 export function mapErrorToFriendly(error: unknown): FriendlyError {
   const msg = error instanceof Error ? error.message : String(error || '');
   const code = (error as any)?.code || '';
+  const lowerMsg = msg.toLowerCase();
 
-  if (code === '42501' || msg.includes('42501') || msg.includes('permission denied') || msg.includes('permission')) {
+  if (lowerMsg.includes('circuit breaker') || lowerMsg.includes('circuit is open')) {
     return {
-      title: 'Permissions Not Ready',
-      message: 'Invite permissions are not fully configured yet. The admin needs to finish Supabase invite policies.',
+      title: 'Having trouble loading',
+      message: 'Having trouble loading, retrying automatically...',
+      recoverable: true,
+      silent: true,
+    };
+  }
+
+  if (lowerMsg.includes('supabase') || lowerMsg.includes('postgrest') || lowerMsg.includes('pgrst')) {
+    return {
+      title: 'Having trouble loading',
+      message: 'Having trouble connecting. Please try again in a moment.',
+      recoverable: true,
+      silent: true,
+    };
+  }
+
+  if (code === '42501' || lowerMsg.includes('42501') || lowerMsg.includes('permission denied') || lowerMsg.includes('permission')) {
+    return {
+      title: 'Temporarily Unavailable',
+      message: 'This feature is temporarily unavailable. Please try again later.',
+      recoverable: false,
+      silent: true,
+    };
+  }
+
+  if (code === '42P17' || lowerMsg.includes('infinite recursion')) {
+    return {
+      title: 'Temporarily Unavailable',
+      message: 'Something went wrong on our end. Please try again later.',
+      recoverable: false,
+      silent: true,
+    };
+  }
+
+  if (code === '23503' || lowerMsg.includes('foreign key') || lowerMsg.includes('fkey') || lowerMsg.includes('23503')) {
+    return {
+      title: 'Something Went Wrong',
+      message: 'Please try again. If this persists, recreate the group.',
       recoverable: false,
     };
   }
 
-  if (code === '42P17' || msg.includes('infinite recursion')) {
-    return {
-      title: 'Database Policy Issue',
-      message: 'A database policy configuration issue is preventing this action. Please contact admin.',
-      recoverable: false,
-    };
-  }
-
-  if (code === '23503' || msg.includes('foreign key') || msg.includes('fkey') || msg.includes('23503')) {
-    return {
-      title: 'Reference Error',
-      message: 'This invite is linked to a missing group ID. Please try deleting and recreating the group.',
-      recoverable: false,
-    };
-  }
-
-  if (msg.includes('expired')) {
+  if (lowerMsg.includes('expired')) {
     return {
       title: 'Invitation Expired',
       message: 'This invitation has expired. Please create a new one.',
@@ -40,44 +62,60 @@ export function mapErrorToFriendly(error: unknown): FriendlyError {
     };
   }
 
-  if (msg.includes('max') || msg.includes('limit')) {
+  if (lowerMsg.includes('max') || lowerMsg.includes('limit')) {
     return {
-      title: 'Member Limit Reached',
-      message: 'This family group has reached the maximum number of members (including pending invites).',
+      title: 'Limit Reached',
+      message: 'This group has reached the maximum number of members.',
       recoverable: false,
     };
   }
 
   if (
-    msg.includes('Load failed') ||
-    msg.includes('Failed to fetch') ||
-    msg.includes('fetch failed') ||
-    msg.includes('Network request failed') ||
-    msg.includes('network') ||
-    msg.includes('timeout')
+    lowerMsg.includes('load failed') ||
+    lowerMsg.includes('failed to fetch') ||
+    lowerMsg.includes('fetch failed') ||
+    lowerMsg.includes('network request failed') ||
+    lowerMsg.includes('network') ||
+    lowerMsg.includes('timeout') ||
+    lowerMsg.includes('aborted')
   ) {
     return {
-      title: 'Connection Issue',
-      message: 'Network error. Please check your connection and try again.',
+      title: 'Having trouble loading',
+      message: 'Having trouble loading, retrying...',
       recoverable: true,
+      silent: true,
     };
   }
 
-  if (msg.includes('[object Object]') || msg === '' || msg === 'unknown') {
+  if (lowerMsg.includes('http 5') || lowerMsg.includes('500') || lowerMsg.includes('502') || lowerMsg.includes('503') || lowerMsg.includes('504')) {
+    return {
+      title: 'Having trouble loading',
+      message: 'Our servers are busy. Please try again in a moment.',
+      recoverable: true,
+      silent: true,
+    };
+  }
+
+  if (lowerMsg.includes('[object object]') || msg === '' || msg === 'unknown') {
     return {
       title: 'Something Went Wrong',
-      message: 'An unexpected error occurred. Please try again or contact support.',
+      message: 'Something unexpected happened. Please try again.',
       recoverable: true,
+      silent: true,
     };
   }
 
   return {
-    title: 'Error',
-    message: msg || 'An unexpected error occurred. Please try again.',
+    title: 'Something Went Wrong',
+    message: 'Something unexpected happened. Please try again.',
     recoverable: true,
   };
 }
 
 export function getFriendlyErrorMessage(error: unknown): string {
   return mapErrorToFriendly(error).message;
+}
+
+export function isSilentError(error: unknown): boolean {
+  return mapErrorToFriendly(error).silent === true;
 }

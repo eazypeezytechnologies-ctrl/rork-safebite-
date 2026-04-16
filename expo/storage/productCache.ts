@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Product } from '@/types';
 
 const CACHE_KEY = '@allergy_guardian_product_cache';
+const CATEGORY_OVERRIDES_KEY = '@safebite_category_overrides';
 const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface CachedProduct {
@@ -43,8 +44,16 @@ export async function cacheProduct(product: Product): Promise<void> {
     const cacheStr = await AsyncStorage.getItem(CACHE_KEY);
     const cache: ProductCache = cacheStr ? JSON.parse(cacheStr) : {};
 
+    const existing = cache[product.code];
+    const mergedProduct = { ...product };
+
+    if (existing?.product?.product_type && !product.product_type) {
+      mergedProduct.product_type = existing.product.product_type;
+      console.log('[ProductCache] Preserving user-set category:', existing.product.product_type);
+    }
+
     cache[product.code] = {
-      product,
+      product: mergedProduct,
       cachedAt: new Date().toISOString(),
     };
 
@@ -52,6 +61,38 @@ export async function cacheProduct(product: Product): Promise<void> {
     console.log('Product cached:', product.code);
   } catch (error) {
     console.error('Error caching product:', error);
+  }
+}
+
+export async function setProductCategory(barcode: string, category: import('@/types').ProductType): Promise<void> {
+  try {
+    const cacheStr = await AsyncStorage.getItem(CACHE_KEY);
+    const cache: ProductCache = cacheStr ? JSON.parse(cacheStr) : {};
+    const cached = cache[barcode];
+    if (cached) {
+      cached.product.product_type = category;
+      cached.cachedAt = new Date().toISOString();
+      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      console.log('[ProductCache] Category set for', barcode, '->', category);
+    }
+
+    const overridesStr = await AsyncStorage.getItem(CATEGORY_OVERRIDES_KEY);
+    const overrides: Record<string, string> = overridesStr ? JSON.parse(overridesStr) : {};
+    overrides[barcode] = category;
+    await AsyncStorage.setItem(CATEGORY_OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch (error) {
+    console.error('[ProductCache] Error setting category:', error);
+  }
+}
+
+export async function getUserCategoryOverride(barcode: string): Promise<import('@/types').ProductType | null> {
+  try {
+    const overridesStr = await AsyncStorage.getItem(CATEGORY_OVERRIDES_KEY);
+    if (!overridesStr) return null;
+    const overrides: Record<string, string> = JSON.parse(overridesStr);
+    return (overrides[barcode] as import('@/types').ProductType) || null;
+  } catch {
+    return null;
   }
 }
 

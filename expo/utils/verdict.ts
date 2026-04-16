@@ -521,12 +521,28 @@ export function getVerdictIcon(level: VerdictLevel): string {
 export function getVerdictLabel(level: VerdictLevel): string {
   switch (level) {
     case 'danger':
-      return 'AVOID';
+      return 'Not Safe';
     case 'caution':
-      return 'CAUTION';
+      return 'Partially Verified';
     case 'unknown':
-      return 'UNKNOWN';
+      return 'We Need More Info';
     case 'safe':
-      return 'SAFE';
+      return 'Safe to Use';
+  }
+}
+
+export function getVerdictMessage(level: VerdictLevel, profileName: string, missingData?: boolean): string {
+  if (missingData) {
+    return `We couldn't fully verify this product yet. Some ingredient data is missing.`;
+  }
+  switch (level) {
+    case 'danger':
+      return `This product contains ingredients that may affect ${profileName}.`;
+    case 'caution':
+      return `We checked what we could, but some details are unclear for ${profileName}.`;
+    case 'unknown':
+      return `We couldn't fully verify this product yet.`;
+    case 'safe':
+      return `This product looks safe for ${profileName} based on available data.`;
   }
 }

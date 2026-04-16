@@ -92,10 +92,10 @@ function engineToConfidence(result: EvaluationResult): ConfidenceBreakdown {
 
 function getVerdictLabel(level: VerdictLevel): string {
   switch (level) {
-    case 'danger': return 'AVOID';
-    case 'caution': return 'CAUTION';
-    case 'safe': return 'SAFE';
-    case 'unknown': return 'UNKNOWN';
+    case 'danger': return 'Not Safe';
+    case 'caution': return 'Partially Verified';
+    case 'safe': return 'Safe to Use';
+    case 'unknown': return 'We Need More Info';
   }
 }
 

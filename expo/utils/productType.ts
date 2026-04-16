@@ -1,4 +1,5 @@
 import { ProductType } from '@/types';
+import { getUserCategoryOverride } from '@/storage/productCache';
 
 const SKIN_SIGNALS = [
   'aqua', 'parfum', 'dimethicone', 'cetyl alcohol', 'stearyl alcohol',
@@ -90,4 +91,19 @@ export function getProductTypeEmoji(type?: ProductType): string {
     case 'other': return '📦';
     default: return '🍽';
   }
+}
+
+export async function getProductTypeWithOverride(
+  barcode: string,
+  ingredients?: string,
+  productName?: string,
+  categories?: string,
+  existingType?: ProductType,
+): Promise<ProductType> {
+  const override = await getUserCategoryOverride(barcode);
+  if (override) {
+    console.log('[ProductType] Using user override for', barcode, '->', override);
+    return override;
+  }
+  return existingType || guessProductType(ingredients, productName, categories);
 }
