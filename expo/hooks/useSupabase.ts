@@ -130,8 +130,7 @@ export function useCreateProfile(userId: string) {
 const CORE_PROFILE_COLUMNS = new Set([
   'name', 'relationship', 'date_of_birth', 'allergens', 'custom_keywords',
   'has_anaphylaxis', 'emergency_contacts', 'medications', 'avatar_color',
-  'track_eczema_triggers', 'eczema_trigger_groups', 'dietary_rules',
-  'avoid_ingredients', 'dietary_restrictions', 'dietary_strictness', 'health_items',
+  'dietary_rules', 'avoid_ingredients',
 ]);
 
 export function useUpdateProfile(userId: string) {

@@ -37,7 +37,7 @@ import * as Haptics from 'expo-haptics';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { Product, Verdict, VerdictLevel, ConfidenceBreakdown } from '@/types';
-import { getVerdictColor, getVerdictMessage } from '@/utils/verdict';
+import { getVerdictColor } from '@/utils/verdict';
 import {
   evaluateProduct,
   EvaluationResult,
