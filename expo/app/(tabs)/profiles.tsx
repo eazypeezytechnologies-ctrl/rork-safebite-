@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, RefreshControl } from 'react-native';
 import React from 'react';
 import { useRouter, Href } from 'expo-router';
-import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus, AlertTriangle, Sparkles, FileText, Leaf } from 'lucide-react-native';
+import { Plus, User, AlertCircle, Trash2, Edit, LogOut, Shield, Users, Send, UserPlus, AlertTriangle, Sparkles, FileText, Leaf, LifeBuoy } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { getHealthItemSummary } from '@/utils/profileHealthItems';
@@ -363,6 +363,15 @@ export default function ProfilesScreen() {
           )}
           
           <ReduceMotionToggle />
+
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => router.push('/report-issue' as Href)}
+            testID="report-issue-button"
+          >
+            <LifeBuoy size={20} color={arcaneColors.textSecondary} />
+            <Text style={styles.settingsButtonText}>Report an Issue</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.settingsButton}

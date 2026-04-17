@@ -108,3 +108,69 @@ export function logProductNotFound(barcode: string, userId?: string): void {
     userId,
   });
 }
+
+export function logScanFailed(reason: string, barcode?: string, userId?: string): void {
+  void autoLogIssue({
+    issueType: 'scan_failed',
+    description: `Scan failed: ${reason}${barcode ? ` (barcode: ${barcode})` : ''}`,
+    severity: 'medium',
+    appSection: 'scanner',
+    barcode,
+    userId,
+  });
+}
+
+export function logProductLookupFailed(barcode: string, reason: string, userId?: string, profileId?: string, profileName?: string): void {
+  void autoLogIssue({
+    issueType: 'other',
+    description: `Product lookup failed for ${barcode}: ${reason}`,
+    severity: 'medium',
+    appSection: 'product_detail',
+    barcode,
+    userId,
+    profileId,
+    profileName,
+  });
+}
+
+export function logProfileSaveFailed(reason: string, userId?: string, profileId?: string, profileName?: string): void {
+  void autoLogIssue({
+    issueType: 'profile_not_saving',
+    description: `Profile save failed: ${reason}`,
+    severity: 'high',
+    appSection: 'profiles',
+    userId,
+    profileId,
+    profileName,
+  });
+}
+
+export function logNetworkFailure(url: string, reason: string, userId?: string): void {
+  void autoLogIssue({
+    issueType: 'other',
+    description: `Network request failed: ${reason} (url: ${url})`,
+    severity: 'low',
+    appSection: 'other',
+    userId,
+  });
+}
+
+export function logCircuitBreakerOpened(errorCount: number, userId?: string): void {
+  void autoLogIssue({
+    issueType: 'app_loading_freeze',
+    description: `Circuit breaker opened after ${errorCount} recent network failures. App entered degraded state.`,
+    severity: 'high',
+    appSection: 'other',
+    userId,
+  });
+}
+
+export function logAppCrash(error: Error, componentStack?: string, userId?: string): void {
+  void autoLogIssue({
+    issueType: 'app_loading_freeze',
+    description: `App crash (ErrorBoundary): ${error.message}${componentStack ? `\n\nComponent stack:\n${componentStack.slice(0, 500)}` : ''}${error.stack ? `\n\nStack:\n${error.stack.slice(0, 500)}` : ''}`,
+    severity: 'critical',
+    appSection: 'other',
+    userId,
+  });
+}

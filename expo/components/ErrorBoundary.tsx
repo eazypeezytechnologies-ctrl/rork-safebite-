@@ -26,6 +26,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary - Error:', error);
     console.error('ErrorBoundary - Error Info:', errorInfo);
+    import('@/utils/autoIssueLogger')
+      .then(m => m.logAppCrash(error, errorInfo.componentStack ?? undefined))
+      .catch(() => {});
   }
 
   handleReset = () => {

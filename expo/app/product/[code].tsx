@@ -352,6 +352,10 @@ export default function ProductDetailsScreen() {
       const friendly = mapErrorToFriendly(err);
       console.error('[ProductDetail] Raw error:', err instanceof Error ? err.message : err);
       setError(friendly.message);
+      const reason = err instanceof Error ? err.message : String(err);
+      import('@/utils/autoIssueLogger')
+        .then(m => m.logProductLookupFailed(code, reason, currentUser?.id, activeProfile?.id, activeProfile?.name))
+        .catch(() => {});
     } finally {
       console.log('loadProduct finished, isLoading set to false');
       loadProductLockRef.current = false;

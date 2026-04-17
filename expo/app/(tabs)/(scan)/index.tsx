@@ -328,6 +328,10 @@ IMPORTANT: Preserve the ORIGINAL language of ingredients. Do NOT translate them.
       }
     } catch (error) {
       console.error('[SmartScan] Pipeline error:', error);
+      const reason = error instanceof Error ? error.message : String(error);
+      import('@/utils/autoIssueLogger')
+        .then(m => m.logScanFailed(reason, undefined, currentUser?.id))
+        .catch(() => {});
       showToast('Smart scan failed. Please try again.', 'danger');
     } finally {
       setSmartScanProcessing(false);

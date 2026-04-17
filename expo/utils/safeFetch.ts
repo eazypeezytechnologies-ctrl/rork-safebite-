@@ -148,6 +148,9 @@ class CircuitBreaker {
       console.error(`[CircuitBreaker] OPENING circuit - ${recentErrorsCount} errors in ${this.config.monitorWindow}ms window`);
       this.state = CircuitState.OPEN;
       this.failureCount = 0;
+      import('@/utils/autoIssueLogger')
+        .then(m => m.logCircuitBreakerOpened(recentErrorsCount))
+        .catch(() => {});
     }
   }
 

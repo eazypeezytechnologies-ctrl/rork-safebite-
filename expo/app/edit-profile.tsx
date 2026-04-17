@@ -149,7 +149,11 @@ export default function EditProfileScreen() {
         updatedAt: new Date().toISOString(),
       });
       router.back();
-    } catch {
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      import('@/utils/autoIssueLogger')
+        .then(m => m.logProfileSaveFailed(reason, undefined, profile?.id, profile?.name))
+        .catch(() => {});
       Alert.alert('Error', 'Failed to update profile');
     }
   };
