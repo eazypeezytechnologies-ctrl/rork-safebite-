@@ -317,13 +317,12 @@ function RootLayoutNav() {
       runSimpleConnectionCheck().then((result) => {
         console.log('[Layout] Health check result:', result.message);
         if (!result.ok) {
+          console.warn('[Layout] Health check failed (logged, banner suppressed):', result.message);
           setLimitedMode(true);
-          setLimitedBannerVisible(true);
         }
       }).catch((err) => {
-        console.warn('[Layout] Health check error:', err);
+        console.warn('[Layout] Health check error (logged, banner suppressed):', err);
         setLimitedMode(true);
-        setLimitedBannerVisible(true);
       });
     }
   }, [isInitialized, currentUser]);

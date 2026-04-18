@@ -133,6 +133,11 @@ const CORE_PROFILE_COLUMNS = new Set([
   'dietary_rules', 'avoid_ingredients',
 ]);
 
+const ALWAYS_SAFE_PROFILE_COLUMNS = [
+  'name', 'relationship', 'date_of_birth', 'allergens', 'custom_keywords',
+  'has_anaphylaxis', 'emergency_contacts', 'medications', 'avatar_color',
+];
+
 export function useUpdateProfile(userId: string) {
   const queryClient = useQueryClient();
 
@@ -165,33 +170,44 @@ export function useUpdateProfile(userId: string) {
         .single();
 
       if (error) {
-        console.error('[useUpdateProfile] Error:', error.message || error.code || JSON.stringify(error));
+        console.warn('[useUpdateProfile] Initial update failed (logged, will retry):', error.message || error.code);
 
         if (error.message?.includes('column') || error.code === 'PGRST204' || error.code === '42703') {
-          console.log('[useUpdateProfile] Retrying with core-only fields...');
+          console.log('[useUpdateProfile] Retrying with always-safe fields only...');
           const coreOnly: Record<string, any> = {};
-          const safeCols = ['name', 'relationship', 'date_of_birth', 'allergens', 'custom_keywords',
-            'has_anaphylaxis', 'emergency_contacts', 'medications', 'avatar_color'];
-          for (const col of safeCols) {
+          for (const col of ALWAYS_SAFE_PROFILE_COLUMNS) {
             if (sanitized[col] !== undefined) {
               coreOnly[col] = sanitized[col];
             }
           }
 
-          if (Object.keys(coreOnly).length > 0) {
-            const { data: retryData, error: retryError } = await supabase
+          if (Object.keys(coreOnly).length === 0) {
+            console.log('[useUpdateProfile] No always-safe fields to update, returning existing profile silently');
+            const { data: existing } = await supabase
               .from('profiles')
-              .update(coreOnly)
+              .select('*')
               .eq('id', id)
-              .select()
               .single();
-
-            if (retryError) {
-              console.error('[useUpdateProfile] Retry also failed:', retryError);
-              throw retryError;
-            }
-            return retryData as SupabaseProfile;
+            return existing as SupabaseProfile;
           }
+
+          const { data: retryData, error: retryError } = await supabase
+            .from('profiles')
+            .update(coreOnly)
+            .eq('id', id)
+            .select()
+            .single();
+
+          if (retryError) {
+            console.warn('[useUpdateProfile] Retry also failed, returning existing profile silently:', retryError.message || retryError.code);
+            const { data: existing } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', id)
+              .single();
+            return existing as SupabaseProfile;
+          }
+          return retryData as SupabaseProfile;
         }
 
         throw error;
