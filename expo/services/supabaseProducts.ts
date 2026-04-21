@@ -56,9 +56,12 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
 
     const { data: existing } = await supabase
       .from('products')
-      .select('id, scan_count, ingredients_text, allergens_tags')
+      .select('id, scan_count, ingredients_text, allergens_tags, source, product_type, categories, product_name, brands')
       .eq('code', code)
       .maybeSingle();
+
+    const incomingIsManual = product.source === 'manual_entry';
+    const existingIsCorrected = existing?.source === 'manual_entry';
 
     if (existing) {
       const updates: Record<string, any> = {
@@ -66,24 +69,31 @@ export async function upsertProduct(product: Product): Promise<{ success: boolea
         scan_count: (existing.scan_count || 0) + 1,
       };
 
-      if (product.product_name && product.product_name !== 'Unknown Product') {
-        updates.product_name = product.product_name;
+      if (existingIsCorrected && !incomingIsManual) {
+        console.log('[SupabaseProducts] Existing record is user-corrected — preserving core fields, only bumping scan_count');
+      } else {
+        if (product.product_name && product.product_name !== 'Unknown Product') {
+          updates.product_name = product.product_name;
+        }
+        if (product.brands) updates.brands = product.brands;
+        if (product.ingredients_text && (incomingIsManual || !existing.ingredients_text || product.ingredients_text.length > (existing.ingredients_text?.length || 0))) {
+          updates.ingredients_text = product.ingredients_text;
+        }
+        if (product.allergens) updates.allergens = product.allergens;
+        if (product.allergens_tags && product.allergens_tags.length > 0) {
+          updates.allergens_tags = product.allergens_tags;
+        }
+        if (product.traces_tags && product.traces_tags.length > 0) {
+          updates.traces_tags = product.traces_tags;
+        }
+        if (product.image_url) updates.image_url = product.image_url;
+        if (product.image_front_url) updates.image_front_url = product.image_front_url;
+        if (product.categories && (incomingIsManual || !existing.categories)) updates.categories = product.categories;
+        if (product.product_type && (incomingIsManual || !existing.product_type)) updates.product_type = product.product_type;
+        if (incomingIsManual) {
+          updates.source = 'manual_entry';
+        }
       }
-      if (product.brands) updates.brands = product.brands;
-      if (product.ingredients_text && (!existing.ingredients_text || product.ingredients_text.length > (existing.ingredients_text?.length || 0))) {
-        updates.ingredients_text = product.ingredients_text;
-      }
-      if (product.allergens) updates.allergens = product.allergens;
-      if (product.allergens_tags && product.allergens_tags.length > 0) {
-        updates.allergens_tags = product.allergens_tags;
-      }
-      if (product.traces_tags && product.traces_tags.length > 0) {
-        updates.traces_tags = product.traces_tags;
-      }
-      if (product.image_url) updates.image_url = product.image_url;
-      if (product.image_front_url) updates.image_front_url = product.image_front_url;
-      if (product.categories) updates.categories = product.categories;
-      if (product.product_type) updates.product_type = product.product_type;
 
       const { error } = await supabase
         .from('products')

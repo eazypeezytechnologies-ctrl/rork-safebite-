@@ -84,7 +84,18 @@ export async function searchProductByBarcode(barcode: string, useCache: boolean 
 
   if (useCache) {
     const cached = await getCachedProduct(normalizedBarcode);
+    if (cached && cached.source === 'manual_entry' && cached.ingredients_text) {
+      console.log('[Products] ✅ Returning user-corrected local cache (' + (Date.now() - lookupStart) + 'ms)');
+      return cached;
+    }
     if (cached) {
+      console.log('[Products] Local cache hit but checking Supabase for corrected version first...');
+      const correctedCheck = await getProductByCode(normalizedBarcode).catch(() => null);
+      if (correctedCheck && correctedCheck.source === 'manual_entry' && correctedCheck.ingredients_text) {
+        console.log('[Products] ✅ Supabase has user-corrected record, preferring over local cache');
+        cacheProduct(correctedCheck).catch(() => {});
+        return correctedCheck;
+      }
       console.log('[Products] ✅ Returning local cached product (' + (Date.now() - lookupStart) + 'ms)');
       return cached;
     }
@@ -119,18 +130,18 @@ export async function searchProductByBarcode(barcode: string, useCache: boolean 
     getFromOfflineCache(normalizedBarcode).catch(() => null),
   ]);
 
+  if (supabaseResult && supabaseResult.source === 'manual_entry' && supabaseResult.ingredients_text) {
+    console.log('[Products] ✅ User-corrected Supabase data takes HIGHEST priority (' + (Date.now() - lookupStart) + 'ms):', supabaseResult.product_name);
+    cacheProduct(supabaseResult).catch(() => {});
+    return supabaseResult;
+  }
+
   if (manualResult && manualResult.ingredients_text) {
-    console.log('[Products] ✅ User-corrected manual entry takes priority (' + (Date.now() - lookupStart) + 'ms)');
+    console.log('[Products] ✅ Local manual entry takes priority (' + (Date.now() - lookupStart) + 'ms)');
     return manualResult;
   }
 
   if (supabaseResult && supabaseResult.product_name && supabaseResult.product_name !== 'Unknown Product') {
-    const isCorrected = supabaseResult.source === 'manual_entry' && supabaseResult.ingredients_text;
-    if (isCorrected) {
-      console.log('[Products] ✅ User-corrected Supabase data takes priority (' + (Date.now() - lookupStart) + 'ms):', supabaseResult.product_name);
-      cacheProduct(supabaseResult).catch(() => {});
-      return supabaseResult;
-    }
     console.log('[Products] ✅ Found in Supabase (' + (Date.now() - lookupStart) + 'ms):', supabaseResult.product_name);
     cacheProduct(supabaseResult).catch(() => {});
     return supabaseResult;
@@ -152,6 +163,11 @@ export async function searchProductByBarcode(barcode: string, useCache: boolean 
   const externalResult = await fetchFromExternalSourcesParallel(normalizedBarcode);
 
   if (externalResult) {
+    if (supabaseResult && supabaseResult.source === 'manual_entry' && supabaseResult.ingredients_text) {
+      console.log('[Products] ✅ User-corrected Supabase beats external (' + (Date.now() - lookupStart) + 'ms)');
+      cacheProduct(supabaseResult).catch(() => {});
+      return supabaseResult;
+    }
     if (supabaseResult && supabaseResult.ingredients_text && !externalResult.ingredients_text) {
       console.log('[Products] ✅ Supabase has better data than external, using Supabase (' + (Date.now() - lookupStart) + 'ms)');
       cacheProduct(supabaseResult).catch(() => {});
