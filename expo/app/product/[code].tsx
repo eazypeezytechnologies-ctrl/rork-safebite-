@@ -61,6 +61,8 @@ import { HouseholdVerdictCard } from '@/components/HouseholdVerdictCard';
 import { BetterOptionCard } from '@/components/BetterOptionCard';
 import { LegalDisclaimer } from '@/components/LegalDisclaimer';
 import { calculateHouseholdVerdict } from '@/utils/householdVerdict';
+import { mapErrorToFriendly } from '@/utils/friendlyErrors';
+import { logProductNotFound, logMissingData } from '@/utils/autoIssueLogger';
 
 export default function ProductDetailsScreen() {
   const params = useLocalSearchParams<{ code: string | string[] }>();
