@@ -130,7 +130,12 @@ export function useCreateProfile(userId: string) {
 const CORE_PROFILE_COLUMNS = new Set([
   'name', 'relationship', 'date_of_birth', 'allergens', 'custom_keywords',
   'has_anaphylaxis', 'emergency_contacts', 'medications', 'avatar_color',
-  'dietary_rules', 'avoid_ingredients',
+]);
+
+const OPTIONAL_PROFILE_COLUMNS = new Set([
+  'dietary_rules', 'avoid_ingredients', 'track_eczema_triggers',
+  'eczema_trigger_groups', 'dietary_restrictions', 'dietary_strictness',
+  'health_items',
 ]);
 
 const ALWAYS_SAFE_PROFILE_COLUMNS = [
@@ -144,9 +149,13 @@ export function useUpdateProfile(userId: string) {
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<SupabaseProfile> }) => {
       const sanitized: Record<string, any> = {};
+      const optional: Record<string, any> = {};
       for (const [key, value] of Object.entries(updates)) {
-        if (CORE_PROFILE_COLUMNS.has(key) && value !== undefined) {
+        if (value === undefined) continue;
+        if (CORE_PROFILE_COLUMNS.has(key)) {
           sanitized[key] = value;
+        } else if (OPTIONAL_PROFILE_COLUMNS.has(key)) {
+          optional[key] = value;
         }
       }
 
@@ -160,14 +169,27 @@ export function useUpdateProfile(userId: string) {
         return existing as SupabaseProfile;
       }
 
-      console.log('[useUpdateProfile] Updating profile', id, 'with fields:', Object.keys(sanitized).join(', '));
+      console.log('[useUpdateProfile] Updating profile', id, 'with core fields:', Object.keys(sanitized).join(', '));
 
-      const { data, error } = await supabase
+      const fullPayload = { ...sanitized, ...optional };
+      let { data, error } = await supabase
         .from('profiles')
-        .update(sanitized)
+        .update(fullPayload)
         .eq('id', id)
         .select()
         .single();
+
+      if (error && (error.code === 'PGRST204' || error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) {
+        console.warn('[useUpdateProfile] Full payload failed, retrying with core-only fields:', error.message || error.code);
+        const coreRetry = await supabase
+          .from('profiles')
+          .update(sanitized)
+          .eq('id', id)
+          .select()
+          .single();
+        data = coreRetry.data;
+        error = coreRetry.error;
+      }
 
       if (error) {
         console.warn('[useUpdateProfile] Initial update failed (logged, will retry):', error.message || error.code);

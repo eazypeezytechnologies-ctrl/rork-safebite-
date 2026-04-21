@@ -18,22 +18,17 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
 import { searchProductByBarcode } from '@/api/products';
 import { searchRecallsByBarcode } from '@/api/recalls';
-import { getVerdictColor, getVerdictLabel, getVerdictMessage } from '@/utils/verdict';
+import { getVerdictColor, getVerdictLabel } from '@/utils/verdict';
 import type { VerdictLevel } from '@/types';
 
 function buildVerdictMessage(level: VerdictLevel, profileName: string, missingData?: boolean): string {
-  try {
-    return getVerdictMessage(level, profileName, missingData);
-  } catch (e) {
-    console.warn('[ProductDetail] verdict message fallback:', e);
-    if (missingData) return `We couldn't fully verify this product yet.`;
-    switch (level) {
-      case 'danger': return `This product contains ingredients that may affect ${profileName}.`;
-      case 'caution': return `We checked what we could, but some details are unclear for ${profileName}.`;
-      case 'unknown': return `We couldn't fully verify this product yet.`;
-      case 'safe': return `This product looks safe for ${profileName} based on available data.`;
-      default: return `Result available for ${profileName}.`;
-    }
+  if (missingData) return `We couldn't fully verify this product yet. Some ingredient data is missing.`;
+  switch (level) {
+    case 'danger': return `This product contains ingredients that may affect ${profileName}.`;
+    case 'caution': return `We checked what we could, but some details are unclear for ${profileName}.`;
+    case 'unknown': return `We couldn't fully verify this product yet.`;
+    case 'safe': return `This product looks safe for ${profileName} based on available data.`;
+    default: return `Result available for ${profileName}.`;
   }
 }
 import { runUnifiedEvaluation } from '@/utils/unifiedEvaluation';
