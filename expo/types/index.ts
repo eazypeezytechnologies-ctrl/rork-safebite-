@@ -99,7 +99,9 @@ export interface User {
   createdAt: string;
 }
 
-export type ProductType = 'food' | 'skin' | 'hair' | 'other';
+export type ProductType = 'food' | 'skin' | 'hair' | 'household' | 'other';
+
+export type ProductCategoryGroup = 'food' | 'personal_care' | 'household' | 'other';
 
 export interface Product {
   code: string;

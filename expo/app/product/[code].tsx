@@ -58,6 +58,7 @@ import { ConfidenceScoreBar } from '@/components/ConfidenceScoreBar';
 import { ManufacturerWarningsCard } from '@/components/ManufacturerWarningsCard';
 import { addToAvoidList, isOnAvoidList, removeFromAvoidList, getAvoidList } from '@/storage/avoidList';
 import { HouseholdVerdictCard } from '@/components/HouseholdVerdictCard';
+import { BetterOptionCard } from '@/components/BetterOptionCard';
 import { LegalDisclaimer } from '@/components/LegalDisclaimer';
 import { calculateHouseholdVerdict } from '@/utils/householdVerdict';
 
@@ -946,6 +947,15 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             householdVerdict={householdVerdict}
             familyGroupName={activeFamilyGroup?.name}
             testID="household-verdict-card"
+          />
+        )}
+
+        {activeProfile && product && verdict && verdict.level !== 'safe' && (
+          <BetterOptionCard
+            product={product}
+            profile={activeProfile}
+            verdict={verdict}
+            testID="better-option-card"
           />
         )}
 

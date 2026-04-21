@@ -1,5 +1,13 @@
-import { ProductType } from '@/types';
+import { ProductType, ProductCategoryGroup } from '@/types';
 import { getUserCategoryOverride } from '@/storage/productCache';
+
+const HOUSEHOLD_SIGNALS = [
+  'detergent', 'bleach', 'disinfectant', 'cleaner', 'cleaning',
+  'laundry', 'fabric softener', 'dish soap', 'dishwasher',
+  'all-purpose', 'surface cleaner', 'floor cleaner', 'toilet',
+  'degreaser', 'ammonia', 'air freshener', 'furniture polish',
+  'drain cleaner', 'stain remover', 'sanitizer', 'window cleaner',
+];
 
 const SKIN_SIGNALS = [
   'aqua', 'parfum', 'dimethicone', 'cetyl alcohol', 'stearyl alcohol',
@@ -44,6 +52,11 @@ export function guessProductType(
   let hairScore = 0;
   let skinScore = 0;
   let foodScore = 0;
+  let householdScore = 0;
+
+  for (const signal of HOUSEHOLD_SIGNALS) {
+    if (text.includes(signal)) householdScore++;
+  }
 
   for (const signal of HAIR_SIGNALS) {
     if (text.includes(signal)) hairScore++;
@@ -55,12 +68,24 @@ export function guessProductType(
     if (text.includes(signal)) foodScore++;
   }
 
+  if (householdScore >= 2 && householdScore >= hairScore && householdScore >= skinScore && householdScore >= foodScore) return 'household';
   if (hairScore > skinScore && hairScore > foodScore && hairScore >= 2) return 'hair';
   if (skinScore > foodScore && skinScore >= 2) return 'skin';
   if (foodScore >= 1) return 'food';
   if (skinScore >= 1) return 'skin';
+  if (householdScore >= 1) return 'household';
 
   return 'food';
+}
+
+export function getCategoryGroup(type?: ProductType): ProductCategoryGroup {
+  switch (type) {
+    case 'food': return 'food';
+    case 'skin':
+    case 'hair': return 'personal_care';
+    case 'household': return 'household';
+    default: return 'other';
+  }
 }
 
 export function getProductTypeLabel(type?: ProductType): string {
@@ -68,6 +93,7 @@ export function getProductTypeLabel(type?: ProductType): string {
     case 'food': return 'Food';
     case 'skin': return 'Skin';
     case 'hair': return 'Hair';
+    case 'household': return 'Household';
     case 'other': return 'Other';
     default: return 'Food';
   }
@@ -78,6 +104,7 @@ export function getProductTypeColor(type?: ProductType): string {
     case 'food': return '#10B981';
     case 'skin': return '#8B5CF6';
     case 'hair': return '#EC4899';
+    case 'household': return '#0EA5E9';
     case 'other': return '#6B7280';
     default: return '#10B981';
   }
@@ -88,6 +115,7 @@ export function getProductTypeEmoji(type?: ProductType): string {
     case 'food': return '🍽';
     case 'skin': return '🧴';
     case 'hair': return '💇';
+    case 'household': return '🧹';
     case 'other': return '📦';
     default: return '🍽';
   }
