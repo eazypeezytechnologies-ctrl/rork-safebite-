@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SafeBite",
-    "slug": "allergy-guardian",
+    "slug": "allergy-guardian-barcode-safety-scanner",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
