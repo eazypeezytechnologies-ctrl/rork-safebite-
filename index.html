@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>SafeBite</title>
-    <meta http-equiv="refresh" content="0; url=https://allergy-guardian.rork.app" />
+    <title>SafeBite Redirect</title>
+    <script>
+      const rorkBase = "https://allergy-guardian.rork.app";
+
+      const path = window.location.pathname || "";
+      const search = window.location.search || "";
+      const hash = window.location.hash || "";
+
+      window.location.replace(rorkBase + path + search + hash);
+    </script>
   </head>
   <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
     <h2>Redirecting to SafeBite...</h2>
-    <p>If you're not redirected, <a href="https://allergy-guardian.rork.app">click here</a>.</p>
+    <p>If you are not redirected, <a href="https://allergy-guardian.rork.app">click here</a>.</p>
   </body>
 </html>
