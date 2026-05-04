@@ -484,6 +484,15 @@ export default function ProductDetailsScreen() {
   }
 
   const getUnifiedVerdictInfo = () => {
+    const fallbackVerdict = {
+      verdict: { level: 'unknown' as const, matches: [] as any[], message: 'Need More Info', missingData: true },
+      verdictColor: '#F59E0B',
+      verdictLabel: 'NEED MORE INFO',
+      affectedMembers: [] as string[],
+      aiAdjusted: false,
+      aiConflict: false,
+    };
+    try {
     if (!activeProfile) return { verdict: null, verdictColor: '#9CA3AF', verdictLabel: 'NO PROFILE', affectedMembers: [] as string[], aiAdjusted: false, aiConflict: false };
 
     if (viewMode === 'family' && activeFamilyGroup) {
@@ -554,17 +563,33 @@ export default function ProductDetailsScreen() {
       aiAdjusted: unified.aiAdjusted,
       aiConflict: unified.aiConflict,
     };
+    } catch (err) {
+      console.warn('[ProductDetail] Verdict computation failed, using safe fallback:', err);
+      return fallbackVerdict;
+    }
   };
 
   const { verdict, verdictColor, verdictLabel, affectedMembers, aiAdjusted, aiConflict } = getUnifiedVerdictInfo();
   
   const VerdictIcon = verdict?.level === 'safe' ? CheckCircle : verdict?.level === 'caution' ? AlertTriangle : verdict?.level === 'unknown' ? HelpCircle : AlertCircle;
 
-  const householdVerdict = (viewMode === 'family' && activeFamilyGroup && product)
-    ? calculateHouseholdVerdict(product, getFamilyMembers(profiles))
-    : null;
+  let householdVerdict: ReturnType<typeof calculateHouseholdVerdict> | null = null;
+  try {
+    householdVerdict = (viewMode === 'family' && activeFamilyGroup && product)
+      ? calculateHouseholdVerdict(product, getFamilyMembers(profiles))
+      : null;
+  } catch (err) {
+    console.warn('[ProductDetail] householdVerdict failed:', err);
+    householdVerdict = null;
+  }
 
-  const unifiedResult = (activeProfile && product) ? runUnifiedEvaluation(product, activeProfile, aiVerdictRecord, trustedProduct) : null;
+  let unifiedResult: ReturnType<typeof runUnifiedEvaluation> | null = null;
+  try {
+    unifiedResult = (activeProfile && product) ? runUnifiedEvaluation(product, activeProfile, aiVerdictRecord, trustedProduct) : null;
+  } catch (err) {
+    console.warn('[ProductDetail] unifiedResult failed:', err);
+    unifiedResult = null;
+  }
   const confidence = unifiedResult ? unifiedResult.confidence : null;
   
   const handleToggleFavorite = async () => {
