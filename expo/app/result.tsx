@@ -38,6 +38,7 @@ import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { Product, Verdict, VerdictLevel, ConfidenceBreakdown } from '@/types';
 import { getVerdictColor } from '@/utils/verdict';
+import { hasSevereProfileRisk } from '@/utils/profileHealthItems';
 import {
   evaluateProduct,
   EvaluationResult,
@@ -566,7 +567,7 @@ export default function ResultScreen() {
   const verdictBg = getVerdictBg(verdict.level);
   const confidenceScore = confidence?.score ?? 50;
   const confidenceLabel = confidence?.label ?? 'Moderate';
-  const hasSevereAllergy = !!activeProfile.hasAnaphylaxis;
+  const hasSevereAllergy = hasSevereProfileRisk(activeProfile);
   const keyReason = getKeyReason(verdict, triggers, activeProfile.name, hasSevereAllergy);
   const actionText = getActionText(verdict, hasSevereAllergy);
 

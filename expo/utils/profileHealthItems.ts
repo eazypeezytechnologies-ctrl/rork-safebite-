@@ -275,6 +275,23 @@ export function buildHealthItemsFromProfile(profile: Profile): ProfileHealthItem
   return items;
 }
 
+/**
+ * Returns true when the active profile has any severe allergy risk.
+ * Considers both the legacy `hasAnaphylaxis` flag and any active health item
+ * whose severity is marked 'severe'.
+ */
+export function hasSevereProfileRisk(profile: Profile | null | undefined): boolean {
+  if (!profile) return false;
+  if (profile.hasAnaphylaxis) return true;
+  const items = profile.healthItems ?? [];
+  return items.some(
+    h =>
+      (h.category === 'allergy' || h.category === 'sensitivity') &&
+      h.status !== 'resolved' &&
+      h.severity === 'severe',
+  );
+}
+
 export function getHealthItemSummary(profile: Profile): {
   activeAllergens: number;
   resolvedAllergens: number;

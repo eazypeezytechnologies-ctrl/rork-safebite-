@@ -19,6 +19,7 @@ import { useFamily } from '@/contexts/FamilyContext';
 import { searchProductByBarcode } from '@/api/products';
 import { searchRecallsByBarcode } from '@/api/recalls';
 import { getVerdictColor, getVerdictLabel } from '@/utils/verdict';
+import { hasSevereProfileRisk } from '@/utils/profileHealthItems';
 import type { VerdictLevel } from '@/types';
 
 function buildVerdictMessage(level: VerdictLevel, profileName: string, missingData?: boolean, hasSevereAllergy?: boolean): string {
@@ -826,7 +827,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             </Text>
             {verdict && (
               <Text style={styles.verdictMessage}>
-                {buildVerdictMessage(verdict.level, activeProfile?.name || 'you', verdict.missingData, !!activeProfile?.hasAnaphylaxis)}
+                {buildVerdictMessage(verdict.level, activeProfile?.name || 'you', verdict.missingData, hasSevereProfileRisk(activeProfile))}
               </Text>
             )}
             {viewMode === 'family' && activeFamilyGroup && affectedMembers.length > 0 ? (

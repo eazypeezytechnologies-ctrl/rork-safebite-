@@ -99,7 +99,56 @@ function getVerdictLabel(level: VerdictLevel): string {
   }
 }
 
+function buildSafeFallbackResult(product: Product, profile: Profile, reason: string): UnifiedEvaluationResult {
+  const fallbackVerdict: Verdict = {
+    level: 'unknown',
+    matches: [],
+    eczemaTriggers: [],
+    message: `SafeBite couldn't fully verify this product for ${profile?.name ?? 'this profile'}. Verify the package label before using.`,
+    missingData: true,
+    explanation: reason,
+  };
+  const fallbackEval: EvaluationResult = {
+    verdict: 'Unknown',
+    confidence: 'Low',
+    confidenceScore: 0,
+    confidenceReasons: [{ factor: 'Evaluation', impact: 'negative', detail: 'Evaluation could not be completed — showing safe fallback.' }],
+    matchedConcerns: [],
+    advisoryMatches: [],
+    explanationSummary: fallbackVerdict.message ?? 'Need More Info',
+    explanationDetails: [reason],
+    householdSummary: null,
+    overallHouseholdVerdict: null,
+    trustFooter: 'Not medical advice. For severe allergies, verify with the manufacturer.',
+  };
+  return {
+    verdict: fallbackVerdict,
+    evalResult: fallbackEval,
+    confidence: { score: 0, label: 'Very Low', color: '#DC2626', factors: [] },
+    verdictSource: 'engine',
+    verdictLabel: 'Need More Info',
+    aiAdjusted: false,
+    aiConflict: false,
+    trustedOverride: false,
+    debugLog: [`[UnifiedEval] Fallback: ${reason}`],
+  };
+}
+
 export function runUnifiedEvaluation(
+  product: Product,
+  profile: Profile,
+  aiVerdictRecord: AIVerdictRecord | null,
+  trustedProduct: TrustedProduct | null,
+): UnifiedEvaluationResult {
+  try {
+    return runUnifiedEvaluationInner(product, profile, aiVerdictRecord, trustedProduct);
+  } catch (err) {
+    console.warn('[UnifiedEval] Evaluation threw, returning Need More Info fallback:', err);
+    return buildSafeFallbackResult(product, profile, 'Evaluation engine error — showing Need More Info to keep you safe.');
+  }
+}
+
+function runUnifiedEvaluationInner(
   product: Product,
   profile: Profile,
   aiVerdictRecord: AIVerdictRecord | null,
