@@ -21,13 +21,18 @@ import { searchRecallsByBarcode } from '@/api/recalls';
 import { getVerdictColor, getVerdictLabel } from '@/utils/verdict';
 import type { VerdictLevel } from '@/types';
 
-function buildVerdictMessage(level: VerdictLevel, profileName: string, missingData?: boolean): string {
-  if (missingData) return `We couldn't fully verify this product yet. Some ingredient data is missing.`;
+function buildVerdictMessage(level: VerdictLevel, profileName: string, missingData?: boolean, hasSevereAllergy?: boolean): string {
+  if (missingData) {
+    if (hasSevereAllergy) {
+      return `Ingredient data is missing. Do not use if the allergy risk is severe — verify the package label before using.`;
+    }
+    return `SafeBite doesn't have enough ingredient information to verify this product. Verify the package label before using.`;
+  }
   switch (level) {
-    case 'danger': return `This product contains ingredients that may affect ${profileName}.`;
-    case 'caution': return `We checked what we could, but some details are unclear for ${profileName}.`;
-    case 'unknown': return `We couldn't fully verify this product yet.`;
-    case 'safe': return `This product looks safe for ${profileName} based on available data.`;
+    case 'danger': return `Based on available ingredient data, this product contains items that may affect ${profileName}. Verify the package label before using.`;
+    case 'caution': return `Some details are unclear for ${profileName}. Verify the package label before using.`;
+    case 'unknown': return `SafeBite doesn't have enough ingredient information yet. Verify the package label before using.`;
+    case 'safe': return `Based on available ingredient data, no known concerns were found for ${profileName}. Please verify the package label because formulas can change.`;
     default: return `Result available for ${profileName}.`;
   }
 }
@@ -821,7 +826,7 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             </Text>
             {verdict && (
               <Text style={styles.verdictMessage}>
-                {buildVerdictMessage(verdict.level, activeProfile?.name || 'you', verdict.missingData)}
+                {buildVerdictMessage(verdict.level, activeProfile?.name || 'you', verdict.missingData, !!activeProfile?.hasAnaphylaxis)}
               </Text>
             )}
             {viewMode === 'family' && activeFamilyGroup && affectedMembers.length > 0 ? (
@@ -1589,7 +1594,7 @@ function getRecommendationTitle(level: string): string {
     case 'danger':
       return 'Not Safe — Allergen Detected';
     case 'caution':
-      return 'Partially Verified — Review Recommended';
+      return 'Use Caution — Review the Label';
     case 'safe':
       return 'Safe to Use — No Issues Found';
     default:
@@ -1609,14 +1614,14 @@ function getRecommendationMessage(level: string, profile: any): string {
     
     case 'caution':
       return hasAnaphylaxis
-        ? `We checked what we could, but some details are unclear. Given ${name}'s sensitivity level, we recommend choosing a verified alternative.`
-        : `We checked what we could, but some details are unclear for ${name}. Consider verifying the label or choosing a product with clearer ingredient data.`;
+        ? `Some details are unclear. Given ${name}'s severe allergy, do not use until verified — choose a product with clearer ingredient data.`
+        : `Some details are unclear for ${name}. Verify the package label before using, or choose a product with clearer ingredient data.`;
     
     case 'safe':
-      return `This product looks safe for ${name} based on available data. No allergen matches found. Always double-check the physical label as formulations can change.`;
+      return `Based on available ingredient data, no known concerns were found for ${name}. SafeBite reviews ingredient data, not marketing claims — verify the package label because formulas can change.`;
     
     default:
-      return `We couldn't fully verify this product. Please check the label directly.`;
+      return `SafeBite doesn't have enough ingredient information yet. Verify the package label before using.`;
   }
 }
 

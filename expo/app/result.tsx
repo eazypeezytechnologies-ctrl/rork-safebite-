@@ -122,12 +122,12 @@ function getVerdictBorder(level: VerdictLevel): string {
 }
 
 function getVerdictDisplayLabel(level: VerdictLevel, missingData?: boolean): string {
-  if (missingData) return 'We Need More Info';
+  if (missingData) return 'Need More Info';
   switch (level) {
     case 'safe': return 'Safe to Use';
-    case 'caution': return 'Partially Verified';
+    case 'caution': return 'Use Caution';
     case 'danger': return 'Not Safe';
-    case 'unknown': return 'We Need More Info';
+    case 'unknown': return 'Need More Info';
   }
 }
 
@@ -141,12 +141,15 @@ function VerdictIcon({ level, size }: { level: VerdictLevel; size: number }) {
   }
 }
 
-function getKeyReason(verdict: Verdict, triggers: TriggerDetail[], profileName: string): string {
+function getKeyReason(verdict: Verdict, triggers: TriggerDetail[], profileName: string, hasSevereAllergy?: boolean): string {
   if (verdict.missingData) {
-    return 'Ingredient data is missing — we can\'t fully verify safety.';
+    if (hasSevereAllergy) {
+      return `Ingredient data is missing for ${profileName}. Do not use until verified — severe allergy risk.`;
+    }
+    return `SafeBite doesn't have enough ingredient information for ${profileName}. Verify the package label before using.`;
   }
   if (verdict.level === 'safe') {
-    return `No allergen matches found for ${profileName}.`;
+    return `Based on available ingredient data, no known concerns were found for ${profileName}.`;
   }
   if (verdict.level === 'danger' && triggers.length > 0) {
     const allergyTriggers = triggers.filter(t => t.issueType === 'allergy');
@@ -164,12 +167,15 @@ function getKeyReason(verdict: Verdict, triggers: TriggerDetail[], profileName: 
   return 'Could not fully verify this product.';
 }
 
-function getActionText(verdict: Verdict): string {
+function getActionText(verdict: Verdict, hasSevereAllergy?: boolean): string {
+  if (verdict.missingData && hasSevereAllergy) {
+    return 'Do not use if the allergy risk is severe. Scan the ingredient label or add product details.';
+  }
   switch (verdict.level) {
-    case 'safe': return 'No action needed. Always double-check physical label.';
+    case 'safe': return 'Verify the package label before using — formulas can change.';
     case 'danger': return 'Avoid this product. Consider safer alternatives.';
-    case 'caution': return 'Check the physical label before using.';
-    case 'unknown': return 'Scan the ingredient label or add details.';
+    case 'caution': return 'Verify the package label before using.';
+    case 'unknown': return 'Scan the ingredient label or add product details.';
   }
 }
 
@@ -560,8 +566,9 @@ export default function ResultScreen() {
   const verdictBg = getVerdictBg(verdict.level);
   const confidenceScore = confidence?.score ?? 50;
   const confidenceLabel = confidence?.label ?? 'Moderate';
-  const keyReason = getKeyReason(verdict, triggers, activeProfile.name);
-  const actionText = getActionText(verdict);
+  const hasSevereAllergy = !!activeProfile.hasAnaphylaxis;
+  const keyReason = getKeyReason(verdict, triggers, activeProfile.name, hasSevereAllergy);
+  const actionText = getActionText(verdict, hasSevereAllergy);
 
   return (
     <View style={styles.screen} testID="result-screen">
@@ -830,7 +837,7 @@ export default function ResultScreen() {
             <View style={styles.trustFooter} testID="trust-footer">
               <ShieldAlert size={16} color="#92400E" />
               <Text style={styles.trustFooterText}>
-                Not medical advice. For severe allergies, always verify with the manufacturer and consult your doctor.
+                SafeBite reviews ingredient data, not marketing claims. Formulas can change — always verify the package label. This app is informational and does not replace medical advice.
               </Text>
             </View>
           </View>

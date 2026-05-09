@@ -523,9 +523,9 @@ export function getVerdictLabel(level: VerdictLevel): string {
     case 'danger':
       return 'Not Safe';
     case 'caution':
-      return 'Partially Verified';
+      return 'Use Caution';
     case 'unknown':
-      return 'We Need More Info';
+      return 'Need More Info';
     case 'safe':
       return 'Safe to Use';
   }
@@ -533,16 +533,16 @@ export function getVerdictLabel(level: VerdictLevel): string {
 
 export function getVerdictMessage(level: VerdictLevel, profileName: string, missingData?: boolean): string {
   if (missingData) {
-    return `We couldn't fully verify this product yet. Some ingredient data is missing.`;
+    return `SafeBite doesn't have enough ingredient information to verify this product for ${profileName}. Please verify the package label before using.`;
   }
   switch (level) {
     case 'danger':
-      return `This product contains ingredients that may affect ${profileName}.`;
+      return `Based on available ingredient data, this product contains items that may affect ${profileName}. Please verify the package label before using.`;
     case 'caution':
-      return `We checked what we could, but some details are unclear for ${profileName}.`;
+      return `Some details are unclear for ${profileName}. Please verify the package label before using.`;
     case 'unknown':
-      return `We couldn't fully verify this product yet.`;
+      return `SafeBite doesn't have enough ingredient information to verify this product. Please verify the package label before using.`;
     case 'safe':
-      return `This product looks safe for ${profileName} based on available data.`;
+      return `Based on available ingredient data, no known concerns were found for ${profileName}. Please verify the package label because formulas can change.`;
   }
 }
