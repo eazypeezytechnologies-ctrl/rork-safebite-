@@ -43,6 +43,21 @@ export default function AIAnalysisScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
+  const generateTextWithTimeout = async (prompt: string, timeoutMs: number): Promise<string | null> => {
+    try {
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+      const generationPromise = generateText(prompt).catch((err) => {
+        console.log('[AIAnalysis] generateText error (non-fatal):', err instanceof Error ? err.message : err);
+        return null;
+      });
+      const winner = await Promise.race([generationPromise, timeoutPromise]);
+      return winner;
+    } catch (err) {
+      console.log('[AIAnalysis] AI timeout wrapper error:', err);
+      return null;
+    }
+  };
+
   const loadProductAndAnalyze = async () => {
     if (!code || !activeProfile) return;
     
@@ -125,7 +140,12 @@ Please provide:
 
 Be thorough but concise. Use clear, non-technical language.`;
 
-    const result = await generateText(prompt);
+    const result = await generateTextWithTimeout(prompt, 25000);
+    if (!result) {
+      console.log('[AIAnalysis] AI generation timed out or failed — showing calm fallback');
+      setAnalysis('AI check could not complete right now. You can still review the ingredient list and verify the label.');
+      return;
+    }
     setAnalysis(result);
     setLastRunAt(new Date().toISOString());
 

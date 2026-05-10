@@ -983,15 +983,6 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
           />
         )}
 
-        {activeProfile && product && verdict && verdict.level !== 'safe' && (
-          <BetterOptionCard
-            product={product}
-            profile={activeProfile}
-            verdict={verdict}
-            testID="better-option-card"
-          />
-        )}
-
         {'explanation' in (verdict || {}) && (verdict as any)?.explanation && (
           <View style={styles.whyResultCard}>
             <Text style={styles.whyResultTitle}>Why this result?</Text>
@@ -1003,6 +994,31 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
           <ConfidenceScoreBar
             score={confidenceScore}
             testID="confidence-score-bar"
+          />
+        )}
+
+        {activeProfile && product && product.ingredients_text && (
+          <TouchableOpacity
+            style={styles.aiButton}
+            onPress={() => router.push(`/ai-analysis/${code}` as Href)}
+            testID="ai-analysis-button"
+          >
+            <Sparkles size={24} color="#FFFFFF" />
+            <View style={styles.aiButtonContent}>
+              <Text style={styles.aiButtonTitle}>AI Ingredient Check</Text>
+              <Text style={styles.aiButtonSubtitle}>
+                Review possible false positives — use this when a product may be flagged because of an unclear ingredient name.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {activeProfile && product && verdict && verdict.level !== 'safe' && (
+          <BetterOptionCard
+            product={product}
+            profile={activeProfile}
+            verdict={verdict}
+            testID="better-option-card"
           />
         )}
 
@@ -1139,71 +1155,8 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
           </TouchableOpacity>
         )}
 
-        {verdict && verdict.level === 'caution' && showAlternatives && (
-          <View style={styles.alternativesSection}>
-            <View style={styles.alternativesHeader}>
-              <Lightbulb size={28} color="#F59E0B" />
-              <Text style={[styles.alternativesTitle, { color: '#F59E0B' }]}>Safer Alternative Products</Text>
-            </View>
-            
-            {isLoadingAlternatives ? (
-              <View style={[styles.alternativesLoading, { borderColor: '#F59E0B' }]}>
-                <ActivityIndicator size="large" color="#F59E0B" />
-                <Text style={styles.alternativesLoadingText}>Finding safer alternatives...</Text>
-                <Text style={styles.alternativesLoadingSubtext}>Looking for products without {verdict.matches.map((m: any) => m.allergen).join(', ')}</Text>
-              </View>
-            ) : (
-              <View style={[styles.alternativesCard, { borderColor: '#F59E0B' }]}>
-                <View style={[styles.alternativesIntro, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
-                  <Text style={[styles.alternativesIntroText, { color: '#92400E' }]}>
-                    ⚡ Due to cross-contamination risk, consider these alternatives that are produced in facilities free from {verdict.matches.map((m: any) => m.allergen).join(', ')}:
-                  </Text>
-                </View>
-                <Text style={styles.alternativesText}>{alternativeRecommendations}</Text>
-                <View style={styles.alternativesDisclaimer}>
-                  <AlertCircle size={14} color="#F59E0B" />
-                  <Text style={styles.alternativesDisclaimerText}>
-                    Always verify ingredients and manufacturing processes. Contact manufacturers about cross-contamination policies.
-                  </Text>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-
-        {verdict && verdict.level === 'danger' && showAlternatives && (
-          <View style={styles.alternativesSection}>
-            <View style={styles.alternativesHeader}>
-              <Lightbulb size={28} color="#10B981" />
-              <Text style={styles.alternativesTitle}>Safe Alternative Products</Text>
-            </View>
-            
-            {isLoadingAlternatives ? (
-              <View style={styles.alternativesLoading}>
-                <ActivityIndicator size="large" color="#10B981" />
-                <Text style={styles.alternativesLoadingText}>AI is finding safe alternatives...</Text>
-                <Text style={styles.alternativesLoadingSubtext}>Analyzing products without {verdict.matches.map((m: any) => m.allergen).join(', ')}</Text>
-              </View>
-            ) : (
-              <View style={styles.alternativesCard}>
-                <View style={styles.alternativesIntro}>
-                  <Text style={styles.alternativesIntroText}>
-                    🛡️ These alternatives are recommended based on your allergy profile and are free from {verdict.matches.map((m: any) => m.allergen).join(', ')}:
-                  </Text>
-                </View>
-                <Text style={styles.alternativesText}>{alternativeRecommendations}</Text>
-                <View style={styles.alternativesDisclaimer}>
-                  <AlertCircle size={14} color="#F59E0B" />
-                  <Text style={styles.alternativesDisclaimerText}>
-                    Always verify ingredients on product labels before purchasing. Formulations can change.
-                  </Text>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-
         {showAlternatives && !isLoadingAlternatives && (alternativeRecommendations || noDataAlternatives) && (
+
           <View style={styles.aiReplySection}>
             <View style={styles.aiReplyHeader}>
               <MessageCircle size={20} color="#0891B2" />
@@ -1515,19 +1468,6 @@ Provide a helpful, specific answer. Keep it concise but thorough. If recommendin
             </Text>
           </TouchableOpacity>
         </View>
-
-        {activeProfile && product.ingredients_text && (
-          <TouchableOpacity
-            style={styles.aiButton}
-            onPress={() => router.push(`/ai-analysis/${code}` as Href)}
-          >
-            <Sparkles size={24} color="#FFFFFF" />
-            <View style={styles.aiButtonContent}>
-              <Text style={styles.aiButtonTitle}>Get AI Analysis</Text>
-              <Text style={styles.aiButtonSubtitle}>Detailed ingredient breakdown powered by AI</Text>
-            </View>
-          </TouchableOpacity>
-        )}
 
         <View style={styles.sourceCard}>
           <Text style={styles.sourceText}>

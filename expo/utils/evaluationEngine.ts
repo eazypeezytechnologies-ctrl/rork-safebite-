@@ -75,6 +75,89 @@ function normalizeText(text: string): string {
   return text.toLowerCase().trim().replace(/[^a-z0-9\s\-&/,;().]/g, ' ').replace(/\s+/g, ' ');
 }
 
+/**
+ * Synonyms that are ambiguous on their own — they only indicate a specific
+ * allergen when the source is qualified (e.g. "soy lecithin", "egg lecithin").
+ * Plain "lecithin" or "sunflower lecithin" should NOT auto-trigger soy/egg.
+ */
+const AMBIGUOUS_SYNONYMS_BY_ALLERGEN: Record<string, string[]> = {
+  soybeans: ['lecithin', 'mono-diglyceride', 'monoglycerides', 'diglycerides', 'vegetable oil', 'vegetable protein', 'vegetable broth', 'vegetable gum', 'vegetable starch', 'natural flavoring', 'artificial flavoring', 'emulsifier'],
+  soy: ['lecithin', 'mono-diglyceride', 'monoglycerides', 'diglycerides', 'vegetable oil', 'vegetable protein', 'natural flavoring', 'artificial flavoring', 'emulsifier'],
+  eggs: ['lecithin', 'globulin', 'livetin', 'lysozyme', 'binder', 'coagulant', 'emulsifier', 'natural flavoring'],
+  egg: ['lecithin', 'globulin', 'livetin', 'lysozyme', 'binder', 'coagulant', 'emulsifier', 'natural flavoring'],
+  milk: ['natural flavoring', 'artificial flavoring', 'emulsifier'],
+  wheat: ['natural flavoring', 'modified food starch', 'food starch', 'vegetable starch', 'gelatinized starch'],
+};
+
+/**
+ * Tokens that, when used as a qualifier in the ingredient text
+ * (e.g. "sunflower lecithin"), make the ambiguous synonym clearly NOT the allergen.
+ */
+const NON_ALLERGEN_QUALIFIERS = ['sunflower', 'rapeseed', 'canola', 'rice', 'oat', 'corn', 'safflower', 'coconut', 'palm', 'olive'];
+
+/**
+ * Per-allergen qualifiers that confirm the ambiguous synonym IS the allergen.
+ */
+const ALLERGEN_QUALIFIERS: Record<string, string[]> = {
+  soybeans: ['soy', 'soya', 'soybean'],
+  soy: ['soy', 'soya', 'soybean'],
+  eggs: ['egg', 'eggs'],
+  egg: ['egg', 'eggs'],
+  milk: ['milk', 'dairy'],
+  wheat: ['wheat'],
+};
+
+function isAmbiguousSynonym(allergen: string, synonym: string): boolean {
+  const list = AMBIGUOUS_SYNONYMS_BY_ALLERGEN[allergen.toLowerCase()];
+  if (!list) return false;
+  return list.some(s => s.toLowerCase() === synonym.toLowerCase());
+}
+
+type AmbiguousResolution = 'confirmed' | 'suppress' | 'unqualified';
+
+/**
+ * For an ambiguous synonym match, inspect surrounding ingredient text
+ * to decide whether the source is allergen-confirmed, clearly non-allergen,
+ * or unqualified (no source). Unqualified matches should be downgraded
+ * to a soft advisory rather than a direct allergen flag.
+ */
+function resolveAmbiguousMatch(
+  allergen: string,
+  synonym: string,
+  ingredientsText: string,
+): AmbiguousResolution {
+  const text = ingredientsText.toLowerCase();
+  const synonymLower = synonym.toLowerCase();
+  const escSyn = synonymLower.replace(/[.*+?^${}()|[\]\\]/g, '\\function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/[^a-z0-9\s\-&/,;().]/g, ' ').replace(/\s+/g, ' ');
+}');
+
+  const allergenQualifiers = ALLERGEN_QUALIFIERS[allergen.toLowerCase()] ?? [];
+  for (const q of allergenQualifiers) {
+    const escQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/[^a-z0-9\s\-&/,;().]/g, ' ').replace(/\s+/g, ' ');
+}');
+    try {
+      const prefix = new RegExp(`\\b${escQ}\\s+${escSyn}\\b`, 'i');
+      const paren = new RegExp(`\\b${escSyn}\\s*\\(\\s*${escQ}\\b`, 'i');
+      if (prefix.test(text) || paren.test(text)) return 'confirmed';
+    } catch {}
+  }
+
+  for (const q of NON_ALLERGEN_QUALIFIERS) {
+    const escQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/[^a-z0-9\s\-&/,;().]/g, ' ').replace(/\s+/g, ' ');
+}');
+    try {
+      const prefix = new RegExp(`\\b${escQ}\\s+${escSyn}\\b`, 'i');
+      const paren = new RegExp(`\\b${escSyn}\\s*\\(\\s*${escQ}\\b`, 'i');
+      if (prefix.test(text) || paren.test(text)) return 'suppress';
+    } catch {}
+  }
+
+  return 'unqualified';
+}
+
 function detectAllergenMatches(
   product: Product,
   allergens: string[],
@@ -162,21 +245,56 @@ function detectAllergenMatches(
 
         if (matched) {
           const key = `allergy-ingredient_text-${allergen}-${synonym}`;
-          if (!foundKeys.has(key)) {
-            foundKeys.add(key);
-            const isHidden = allergenDef?.hiddenSources.some(h => h.toLowerCase() === synonym.toLowerCase()) ?? false;
-            concerns.push({
-              ingredient: synonym,
-              matchedText: synonym,
-              profileAllergen: allergen,
-              concernType: 'allergy',
-              source: 'ingredient_text',
-              severityHint: severity,
-              notes: isHidden ? `Hidden source of ${allergen}` : undefined,
+          if (foundKeys.has(key)) continue;
+
+          const ambiguous = isAmbiguousSynonym(allergen, synonym);
+          if (ambiguous) {
+            const resolution = resolveAmbiguousMatch(allergen, synonym, product.ingredients_text);
+            console.log(`[EvalEngine] AMBIGUOUS MATCH: "${synonym}" for ${allergen} -> ${resolution}`);
+
+            // If allergen tags or traces explicitly list the allergen, treat as confirmed regardless
+            const explicitTagListed = (product.allergens_tags ?? []).some(t => {
+              const nt = t.replace(/^en:/, '').toLowerCase();
+              return nt.includes(allergen.toLowerCase()) || allergen.toLowerCase().includes(nt);
+            }) || (product.traces_tags ?? []).some(t => {
+              const nt = t.replace(/^en:/, '').toLowerCase();
+              return nt.includes(allergen.toLowerCase()) || allergen.toLowerCase().includes(nt);
             });
-            console.log(`[EvalEngine] INGREDIENT TEXT MATCH: "${synonym}" -> ${allergen}${isHidden ? ' (hidden source)' : ''}`);
-            break;
+
+            if (resolution === 'suppress' && !explicitTagListed) {
+              console.log(`[EvalEngine] AMBIGUOUS MATCH SUPPRESSED: "${synonym}" — non-allergen source qualifier present`);
+              continue;
+            }
+
+            if (resolution === 'unqualified' && !explicitTagListed) {
+              const advisoryKey = `advisory-ambiguous-${allergen}-${synonym}`;
+              if (!foundKeys.has(advisoryKey)) {
+                foundKeys.add(advisoryKey);
+                advisories.push({
+                  type: 'may_contain',
+                  allergen,
+                  rawText: `${synonym} (source unclear)`,
+                  affectsSevereAllergen: hasAnaphylaxis,
+                });
+                console.log(`[EvalEngine] AMBIGUOUS MATCH -> advisory only: "${synonym}" for ${allergen}`);
+              }
+              continue;
+            }
           }
+
+          foundKeys.add(key);
+          const isHidden = allergenDef?.hiddenSources.some(h => h.toLowerCase() === synonym.toLowerCase()) ?? false;
+          concerns.push({
+            ingredient: synonym,
+            matchedText: synonym,
+            profileAllergen: allergen,
+            concernType: 'allergy',
+            source: 'ingredient_text',
+            severityHint: severity,
+            notes: isHidden ? `Hidden source of ${allergen}` : undefined,
+          });
+          console.log(`[EvalEngine] INGREDIENT TEXT MATCH: "${synonym}" -> ${allergen}${isHidden ? ' (hidden source)' : ''}`);
+          break;
         }
       }
     }
