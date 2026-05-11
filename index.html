@@ -1,21 +1,75 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>SafeBite Redirect</title>
+    <meta charset="utf-8" />
+    <title>SafeBite</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="SafeBite — product safety scanner for allergies, sensitivities, and dietary needs." />
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SafeBite" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="SafeBite" />
+
+    <link rel="manifest" href="/site.webmanifest" />
+
     <script>
-      const rorkBase = "https://safebite-allergy-guardian.rork.app";
-
-      const path = window.location.pathname || "";
-      const search = window.location.search || "";
-      const hash = window.location.hash || "";
-
-      window.location.replace(rorkBase + path + search + hash);
+      (function () {
+        try {
+          var rorkBase = "https://safebite-allergy-guardian.rork.app";
+          var path = window.location.pathname || "";
+          var search = window.location.search || "";
+          var hash = window.location.hash || "";
+          window.location.replace(rorkBase + path + search + hash);
+        } catch (e) {
+          // Silent fallback; link below is available.
+        }
+      })();
     </script>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        color: #e6e6e6;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        height: 100%;
+      }
+      .wrap {
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+      }
+      .logo {
+        width: 96px;
+        height: 96px;
+        border-radius: 22px;
+      }
+      a { color: #6cd0ff; }
+      h2 { margin: 16px 0 8px; font-weight: 600; }
+      p { margin: 4px 0; color: #b8b8b8; }
+    </style>
   </head>
-  <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-    <h2>Redirecting to SafeBite...</h2>
-    <p>If you are not redirected, 
-      <a href="https://safebite-allergy-guardian.rork.app">click here</a>.
-    </p>
+  <body>
+    <div class="wrap">
+      <img class="logo" src="/apple-touch-icon.png" alt="SafeBite" />
+      <h2>Opening SafeBite…</h2>
+      <p>If you are not redirected,
+        <a href="https://safebite-allergy-guardian.rork.app">tap here to continue</a>.
+      </p>
+    </div>
   </body>
 </html>
