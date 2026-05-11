@@ -114,7 +114,28 @@ function isAmbiguousSynonym(allergen: string, synonym: string): boolean {
 }
 
 function escapeRegexText(input: string): string {
-  const specials = new Set(['.', '*', '+', '?', '^', '
+  let output = '';
+  for (const char of input) {
+    const code = char.charCodeAt(0);
+    const isSpecial =
+      code === 46 ||
+      code === 42 ||
+      code === 43 ||
+      code === 63 ||
+      code === 94 ||
+      code === 36 ||
+      code === 123 ||
+      code === 125 ||
+      code === 40 ||
+      code === 41 ||
+      code === 124 ||
+      code === 91 ||
+      code === 93 ||
+      code === 92;
+    output += isSpecial ? String.fromCharCode(92) + char : char;
+  }
+  return output;
+}
 
 type AmbiguousResolution = 'confirmed' | 'suppress' | 'unqualified';
 
