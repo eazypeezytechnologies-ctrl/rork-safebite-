@@ -113,6 +113,9 @@ function isAmbiguousSynonym(allergen: string, synonym: string): boolean {
   return list.some(s => s.toLowerCase() === synonym.toLowerCase());
 }
 
+function escapeRegexText(input: string): string {
+  const specials = new Set(['.', '*', '+', '?', '^', '
+
 type AmbiguousResolution = 'confirmed' | 'suppress' | 'unqualified';
 
 /**
@@ -128,19 +131,11 @@ function resolveAmbiguousMatch(
 ): AmbiguousResolution {
   const text = ingredientsText.toLowerCase();
   const synonymLower = synonym.toLowerCase();
-  const escSyn = synonymLower.replace(/[.*+?^${}()|[\]\\]/g, '\\  const escSyn = synonymLower.replace(/[.*+?^${}()|[\]\\]/g, '\\function normalizeText(text: string): string {
-  return text.toLowerCase().trim().replace(/[^a-z0-9\s\-&/,;().]/g, ' ').replace(/\s+/g, ' ');
-}');');
+  const escSyn = escapeRegexText(synonymLower);
 
   const allergenQualifiers = ALLERGEN_QUALIFIERS[allergen.toLowerCase()] ?? [];
   for (const q of allergenQualifiers) {
-    const escQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\    const escQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\function normalizeText(text: string): string {
-  return text.toLowerCase().trim().replace(/[^a-z0-9\s\-&/,;().]/g, ' ').replace(/\s+/g, ' ');
-}');
-    try {
-      const prefix = new RegExp(`\\b${escQ}\\s+${escSyn}\\b`, 'i');
-      const paren = new RegExp(`\\b${escSyn}\\s*\\(\\s*${escQ}\\b`, 'i');
-      if (prefix.test(text) || paren.test(text)) return 'confirmed';');
+    const escQ = escapeRegexText(q);
     try {
       const prefix = new RegExp(`\\b${escQ}\\s+${escSyn}\\b`, 'i');
       const paren = new RegExp(`\\b${escSyn}\\s*\\(\\s*${escQ}\\b`, 'i');
@@ -149,13 +144,7 @@ function resolveAmbiguousMatch(
   }
 
   for (const q of NON_ALLERGEN_QUALIFIERS) {
-    const escQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\    const escQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\function normalizeText(text: string): string {
-  return text.toLowerCase().trim().replace(/[^a-z0-9\s\-&/,;().]/g, ' ').replace(/\s+/g, ' ');
-}');
-    try {
-      const prefix = new RegExp(`\\b${escQ}\\s+${escSyn}\\b`, 'i');
-      const paren = new RegExp(`\\b${escSyn}\\s*\\(\\s*${escQ}\\b`, 'i');
-      if (prefix.test(text) || paren.test(text)) return 'suppress';');
+    const escQ = escapeRegexText(q);
     try {
       const prefix = new RegExp(`\\b${escQ}\\s+${escSyn}\\b`, 'i');
       const paren = new RegExp(`\\b${escSyn}\\s*\\(\\s*${escQ}\\b`, 'i');
