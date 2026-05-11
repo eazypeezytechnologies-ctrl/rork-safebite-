@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SafeBite",
-    "slug": "safebite-allergy-guardian",
+    "slug": "safebite-scanner",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.rork.allergy-guardian-barcode-safety-scanner",
+      "bundleIdentifier": "com.eazypeezytech.safebite",
       "infoPlist": {
         "NSFaceIDUsageDescription": "Allow $(PRODUCT_NAME) to access your Face ID biometric data.",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
@@ -42,7 +42,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "app.rork.allergy-guardian-barcode-safety-scanner",
+      "package": "com.eazypeezytech.safebite",
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
