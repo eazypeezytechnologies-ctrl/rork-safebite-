@@ -21,7 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, Href, useFocusEffect } from 'expo-router';
 
-import { Camera, Search, X, AlertCircle, CheckCircle, AlertTriangle, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield, Sparkles, Zap, RotateCcw, ScanBarcode, Heart, Ban, ChevronRight, ShieldCheck, BookOpen } from 'lucide-react-native';
+import { Camera, Search, X, CircleAlert as AlertCircle, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Clock, Flashlight, FlashlightOff, Upload, Plus, Shield, Sparkles, Zap, RotateCcw, ScanBarcode, Heart, Ban, ChevronRight, ShieldCheck, BookOpen } from 'lucide-react-native';
 import { LockOnReticle } from '@/components/LockOnReticle';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
 import { useMysticToast } from '@/components/MysticToast';
@@ -29,7 +29,7 @@ import { useMysticToast } from '@/components/MysticToast';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { searchProductByBarcode, searchProductsByName, searchProductByUrl } from '@/api/products';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateText } from '@/lib/aiAdapter';
 import { translateMultiple, isTranslationAvailable, TranslationResult } from '@/services/translationService';
 import { TranslationCard } from '@/components/TranslationCard';
 import { getSearchHistory, addToSearchHistory } from '@/storage/searchHistory';

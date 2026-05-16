@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack, Href } from 'expo-router';
-import { AlertCircle, Save, Upload, Camera } from 'lucide-react-native';
+import { CircleAlert as AlertCircle, Save, Upload, Camera } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { getVerdictLabel } from '@/utils/verdict';
@@ -22,7 +22,7 @@ import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { ProductType } from '@/types';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateText } from '@/lib/aiAdapter';
 import { TranslationCard } from '@/components/TranslationCard';
 
 export default function ManualIngredientEntryScreen() {

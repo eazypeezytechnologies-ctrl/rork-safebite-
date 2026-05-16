@@ -12,7 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, Href, useFocusEffect } from 'expo-router';
-import { AlertCircle, CheckCircle, AlertTriangle, HelpCircle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle, ShieldCheck, Ban } from 'lucide-react-native';
+import { CircleAlert as AlertCircle, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Circle as HelpCircle, Heart, Sparkles, ChevronDown, ChevronUp, ShoppingCart, Share2, Lightbulb, Send, MessageCircle, ShieldCheck, Ban } from 'lucide-react-native';
 import ProductCaptureWizard from '@/components/ProductCaptureWizard';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useFamily } from '@/contexts/FamilyContext';
@@ -57,7 +57,7 @@ import { ViewModeToggle } from '@/components/ViewModeToggle';
 import { SkeletonProductCard } from '@/components/Skeleton';
 import { guessProductType, getProductTypeLabel, getProductTypeColor, getProductTypeEmoji } from '@/utils/productType';
 import { generateSafeSwaps, generateNoDataSwaps } from '@/services/safeSwapService';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateText } from '@/lib/aiAdapter';
 import { DietaryCompatibilityCard } from '@/components/DietaryCompatibilityCard';
 import { DietaryRestrictionVerdictCard } from '@/components/DietaryRestrictionVerdictCard';
 import { ConfidenceScoreBar } from '@/components/ConfidenceScoreBar';

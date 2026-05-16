@@ -1,5 +1,5 @@
 import { Product, Profile, Verdict, ProductType } from '@/types';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateText } from '@/lib/aiAdapter';
 import Constants from 'expo-constants';
 import { getUserCategoryOverride } from '@/storage/productCache';
 

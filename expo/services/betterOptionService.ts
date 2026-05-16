@@ -1,5 +1,5 @@
 import { Product, Profile, ProductType, Verdict } from '@/types';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateText } from '@/lib/aiAdapter';
 import { getUserCategoryOverride } from '@/storage/productCache';
 import { guessProductType, getCategoryGroup } from '@/utils/productType';
 

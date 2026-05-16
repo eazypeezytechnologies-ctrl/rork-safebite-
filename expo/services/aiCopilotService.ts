@@ -1,4 +1,4 @@
-import { generateObject } from '@rork-ai/toolkit-sdk';
+import { generateObject } from '@/lib/aiAdapter';
 import { z } from 'zod';
 import { SupportIssue, AICopilotAnalysis, ISSUE_TYPE_LABELS } from '@/types/adminSupport';
 import { updateIssueAI } from '@/services/adminSupportService';

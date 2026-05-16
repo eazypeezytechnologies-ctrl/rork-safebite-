@@ -3,7 +3,7 @@ import {
   getAllergenDefinition,
   isIngredientAllergen,
 } from '@/constants/scientificAllergenDatabase';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateText } from '@/lib/aiAdapter';
 
 export interface DetectionResult {
   allergen: string;

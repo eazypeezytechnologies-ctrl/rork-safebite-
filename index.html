@@ -22,19 +22,6 @@
 
     <link rel="manifest" href="/site.webmanifest" />
 
-    <script>
-      (function () {
-        try {
-          var rorkBase = "https://safebite-allergy-guardian.rork.app";
-          var path = window.location.pathname || "";
-          var search = window.location.search || "";
-          var hash = window.location.hash || "";
-          window.location.replace(rorkBase + path + search + hash);
-        } catch (e) {
-          // Silent fallback; link below is available.
-        }
-      })();
-    </script>
     <style>
       html, body {
         margin: 0;
@@ -52,24 +39,22 @@
         justify-content: center;
         text-align: center;
         padding: 24px;
+        gap: 12px;
       }
       .logo {
         width: 96px;
         height: 96px;
         border-radius: 22px;
       }
-      a { color: #6cd0ff; }
-      h2 { margin: 16px 0 8px; font-weight: 600; }
-      p { margin: 4px 0; color: #b8b8b8; }
+      h2 { margin: 4px 0; font-weight: 600; font-size: 22px; }
+      p { margin: 0; color: #b8b8b8; font-size: 15px; }
     </style>
   </head>
   <body>
     <div class="wrap">
       <img class="logo" src="/apple-touch-icon.png" alt="SafeBite" />
-      <h2>Opening SafeBite…</h2>
-      <p>If you are not redirected,
-        <a href="https://safebite-allergy-guardian.rork.app">tap here to continue</a>.
-      </p>
+      <h2>SafeBite</h2>
+      <p>Migration Phase 1 complete. The app runs via the Expo web build.</p>
     </div>
   </body>
 </html>

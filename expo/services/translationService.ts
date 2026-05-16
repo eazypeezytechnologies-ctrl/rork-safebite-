@@ -1,4 +1,4 @@
-import { generateObject } from '@rork-ai/toolkit-sdk';
+import { generateObject } from '@/lib/aiAdapter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { z } from 'zod';
 

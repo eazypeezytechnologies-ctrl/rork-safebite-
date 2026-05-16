@@ -8,14 +8,14 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Sparkles, AlertCircle, ArrowLeft, RefreshCw, ShieldCheck, ShieldAlert, Shield } from 'lucide-react-native';
+import { Sparkles, CircleAlert as AlertCircle, ArrowLeft, RefreshCw, ShieldCheck, ShieldAlert, Shield } from 'lucide-react-native';
 import { useProfiles } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { searchProductByBarcode } from '@/api/products';
 import { Product } from '@/types';
 import { evaluateProduct } from '@/utils/evaluationEngine';
 import { engineToLegacyVerdict } from '@/utils/unifiedEvaluation';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateText } from '@/lib/aiAdapter';
 import { saveAIVerdict, parseAIVerdictFromText, getAIVerdict, AIVerdictRecord } from '@/storage/aiVerdict';
 import { ArcaneSpinner } from '@/components/ArcaneSpinner';
 import { updateProductAIVerdict } from '@/services/supabaseProducts';

@@ -33,7 +33,7 @@ import {
   Eye,
   FileText,
 } from 'lucide-react-native';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateText } from '@/lib/aiAdapter';
 import { Product, ProductType } from '@/types';
 import { upsertProduct, recordScanEvent } from '@/services/supabaseProducts';
 import { addToShoppingList } from '@/storage/shoppingList';
