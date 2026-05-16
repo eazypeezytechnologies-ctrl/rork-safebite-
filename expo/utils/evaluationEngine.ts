@@ -436,7 +436,8 @@ function detectEczemaAndSensitivityConcerns(
 
   for (const match of skincareTriggers) {
     const healthItem = getHealthItemForName(profile, match.trigger.triggerGroup);
-    const effectiveSeverity = healthItem?.status === 'suspected' ? 'low' : match.trigger.severityHint;
+    const rawSeverity = healthItem?.status === 'suspected' ? 'low' : match.trigger.severityHint;
+    const effectiveSeverity = rawSeverity === 'medium' ? 'moderate' as const : rawSeverity as 'critical' | 'high' | 'moderate' | 'low';
     concerns.push({
       ingredient: match.trigger.name,
       matchedText: match.matchedText,
