@@ -1,0 +1,10 @@
+{
+  "name": "safebite",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd expo && npx expo export --platform web && npx serve dist --listen tcp://0.0.0.0:3000",
+    "start": "cd expo && npx expo export --platform web && npx serve dist --listen tcp://0.0.0.0:3000",
+    "build": "cd expo && npx expo export --platform web"
+  }
+}
