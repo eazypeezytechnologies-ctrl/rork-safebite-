@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "cd expo && npx expo export --platform web && npx serve dist --listen tcp://0.0.0.0:3000",
-    "start": "cd expo && npx expo export --platform web && npx serve dist --listen tcp://0.0.0.0:3000",
-    "build": "cd expo && npx expo export --platform web"
+    "dev": "cd expo && npm install --legacy-peer-deps && ./node_modules/.bin/expo export --platform web --clear && npx serve dist --listen tcp://0.0.0.0:3000",
+    "start": "cd expo && npm install --legacy-peer-deps && ./node_modules/.bin/expo export --platform web --clear && npx serve dist --listen tcp://0.0.0.0:3000",
+    "build": "cd expo && npm install --legacy-peer-deps && ./node_modules/.bin/expo export --platform web --clear"
   }
 }
