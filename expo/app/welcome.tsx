@@ -652,7 +652,7 @@ export default function WelcomeScreen() {
               placeholderTextColor={arcaneColors.textMuted}
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!showPassword}
+              secureTextEntry={Platform.OS !== 'web' && !showPassword}
               autoCapitalize="none"
               autoCorrect={false}
               editable={!isLoading}
