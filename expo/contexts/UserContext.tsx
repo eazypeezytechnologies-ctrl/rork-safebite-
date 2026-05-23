@@ -276,22 +276,24 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
     loadData();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
-      
-      if (event === 'SIGNED_IN' && session?.user) {
-        const isAdminByEmail = ADMIN_EMAILS.includes(session.user.email?.toLowerCase() || '');
-        console.log('Admin check - email:', session.user.email, 'isAdmin:', isAdminByEmail);
-        
-        const user: User = {
-          id: session.user.id,
-          email: session.user.email || '',
-          isAdmin: isAdminByEmail,
-          createdAt: session.user.created_at,
-        };
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Auth state changed:', event);
+  
+  if (event === 'SIGNED_IN' && session?.user) {
+    const isAdminByEmail = ADMIN_EMAILS.includes(session.user.email?.toLowerCase() || '');
+    console.log('Admin check - email:', session.user.email, 'isAdmin:', isAdminByEmail);
+    
+    const user: User = {
+      id: session.user.id,
+      email: session.user.email || '',
+      isAdmin: isAdminByEmail,
+      createdAt: session.user.created_at,
+    };
 
-        setCurrentUser(user);
-        
+    setCurrentUser(user);
+
+    setTimeout(() => {
+      (async () => {
         try {
           const { data: userData, error } = await supabase
             .from('users')
@@ -311,6 +313,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
               console.log('Upgrading user to admin in database');
               await supabase.from('users').update({ is_admin: true }).eq('id', user.id);
             }
+
             const finalIsAdmin = isAdminByEmail || userData.is_admin;
             if (finalIsAdmin !== user.isAdmin) {
               console.log('Updating local admin status to:', finalIsAdmin);
@@ -324,10 +327,14 @@ export const [UserProvider, useUser] = createContextHook(() => {
         setTimeout(() => {
           triggerMigration(user.id).catch(() => {});
         }, 2000);
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-      }
-    });
+      })().catch((error) => {
+        console.error('Auth state background task failed:', error);
+      });
+    }, 0);
+  } else if (event === 'SIGNED_OUT') {
+    setCurrentUser(null);
+  }
+});
 
     return () => {
       loadingAbortRef.current = true;
