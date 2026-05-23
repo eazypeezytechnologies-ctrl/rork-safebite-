@@ -1113,11 +1113,13 @@ const styles = StyleSheet.create({
   },
 
   authScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
+  flex: 1,
+  width: '100%',
+  justifyContent: 'center',
+  paddingHorizontal: 24,
+  paddingTop: 24,
+  paddingBottom: 24,
+},
   backButton: {
     alignSelf: 'flex-start',
     marginBottom: 20,
