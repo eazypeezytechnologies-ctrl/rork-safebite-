@@ -603,10 +603,9 @@ export default function WelcomeScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+  <View
+    style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+  >
       <ScrollView
         contentContainerStyle={styles.authScroll}
         showsVerticalScrollIndicator={false}
@@ -761,7 +760,7 @@ export default function WelcomeScreen() {
           </Text>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
