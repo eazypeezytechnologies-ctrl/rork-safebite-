@@ -606,11 +606,7 @@ export default function WelcomeScreen() {
   <View
     style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
   >
-      <ScrollView
-        contentContainerStyle={styles.authScroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={styles.authScroll}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => setMode('welcome')}
@@ -759,7 +755,7 @@ export default function WelcomeScreen() {
               : "Returning user? Sign in with your email and password."}
           </Text>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
