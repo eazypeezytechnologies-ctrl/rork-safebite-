@@ -645,30 +645,19 @@ export default function WelcomeScreen() {
             />
           </View>
 
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Password"
-              placeholderTextColor={arcaneColors.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={Platform.OS !== 'web' && !showPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
-            />
-            <TouchableOpacity
-              style={styles.passwordToggle}
-              onPress={() => setShowPassword(!showPassword)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              {showPassword ? (
-                <EyeOff size={20} color={arcaneColors.textMuted} />
-              ) : (
-                <Eye size={20} color={arcaneColors.textMuted} />
-              )}
-            </TouchableOpacity>
-          </View>
+          <View style={styles.inputWrapper}>
+  <TextInput
+    style={styles.input}
+    placeholder="Password"
+    placeholderTextColor={arcaneColors.textMuted}
+    value={password}
+    onChangeText={setPassword}
+    secureTextEntry={Platform.OS !== 'web' && !showPassword}
+    autoCapitalize="none"
+    autoCorrect={false}
+    editable={!isLoading}
+  />
+</View>
 
           {mode === 'signin' && (
             <TouchableOpacity
