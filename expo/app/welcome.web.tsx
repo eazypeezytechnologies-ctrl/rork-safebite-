@@ -5,6 +5,18 @@ import { useUser } from '@/contexts/UserContext';
 
 type AuthMode = 'welcome' | 'signin' | 'signup';
 
+function getModeFromUrl(): AuthMode {
+  if (typeof window === 'undefined') return 'welcome';
+
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get('mode');
+
+  if (mode === 'signin') return 'signin';
+  if (mode === 'signup') return 'signup';
+
+  return 'welcome';
+}
+
 function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
   return Promise.race([
     promise,
@@ -20,7 +32,7 @@ export default function WelcomeWebFallback() {
   const router = useRouter();
   const { signIn, completeOnboarding } = useUser();
 
-  const [mode, setMode] = useState<AuthMode>('welcome');
+  const [mode, setMode] = useState<AuthMode>(() => getModeFromUrl());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -28,12 +40,19 @@ export default function WelcomeWebFallback() {
 
   useEffect(() => {
     console.log('[WebAuthFallback] mounted');
-  }, [mode]);
 
-  const reset = () => {
-    setErrorText('');
-    setIsLoading(false);
-  };
+    const handlePopState = () => {
+      setMode(getModeFromUrl());
+      setErrorText('');
+      setIsLoading(false);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -79,6 +98,7 @@ export default function WelcomeWebFallback() {
       <main style={s.screen}>
         <section style={s.card}>
           <div style={s.badge}>WEB FALLBACK ACTIVE</div>
+
           <div style={s.icon}>🛡️</div>
 
           <h1 style={s.title}>Allergy Guardian</h1>
@@ -87,27 +107,13 @@ export default function WelcomeWebFallback() {
             Scan products and check for allergens to keep you and your loved ones safe
           </p>
 
-          <button
-            type="button"
-            style={s.primaryButton}
-            onClick={() => {
-              reset();
-              setMode('signup');
-            }}
-          >
+          <a href="/welcome?mode=signup&domfallback=4" style={s.primaryLink}>
             Create Account
-          </button>
+          </a>
 
-          <button
-            type="button"
-            style={s.secondaryButton}
-            onClick={() => {
-              reset();
-              setMode('signin');
-            }}
-          >
+          <a href="/welcome?mode=signin&domfallback=4" style={s.secondaryLink}>
             Sign In
-          </button>
+          </a>
 
           <p style={s.footer}>Your privacy matters. All data is stored securely.</p>
         </section>
@@ -120,18 +126,13 @@ export default function WelcomeWebFallback() {
       <form style={s.authCard} onSubmit={submit}>
         <div style={s.badge}>WEB FALLBACK ACTIVE</div>
 
-        <button
-          type="button"
-          style={s.backButton}
-          onClick={() => {
-            reset();
-            setMode('welcome');
-          }}
-        >
+        <a href="/welcome?domfallback=4" style={s.backLink}>
           ← Back
-        </button>
+        </a>
 
-        <h1 style={s.authTitle}>{mode === 'signup' ? 'Create Account' : 'Welcome Back'}</h1>
+        <h1 style={s.authTitle}>
+          {mode === 'signup' ? 'Create Account' : 'Welcome Back'}
+        </h1>
 
         <p style={s.authSubtitle}>
           {mode === 'signup' ? 'Create your SafeBite account.' : 'Enter your email and password.'}
@@ -140,6 +141,7 @@ export default function WelcomeWebFallback() {
         <label style={s.label} htmlFor="safebite-email">
           Email
         </label>
+
         <input
           id="safebite-email"
           style={s.input}
@@ -155,6 +157,7 @@ export default function WelcomeWebFallback() {
         <label style={s.label} htmlFor="safebite-password">
           Password
         </label>
+
         <input
           id="safebite-password"
           style={s.input}
@@ -285,6 +288,38 @@ const s: Record<string, CSSProperties> = {
     padding: '0 14px',
     boxSizing: 'border-box',
   },
+  primaryLink: {
+    width: '100%',
+    minHeight: 56,
+    borderRadius: 14,
+    border: 'none',
+    backgroundColor: '#007782',
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 800,
+    cursor: 'pointer',
+    textDecoration: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxSizing: 'border-box',
+  },
+  secondaryLink: {
+    width: '100%',
+    minHeight: 56,
+    borderRadius: 14,
+    border: '2px solid #007782',
+    backgroundColor: '#FFFFFF',
+    color: '#007782',
+    fontSize: 18,
+    fontWeight: 800,
+    cursor: 'pointer',
+    textDecoration: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxSizing: 'border-box',
+  },
   primaryButton: {
     width: '100%',
     minHeight: 56,
@@ -296,30 +331,18 @@ const s: Record<string, CSSProperties> = {
     fontWeight: 800,
     cursor: 'pointer',
   },
-  secondaryButton: {
-    width: '100%',
-    minHeight: 56,
-    borderRadius: 14,
-    border: '2px solid #007782',
-    backgroundColor: '#FFFFFF',
-    color: '#007782',
-    fontSize: 18,
-    fontWeight: 800,
-    cursor: 'pointer',
-  },
   disabled: {
     opacity: 0.65,
     cursor: 'not-allowed',
   },
-  backButton: {
+  backLink: {
     alignSelf: 'flex-start',
     padding: '8px 0',
-    border: 'none',
-    backgroundColor: 'transparent',
     color: '#007782',
     fontSize: 17,
     fontWeight: 800,
     cursor: 'pointer',
+    textDecoration: 'none',
   },
   linkButton: {
     alignSelf: 'center',
