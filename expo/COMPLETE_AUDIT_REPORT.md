@@ -29,8 +29,8 @@ A complete end-to-end audit and optimization has been performed on the SafeBite 
 **Problem:**
 ```typescript
 // BEFORE - INSECURE
-const supabaseUrl = 'https://gwkyjhmqomaunupnmqxj.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJ...'; // Exposed API key
+const supabaseUrl = 'https://your-project.supabase.co';
+const supabaseAnonKey = 'your_publishable_or_anon_key'; // 
 ```
 
 **Solution:**
@@ -39,17 +39,17 @@ const supabaseAnonKey = 'eyJhbGciOiJ...'; // Exposed API key
 const supabaseUrl = 
   process.env.EXPO_PUBLIC_SUPABASE_URL ||
   Constants.expoConfig?.extra?.supabaseUrl || 
-  'https://gwkyjhmqomaunupnmqxj.supabase.co';
+  '[https://your-project.supabase.co]';
 
 const supabaseAnonKey = 
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
   Constants.expoConfig?.extra?.supabaseAnonKey || 
-  'eyJhbGciOiJ...'; // Fallback only
+  'your_publishable_or_anon_key'; // Fallback only
 
 // Added configuration check
 export const isSupabaseConfigured = () => {
   return !!(supabaseUrl && supabaseAnonKey && 
-    supabaseUrl !== 'https://gwkyjhmqomaunupnmqxj.supabase.co');
+    supabaseUrl !== 'https://your-project.supabase.co');
 };
 ```
 
@@ -64,7 +64,7 @@ export const isSupabaseConfigured = () => {
 **Problem:**
 ```typescript
 // BEFORE - INSECURE
-const supabaseUrl = 'https://gwkyjhmqomaunupnmqxj.supabase.co';
+const supabaseUrl = 'https://your-project.supabase.co';
 const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // Service role key exposed!
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 ```
@@ -319,7 +319,7 @@ SUPABASE_SERVICE_KEY=your_supabase_service_role_key
 
 **How to Get:**
 1. Go to https://supabase.com
-2. Create a new project (or use existing: `gwkyjhmqomaunupnmqxj`)
+2. Create a new project (or use existing: `your-project`)
 3. Go to Project Settings → API
 4. Copy `URL` and `anon` key for client-side
 5. Copy `service_role` key for backend (keep secret!)
