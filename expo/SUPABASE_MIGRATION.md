@@ -128,7 +128,7 @@ This will create:
 ### 2. Configure Supabase Connection
 
 Your `lib/supabase.ts` is already configured with:
-- Supabase URL: `https://gwkyjhmqomaunupnmqxj.supabase.co`
+- Supabase URL: `https://your-project.supabase.co`
 - Anon key is configured
 - Auto-refresh and session persistence enabled
 
