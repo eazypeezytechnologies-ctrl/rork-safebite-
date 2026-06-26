@@ -87,9 +87,9 @@ Create a `.env` file in your project root (or set in your hosting platform):
 
 ```bash
 # Supabase (Already configured in code, but best practice is to use env vars)
-SUPABASE_URL=https://gwkyjhmqomaunupnmqxj.supabase.co
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_KEY=
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_publishable_or_anon_key
+SUPABASE_SERVICE_KEY=your_server_side_secret_key
 
 # Optional: Premium Barcode APIs (only add if you need better coverage)
 BARCODE_LOOKUP_KEY=your_key_here
