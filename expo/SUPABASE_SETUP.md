@@ -86,8 +86,8 @@ Your credentials are currently hardcoded in the files. To make them configurable
 
 ```env
 SUPABASE_URL=https://gwkyjhmqomaunupnmqxj.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd3a3lqaG1xb21hdW51cG5tcXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxMjM5OTYsImV4cCI6MjA3NTY5OTk5Nn0.Ya2ZEw33ea-avrAD0nqy4lYtnPu7O1TULe01jpGsNAk
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd3a3lqaG1xb21hdW51cG5tcXhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDEyMzk5NiwiZXhwIjoyMDc1Njk5OTk2fQ.lOdPn0rl32hzpZDKPISluD_BHgSHv92bYhWvf0m7_J0
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_KEY=
 ```
 
 ## 🔄 Migration from AsyncStorage to Supabase
