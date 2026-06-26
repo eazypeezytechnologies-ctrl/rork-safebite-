@@ -22,7 +22,7 @@
 
 ### Step 1: Run SQL Migrations in Supabase
 
-1. Go to your Supabase Dashboard: https://supabase.com/dashboard/project/gwkyjhmqomaunupnmqxj
+1. Go to your Supabase Dashboard: https://supabase.com/dashboard/your-project.supabase.co
 2. Navigate to **SQL Editor**
 3. Run the following SQL files in order:
 
@@ -85,9 +85,9 @@ const { data: profile } = await supabase
 Your credentials are currently hardcoded in the files. To make them configurable, add these to your environment:
 
 ```env
-SUPABASE_URL=https://gwkyjhmqomaunupnmqxj.supabase.co
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_KEY=
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_publishable_or_anon_key
+SUPABASE_SERVICE_KEY=your_server_side_secret_key
 ```
 
 ## 🔄 Migration from AsyncStorage to Supabase
