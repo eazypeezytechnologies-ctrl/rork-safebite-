@@ -25,7 +25,7 @@
 
 ### Step 1: Run Supabase SQL Migrations
 
-1. Go to your Supabase Dashboard: https://supabase.com/dashboard/project/gwkyjhmqomaunupnmqxj
+1. Go to your Supabase Dashboard: https://supabase.com/dashboard/SUPABASE_URL
 
 2. Navigate to **SQL Editor** in the left sidebar
 
