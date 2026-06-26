@@ -313,7 +313,7 @@ These features work in local mode but need backend setup for full functionality:
 1. **Environment Variables Setup (If Backend Needed)**
    ```
    EXPO_PUBLIC_RORK_API_BASE_URL=[Your backend URL]
-   SUPABASE_URL=https://gwkyjhmqomaunupnmqxj.supabase.co
+   SUPABASE_URL=https://your-project.supabase.co
    SUPABASE_ANON_KEY=[Provided in system]
    SUPABASE_SERVICE_KEY=[Provided in system]
    ```
